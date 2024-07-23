@@ -8,6 +8,8 @@ experiments
 /train
 /test
 /archive
+/vae
+/prototyping
 /WhisperSeg
 temp
 llb3_test
