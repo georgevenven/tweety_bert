@@ -16,10 +16,10 @@ experiment_runner = ExperimentRunner(device="cuda")
 
 configurations = [
          {
-        "experiment_name": "5288_WhisperSeg_Preprocessing",
+        "experiment_name": "5288_WhisperSeg_Preprocessing_Padded",
         "continue_training": False,
-        "train_dir": "/media/george-vengrovski/disk1/5288_train",
-        "test_dir": "/media/george-vengrovski/disk1/5288_test",
+        "train_dir": "/media/george-vengrovski/disk1/5288_train_padded",
+        "test_dir": "/media/george-vengrovski/disk1/5288_test_padded",
         "batch_size": 12,
         "d_transformer": 196,   
         "nhead_transformer": 4,

@@ -16,9 +16,18 @@ def process_file(file):
 
         try:
             # Load the npz file with allow_pickle=True
-            with np.load(input_path, allow_pickle=True) as data:
-                spectrogram = data['s']
-                vocalization = data['vocalization']
+            try:
+                with np.load(input_path, allow_pickle=True) as data:
+                    spectrogram = data['s']
+                    vocalization = data['vocalization']
+                    labels = data.get('labels', np.zeros_like(vocalization))  # Create labels if not present
+            except Exception as e:
+                print(f"Error loading file {file}: {str(e)}")
+                return
+
+            # Skip file if all vocalization numbers are zero
+            if np.all(vocalization == 0):
+                return
 
             # Optimize padding operation
             indices = np.where(vocalization == 1)[0]
@@ -29,7 +38,7 @@ def process_file(file):
                 padded_vocalization[s:e] = 1
 
             # Save as npz file
-            np.savez_compressed(output_path, s=spectrogram, vocalization=padded_vocalization)
+            np.savez_compressed(output_path, s=spectrogram, vocalization=padded_vocalization, labels=labels)
         except Exception as e:
             print(f"Error processing file {file}: {str(e)}")
 

@@ -1,6 +1,7 @@
 import os
 import shutil
 import random
+from tqdm import tqdm
 
 def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest, move_files=False):
     """
@@ -32,7 +33,7 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
     test_files = all_files[train_size:]
 
     # Either move or copy files to respective destination directories based on move_files flag
-    for file in train_files:
+    for file in tqdm(train_files, desc="Processing train files"):
         src_file_path = os.path.join(folder_path, file)
         dest_file_path = os.path.join(train_folder_dest, file)
         if move_files:
@@ -40,7 +41,7 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
         else:
             shutil.copy2(src_file_path, dest_file_path)
 
-    for file in test_files:
+    for file in tqdm(test_files, desc="Processing test files"):
         src_file_path = os.path.join(folder_path, file)
         dest_file_path = os.path.join(test_folder_dest, file)
         if move_files:
@@ -49,4 +50,4 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
             shutil.copy2(src_file_path, dest_file_path)
 
 # Example usage with moving files
-split_dataset('/media/george-vengrovski/disk2/wolf_stuff/Clips_Specs', 0.8, '/media/george-vengrovski/disk1/wolf_train', '/media/george-vengrovski/disk1/wolf_test', move_files=False)
+split_dataset('/media/george-vengrovski/disk1/5288_specs_processed', 0.8, '/media/george-vengrovski/disk1/5288_train_padded', '/media/george-vengrovski/disk1/5288_test_padded', move_files=False)

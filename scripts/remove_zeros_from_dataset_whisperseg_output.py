@@ -34,7 +34,7 @@ def process_npz_files(folder_path, max_workers=4):
             print(future.result())
 
 # Set the folder path where the .npz files are located
-folder_path = "/media/george-vengrovski/disk1/USA_5377_train"
+folder_path = "/media/george-vengrovski/disk1/5288_specs_processed"
 
 # Process the .npz files in the folder
 process_npz_files(folder_path, max_workers=16)
