@@ -364,39 +364,32 @@ class TweetyBERT(nn.Module):
 
 
 
-    def mse_loss(self, predictions, mask, spec, intermediate_layers, vocalization, vocalization_weight=.95):
+    def mse_loss(self, predictions, mask, spec, intermediate_layers, vocalization):
         epsilon = 1e-6
         alpha = self.alpha
-        spec = spec.squeeze(1)
-        reshaped_spec = spec.permute(0, 2, 1)
-
-        # MSE Loss
-        mse_loss_func = nn.MSELoss(reduction='none')
-        mse_loss = mse_loss_func(predictions, reshaped_spec)
-
-        # Apply mask
-        masked_indices = mask[:, 0, :] == 1.0
-        unmasked_indices = ~masked_indices
-
-        vocalized_indices = vocalization
         
-        with torch.no_grad():
-            if masked_indices.sum() > 0:
-                masked_loss = mse_loss[masked_indices].mean()
-            else:
-                masked_loss = torch.tensor(epsilon, requires_grad=True, device=predictions.device)
-
-            if unmasked_indices.sum() > 0:
-                unmasked_loss = mse_loss[unmasked_indices].mean()
-            else:
-                unmasked_loss = torch.tensor(epsilon, requires_grad=True, device=predictions.device)
-
-        # Weight the vocalization indices
-        if vocalized_indices.sum().item() > 0:  # Ensure sum() returns a scalar
-            vocalized_loss = mse_loss[vocalized_indices].mean()
-            combined_loss = alpha * masked_loss + (1 - alpha) * unmasked_loss
-            combined_loss = vocalization_weight * vocalized_loss + (1 - vocalization_weight) * combined_loss
-        else:
-            combined_loss = alpha * masked_loss + (1 - alpha) * unmasked_loss
-
-        return combined_loss, masked_loss, unmasked_loss, mse_loss.detach()
+        # Ensure all tensors are on the same device
+        device = predictions.device
+        mask = mask.to(device)
+        vocalization = vocalization.to(device)
+        
+        spec = spec.squeeze(1).permute(0, 2, 1)
+        
+        # MSE Loss
+        mse_loss = F.mse_loss(predictions, spec, reduction='none')
+        
+        # Create masks
+        masked_indices = mask[:, 0, :] == 1.0
+        vocalized_indices = vocalization.bool()
+        
+        vocalized_and_masked_indices = masked_indices & vocalized_indices
+        vocalized_and_unmasked_indices = vocalized_indices & ~masked_indices
+        
+        # Calculate losses
+        masked_loss = mse_loss[vocalized_and_masked_indices].mean() if vocalized_and_masked_indices.any() else torch.tensor(epsilon, device=device)
+        unmasked_loss = mse_loss[vocalized_and_unmasked_indices].mean() if vocalized_and_unmasked_indices.any() else torch.tensor(epsilon, device=device)
+        
+        # Combine losses
+        combined_loss = alpha * masked_loss + (1 - alpha) * unmasked_loss
+        
+        return combined_loss, masked_loss, unmasked_loss, mse_loss

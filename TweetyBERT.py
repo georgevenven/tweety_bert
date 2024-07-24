@@ -15,12 +15,12 @@ from experiment_manager import ExperimentRunner
 experiment_runner = ExperimentRunner(device="cuda")
 
 configurations = [
-         {
+        {
         "experiment_name": "5288_WhisperSeg_Preprocessing_Padded",
         "continue_training": False,
         "train_dir": "/media/george-vengrovski/disk1/5288_train_padded",
         "test_dir": "/media/george-vengrovski/disk1/5288_test_padded",
-        "batch_size": 12,
+        "batch_size": 48,
         "d_transformer": 196,   
         "nhead_transformer": 4,
         "num_freq_bins": 196,
@@ -31,7 +31,7 @@ configurations = [
         "p": 0.01,
         "alpha": 1,
         "pos_enc_type": "relative",
-        "learning_rate": 5e-4,
+        "learning_rate": 3e-4,
         "max_steps": 5e4,
         "eval_interval": 500,
         "save_interval": 500,
@@ -42,6 +42,33 @@ configurations = [
         "trailing_avg_window": 200,
         "num_ground_truth_labels": 50
         },
+        {
+        "experiment_name": "5288_WhisperSeg_Preprocessing_NotPadded",
+        "continue_training": False,
+        "train_dir": "/media/george-vengrovski/disk1/5288_train",
+        "test_dir": "/media/george-vengrovski/disk1/5288_test",
+        "batch_size": 48,
+        "d_transformer": 196,   
+        "nhead_transformer": 4,
+        "num_freq_bins": 196,
+        "dropout": 0.2,
+        "dim_feedforward": 768,
+        "transformer_layers": 4,
+        "m": 250,
+        "p": 0.01,
+        "alpha": 1,
+        "pos_enc_type": "relative",
+        "learning_rate": 3e-4,
+        "max_steps": 5e4,
+        "eval_interval": 500,
+        "save_interval": 500,
+        "context": 1000,
+        "weight_decay": 0.0,
+        "early_stopping": True,
+        "patience": 8,
+        "trailing_avg_window": 200,
+        "num_ground_truth_labels": 50
+        }
      
 #         {
 #         "experiment_name": "Budige_Smoothing_Test",
