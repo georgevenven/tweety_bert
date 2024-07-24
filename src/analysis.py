@@ -212,47 +212,12 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
     else:
         predictions = spec_arr
 
-    print(f"vocalization arr {vocalization_arr.shape}")
-    print(f"ground truth labels {ground_truth_labels.shape}")
-    print(f"spec arr {spec_arr.shape}")
-    print(f"predictions {predictions.shape}")
-
     # Filter for vocalization before any processing or visualization
     if remove_non_vocalization:
         vocalization_indices = np.where(vocalization_arr == 1)[0]
         predictions = predictions[vocalization_indices]
         ground_truth_labels = ground_truth_labels[vocalization_indices]
         spec_arr = spec_arr[vocalization_indices]
-
-
-        print(f"vocalization indices {vocalization_indices.shape}")
-        print(f"predictions {predictions.shape}")
-        print(f"ground truth labels {ground_truth_labels.shape}")
-        print(f"spec arr {spec_arr.shape}")
-
- 
-
-    # Plot the spec_arr as an image
-    fig, ax = plt.subplots(figsize=(20, 5))
-    im = ax.imshow(spec_arr.T, aspect='auto', origin='lower', cmap='viridis')
-    ax.set_title('Spectrogram with Vocalization Indices')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Frequency')
-    plt.colorbar(im, ax=ax, orientation='vertical', label='Amplitude')
-
-    # Create an axis for the vocalization indices bar
-    ax_vocalization = fig.add_axes([0.1, 0.1, 0.8, 0.05])
-    
-    # Convert color names to numerical values using a colormap
-    color_map = {'red': 1, 'blue': 0}
-    vocalization_colors = [color_map['red'] if i in vocalization_indices else color_map['blue'] for i in range(spec_arr.shape[0])]
-    vocalization_colors = np.array(vocalization_colors).reshape(1, -1)  # Reshape for imshow
-
-    ax_vocalization.imshow(vocalization_colors, aspect='auto', origin='lower', cmap='coolwarm')
-    ax_vocalization.set_axis_off()
-    ax_vocalization.set_title('Vocalization Indices', fontsize=10, pad=10)
-
-    plt.show()
 
     # razor off any extra datapoints 
     if samples > len(predictions):
