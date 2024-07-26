@@ -136,6 +136,6 @@ class UMAPSelector:
             fig.savefig(f"imgs/selected_regions/{random_name}_groundtruth_{ground_truth_label}.png")
             plt.close(fig)
 
-file_path = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_temp.npz"
+file_path = "files/not_padded.npz"
 selector = UMAPSelector(file_path, max_length=500)
 selector.plot_umap_with_selection()

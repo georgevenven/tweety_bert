@@ -206,6 +206,9 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
     # convert the list of batch * samples * features to samples * features 
     ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
     spec_arr = np.concatenate(spec_arr, axis=0)
+
+    original_spec_arr = spec_arr
+
     vocalization_arr = np.concatenate(vocalization_arr, axis=0)
     if not raw_spectogram:
         predictions = np.concatenate(predictions_arr, axis=0)
@@ -246,11 +249,12 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
     unique_ground_truth_labels = np.unique(ground_truth_labels)
     ground_truth_label_colors = {label: cmap_ground_truth.colors[label % len(cmap_ground_truth.colors)] for label in unique_ground_truth_labels}
 
-    # # Convert the color mappings to arrays for saving
-    # hdbscan_colors_array = np.array([hdbscan_label_colors[label] for label in hdbscan_labels])
-    # ground_truth_colors_array = np.array([ground_truth_label_colors[label] for label in ground_truth_labels])
+    # Create a colormap for HDBSCAN labels
+    cmap_hdbscan = glasbey.extend_palette(["#FFFFFF"], palette_size=30)
+    cmap_hdbscan = mcolors.ListedColormap(cmap_hdbscan)
+    hdbscan_colors = np.array([cmap_hdbscan.colors[label % len(cmap_hdbscan.colors)] for label in hdbscan_labels])
 
-    np.savez(f"files/labels_{save_name}", embedding_outputs=embedding_outputs, hdbscan_labels=hdbscan_labels, ground_truth_labels=ground_truth_labels, s=spec_arr, hdbscan_colors=ground_truth_label_colors, ground_truth_colors=ground_truth_label_colors)
+    np.savez(f"files/labels_{save_name}", embedding_outputs=embedding_outputs, hdbscan_labels=hdbscan_labels, ground_truth_labels=ground_truth_labels, s=spec_arr, hdbscan_colors=hdbscan_colors, ground_truth_colors=cmap_ground_truth.colors, original_spectogram=original_spec_arr, vocalization=vocalization_arr)
 
     # ground_truth_labels = syllable_to_phrase_labels(arr=ground_truth_labels,silence=0)
     
@@ -267,7 +271,7 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
     # So that silences is black for HDBSCAN Plot
     # Save HDBSCAN labels plot
     fig_hdbscan, ax_hdbscan = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
-    scatter_hdbscan = ax_hdbscan.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=70, alpha=.1, cmap=cmap_ground_truth)
+    scatter_hdbscan = ax_hdbscan.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=70, alpha=.1, cmap=cmap_hdbscan)
     ax_hdbscan.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     ax_hdbscan.set_xlabel('UMAP 1', fontsize=48)
     ax_hdbscan.set_ylabel('UMAP 2', fontsize=48)
