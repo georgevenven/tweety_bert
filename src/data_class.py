@@ -18,6 +18,7 @@ class SongDataSet_Image(Dataset):
         self.segment_length = segment_length
 
     def __getitem__(self, idx):
+
         if self.infinite_loader:
             original_idx = idx  # Store the original index for logging
             idx = random.randint(0, len(self.file_paths) - 1)
@@ -38,14 +39,7 @@ class SongDataSet_Image(Dataset):
             # Process labels
             ground_truth_labels = np.array(data['labels'], dtype=int)
             vocalization = np.array(data['vocalization'], dtype=int)
-
-            # Check if vocalization is all zeros
-            if np.all(vocalization == 0):
-                if self.infinite_loader:
-                    return self.__getitem__(random.randint(0, len(self.file_paths) - 1))
-                else:
-                    raise e
-
+            
             ground_truth_labels = torch.from_numpy(ground_truth_labels).long().squeeze(0)
             spectogram = torch.from_numpy(spectogram).float().permute(1, 0)
             ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.num_classes).float()
@@ -69,6 +63,7 @@ class SongDataSet_Image(Dataset):
                 spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
                 ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)  # Adjusted padding for labels
                 vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
+
 
             return spectogram, ground_truth_labels, vocalization
 
@@ -101,5 +96,4 @@ class CollateFunction:
 
         # Final reshape for model
         spectograms = spectograms.unsqueeze(1).permute(0,1,3,2)
-
         return spectograms, ground_truth_labels, vocalization

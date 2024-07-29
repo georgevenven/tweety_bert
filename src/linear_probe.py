@@ -137,12 +137,12 @@ class LinearProbeTrainer():
 
         with torch.no_grad():
             try:
-                spectrogram, label = next(test_iter)
+                spectrogram, label, vocalization = next(test_iter)
             except StopIteration:
                 test_iter = iter(self.test_loader)  # Reinitialize the iterator
-                spectrogram, label = next(test_iter)
+                spectrogram, label, vocalization = next(test_iter)
 
-            spectrogram, label = spectrogram.to(self.device), label.to(self.device)
+            spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             # with autocast():  # Use autocast for the validation pass
             output = self.model.forward(spectrogram)
             label = label.argmax(dim=-1)
@@ -174,12 +174,12 @@ class LinearProbeTrainer():
 
         while total_batches < self.desired_total_batches and not stop_training:
             try:
-                spectrogram, label = next(train_iter)
+                spectrogram, label, vocalization = next(train_iter)
             except StopIteration:
                 train_iter = iter(self.train_loader)  # Reinitialize the iterator
-                spectrogram, label = next(train_iter)
+                spectrogram, label, vocalization = next(train_iter)
 
-            spectrogram, label = spectrogram.to(self.device), label.to(self.device)
+            spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             self.optimizer.zero_grad()
          
             output = self.model.forward(spectrogram)
@@ -247,7 +247,6 @@ class LinearProbeTrainer():
         plt.tight_layout()
         plt.show()
 
-
 class ModelEvaluator:
     def __init__(self, model, test_loader, num_classes=21, device='cuda:0', use_tqdm=True, filter_unseen_classes=False, train_dir=None):
         self.model = model.to(device)
@@ -270,7 +269,7 @@ class ModelEvaluator:
                 seen_classes.update(unique_labels)
         return seen_classes
 
-    def validate_model_multiple_passes(self, num_passes=1, max_batches=1e4, spec_height = 196, context = 1000 ):
+    def validate_model_multiple_passes(self, num_passes=1, max_batches=1e4, spec_height=196, context=1000):
         self.model.eval()
         errors_per_class = [0] * self.num_classes
         correct_per_class = [0] * self.num_classes
@@ -281,9 +280,11 @@ class ModelEvaluator:
         progress_bar = tqdm(total=total_iterations, desc="Evaluating", unit="batch") if self.use_tqdm else None
         for _ in range(num_passes):
             with torch.no_grad():
-                for spec, label in self.test_loader:
-                    spec, label = spec.to(self.device), label.to(self.device)
+                for spec, label, vocalization in self.test_loader:
+                    spec, label, vocalization = spec.to(self.device), label.to(self.device), vocalization.to(self.device)
                     # Removed print statements as per instructions
+
+                    print(f"spec shape: {spec.shape}, label shape: {label.shape}, vocalization shape: {vocalization.shape}")
 
                     # this is all done to ensure that all of the eval dataset is seen by the model 
                     # First, pad spec to the nearest multiple of 500
@@ -291,13 +292,13 @@ class ModelEvaluator:
                     spec = F.pad(spec, (0, 0, 0, pad_size))
                     label = F.pad(label, (0, 0, 0, pad_size))
 
-                    # Now, reshape this to be [n x 500 x 513]
+                    # Now, reshape this to be [n x length x freq bins]
                     spec = spec.reshape(-1, context, spec_height)
                     label = label.reshape(-1, context, self.num_classes)
 
                     spec = spec.unsqueeze(1)
 
-                    output = self.model.forward(spec.permute(0,1,3,2))
+                    output = self.model.forward(spec.permute(0, 1, 3, 2))
 
                     label = label.squeeze(1)
 
@@ -370,4 +371,29 @@ class ModelEvaluator:
         plt.ylim(0, max(filtered_class_frame_error_rates.values()) + 5)  # Ensure the y-axis goes a bit beyond the max value for better visualization
         plt.tight_layout()
         plt.savefig(os.path.join(save_path, plot_filename))
+        plt.close()
+
+    def plot_spectrogram_with_labels(self, spec, true_labels, predicted_labels, save_path, filename):
+        plt.figure(figsize=(12, 6))
+        
+        # Plot the spectrogram
+        plt.subplot(3, 1, 1)
+        plt.imshow(spec.squeeze().cpu().numpy(), aspect='auto', origin='lower')
+        plt.title('Spectrogram')
+        plt.colorbar(format='%+2.0f dB')
+
+        # Plot the ground truth labels
+        plt.subplot(3, 1, 2)
+        plt.imshow(true_labels.unsqueeze(0).cpu().numpy(), aspect='auto', cmap='tab20', origin='lower')
+        plt.title('Ground Truth Labels')
+        plt.colorbar(ticks=range(self.num_classes))
+
+        # Plot the predicted labels
+        plt.subplot(3, 1, 3)
+        plt.imshow(predicted_labels.unsqueeze(0).cpu().numpy(), aspect='auto', cmap='tab20', origin='lower')
+        plt.title('Predicted Labels')
+        plt.colorbar(ticks=range(self.num_classes))
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_path, filename))
         plt.close()

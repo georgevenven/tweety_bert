@@ -24,14 +24,14 @@ plot_umap_projection(
 model=model, 
 device=device, 
 data_dir="/media/george-vengrovski/disk1/5288_test",
-samples=5e5, 
+samples=1e6, 
 file_path="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/category_colors_llb3.pkl", 
 layer_index=-2, 
 dict_key="attention_output", 
 context=1000, 
 raw_spectogram=False,
 save_dict_for_analysis = False,
-save_name="for_vis_purposes",
+save_name="for_training_classifier",
 )
 
 # # TweetyBERT 128 OG Model 
