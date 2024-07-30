@@ -20,7 +20,14 @@ class LinearProbeModel(nn.Module):
         self.classifier_dims = classifier_dims
         self.num_classes = num_classes 
 
-        self.classifier = nn.Linear(classifier_dims, num_classes)
+        # Define a 3-layer decoder with ReLU activations
+        self.classifier = nn.Sequential(
+            nn.Linear(classifier_dims, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, num_classes)
+        )
 
         if freeze_layers and model_type == "neural_net":
             self.freeze_all_but_classifier(self.model)
@@ -246,6 +253,7 @@ class LinearProbeTrainer():
 
         plt.tight_layout()
         plt.show()
+
 
 class ModelEvaluator:
     def __init__(self, model, test_loader, num_classes=21, device='cuda:0', use_tqdm=True, filter_unseen_classes=False, train_dir=None):
