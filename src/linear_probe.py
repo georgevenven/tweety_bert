@@ -30,7 +30,7 @@ class LinearProbeModel(nn.Module):
         )
 
         if freeze_layers and model_type == "neural_net":
-            self.freeze_all_but_classifier(self.model)
+            self.freeze_transformer_blocks(self.model)
         if model_type == "pca":
             self.pca = PCA(n_components=classifier_dims, random_state=42)
 
@@ -98,7 +98,7 @@ class LinearProbeModel(nn.Module):
             param.requires_grad = True
 
     def freeze_transformer_blocks(self, model):
-        total_blocks = 3  # Assuming there are 12 transformer encoder blocks
+        total_blocks = 2  # Assuming there are 12 transformer encoder blocks
         for name, module in model.named_modules():
             # Check if the module is part of the transformer encoder blocks and not the last one
             if "transformer_encoder" in name and not name.endswith(f"transformer_encoder.{total_blocks - 1}"):
