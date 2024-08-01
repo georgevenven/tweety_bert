@@ -5,6 +5,7 @@ experiments
 *.zip
 *.png
 *.pdf
+*.npz
 /train
 /test
 /archive
