@@ -12,8 +12,8 @@ os.chdir('/home/george-vengrovski/Documents/projects/tweety_bert_paper')
   
 from analysis import plot_umap_projection, ComputerClusterPerformance, plot_metrics, sliding_window_umap
 
-weights_path = "experiments/5288_WhisperSeg_Preprocessing_Padded/saved_weights/model_step_15000.pth"
-config_path = "experiments/5288_WhisperSeg_Preprocessing_Padded/config.json"
+weights_path = "experiments/PitchShiftTest/saved_weights/model_step_12500.pth"
+config_path = "experiments/PitchShiftTest/config.json"
 
 model = load_model(config_path, weights_path)
 model = model.to(device)
@@ -31,7 +31,7 @@ dict_key="attention_output",
 context=1000, 
 raw_spectogram=False,
 save_dict_for_analysis = False,
-save_name="for_training_classifier",
+save_name="pitch_shift_test",
 )
 
 # # TweetyBERT 128 OG Model 

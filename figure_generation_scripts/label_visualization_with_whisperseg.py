@@ -7,7 +7,7 @@ from bokeh.transform import linear_cmap
 from bokeh.io import show
 
 # Load the data
-f = np.load("/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_for_vis_purposes.npz", allow_pickle=True)
+f = np.load("/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_pitch_shift_test.npz", allow_pickle=True)
 
 length_to_plot = 50000
 downsample_factor = 5  # Adjust this value to balance between performance and detail

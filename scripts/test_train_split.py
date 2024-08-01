@@ -50,4 +50,4 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
             shutil.copy2(src_file_path, dest_file_path)
 
 # Example usage with moving files
-split_dataset('/media/george-vengrovski/disk1/5288_specs_processed', 0.8, '/media/george-vengrovski/disk1/5288_train_padded', '/media/george-vengrovski/disk1/5288_test_padded', move_files=False)
+split_dataset('/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Specs_Processed', 0.8, '/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Train', '/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Test', move_files=False)

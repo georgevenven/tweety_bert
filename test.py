@@ -8,12 +8,11 @@ def process_file(file_path):
         with np.load(file_path, allow_pickle=True) as data:
             arrays = dict(data)
             
-            if 's' in arrays:
-                s_data = arrays['s']
-                if s_data.ndim > 1:
-                    # Use boolean indexing to filter out rows with all zeros
-                    mask = ~np.all(s_data == 0, axis=1)
-                    arrays['s'] = s_data[mask]
+            if 'vocalization' in arrays:
+                # if all the vocalization is 0, then delete the file
+                if np.all(arrays['vocalization'] == 0):
+                    os.remove(file_path)
+                    return False
             
             if 'vocalization' in arrays:
                 arrays['labels'] = np.zeros(len(arrays['vocalization']))
@@ -43,5 +42,5 @@ def process_npz_files(folder_path, max_workers=16):
     print(f"Processing complete. Successful: {successful}, Failed: {failed}")
 
 if __name__ == "__main__":
-    folder_path = "/media/george-vengrovski/disk1/5288_specs_processed"
+    folder_path = "/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Specs"
     process_npz_files(folder_path)

@@ -48,11 +48,14 @@ class WavtoSpec:
 
             folder_file_name = '/'.join(file_path.split('/')[-2:])
      
-            # Check if there is vocalization in the file, [] means no vocalization, [sample_start, sample_end] means vocalization (list of tuples)
-            vocalization_data = self.check_vocalization(folder_file_name=folder_file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
-            if vocalization_data is None:
-                print(f"No vocalization data found for {folder_file_name}. Skipping spectrogram generation.")
-                return
+            # Check if there is vocalization in the file
+            if self.use_csv:
+                vocalization_data = self.check_vocalization(folder_file_name=folder_file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
+                if vocalization_data is None:
+                    print(f"No vocalization data found for {folder_file_name}. Skipping spectrogram generation.")
+                    return
+            else:
+                vocalization_data = [(0, len(data))]  # Assume entire file is vocalization
 
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
             data = filtfilt(b, a, data)
@@ -95,6 +98,9 @@ class WavtoSpec:
             gc.collect()
 
     def check_vocalization(self, folder_file_name, data, samplerate, csv_file_dir):
+        if not self.use_csv:
+            return [(0, len(data))]  # Assume entire file is vocalization if not using CSV
+
         # Open csv file
         csv_file_path = os.path.join(csv_file_dir)
         if not os.path.exists(csv_file_path):
@@ -113,6 +119,9 @@ class WavtoSpec:
         return None
 
     def get_segments_to_process(self, song_name, csv_file_dir, samplerate):
+        if not self.use_csv:
+            return None  # Not applicable when not using CSV
+
         segments_to_process = []
         csv_file_path = os.path.join(csv_file_dir, song_name + '.csv')
         if not os.path.exists(csv_file_path):

@@ -7,18 +7,33 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.profiler import profile, record_function, ProfilerActivity
 import random
-import matplotlib.pyplot as plt
 import logging
 
 class SongDataSet_Image(Dataset):
-    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000):
+    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=True):
         self.file_paths = [os.path.join(file_dir, file) for file in os.listdir(file_dir)]
         self.num_classes = num_classes
         self.infinite_loader = infinite_loader
         self.segment_length = segment_length
+        self.pitch_shift = pitch_shift
+
+    def apply_pitch_shift(self, spectrogram):
+        # Shift the pitch of the spectrogram according to a normal distribution
+        shift_amount = random.randint(-50, 50)
+        
+        # Create an array of zeros with the same shape as the spectrogram
+        shifted_spectrogram = np.zeros_like(spectrogram)
+        
+        if shift_amount > 0:
+            shifted_spectrogram[shift_amount:] = spectrogram[:-shift_amount]
+        elif shift_amount < 0:
+            shifted_spectrogram[:shift_amount] = spectrogram[-shift_amount:]
+        else:
+            shifted_spectrogram = spectrogram
+        
+        return shifted_spectrogram
 
     def __getitem__(self, idx):
-
         if self.infinite_loader:
             original_idx = idx  # Store the original index for logging
             idx = random.randint(0, len(self.file_paths) - 1)
@@ -28,13 +43,16 @@ class SongDataSet_Image(Dataset):
             # Load data and preprocess
             data = np.load(file_path, allow_pickle=True)
             spectogram = data['s']
-
+            
             spectogram = spectogram[20:216]
             # Calculate mean and standard deviation of the spectrogram
             spec_mean = np.mean(spectogram)
             spec_std = np.std(spectogram)
             # Z-score the spectrogram
             spectogram = (spectogram - spec_mean) / spec_std
+
+            if self.pitch_shift:
+                spectogram = self.apply_pitch_shift(spectogram)
 
             # Process labels
             ground_truth_labels = np.array(data['labels'], dtype=int)
