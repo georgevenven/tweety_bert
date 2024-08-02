@@ -9,6 +9,17 @@ from utils import load_model
 from linear_probe import LinearProbeModel, LinearProbeTrainer
 from tqdm import tqdm
 import json
+from spectogram_generator import WavtoSpec  # Add this import
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import sys
+from torch import nn
+from torch.nn import functional as F
+import pandas as pd
+from matplotlib.colors import ListedColormap
+import matplotlib.colors as mcolors
 
 class TweetyBertClassifier:
     def __init__(self, config_path, weights_path, linear_decoder_dir):
@@ -87,7 +98,7 @@ class TweetyBertClassifier:
             classifier_dims=196
         ).to(self.device)
 
-    def train_classifier(self, lr=1e-5, batches_per_eval=100, desired_total_batches=4000, patience=8, generate_loss_plot=False):
+    def train_classifier(self, lr=1e-5, batches_per_eval=100, desired_total_batches=500, patience=8, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -250,20 +261,211 @@ class SpecGenerator:
 
         print(f"Generated {processed_specs} spectrograms.")
 
+
+class TweetyBertInference:
+    def __init__(self, classifier_path, spec_dst_folder):
+        self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.wav_to_spec = None
+        self.spec_dst_folder = spec_dst_folder
+        
+        # Create the spectrogram destination folder if it doesn't exist
+        os.makedirs(self.spec_dst_folder, exist_ok=True)
+        
+        # Generate color palette
+        base_colors = plt.cm.get_cmap('tab20')(np.linspace(0, 1, 20))
+        additional_colors = plt.cm.get_cmap('Set2')(np.linspace(0, 1, 8))
+        colors = np.vstack((base_colors, additional_colors))
+        colors = colors[np.random.permutation(len(colors))]
+        colors = np.vstack(([0, 0, 0, 1], colors))  # Add black at the beginning for silence
+        self.cmap = mcolors.ListedColormap(colors[:self.classifier.num_classes])
+
+    def setup_wav_to_spec(self, folder, csv_file_dir=None):
+        self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, csv_file_dir)
+
+    def inference_data_class(self, data, context_length=1000):
+        recording_length = data[1].shape[1]
+
+        spectogram = data[1][20:216]
+        spec_mean = np.mean(spectogram)
+        spec_std = np.std(spectogram)
+        spectogram = (spectogram - spec_mean) / spec_std
+
+        ground_truth_labels = np.array(data[0], dtype=int)
+        vocalization = np.array(data[2], dtype=int)
+        
+        ground_truth_labels = torch.from_numpy(ground_truth_labels).long().squeeze(0)
+        spectogram = torch.from_numpy(spectogram).float().permute(1, 0)
+        ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.classifier.num_classes).float()
+        vocalization = torch.from_numpy(vocalization).long()
+
+        pad_amount = context_length - (recording_length % context_length)
+        if recording_length < context_length:
+            pad_amount = context_length - recording_length
+         
+        if recording_length > context_length and pad_amount != 0:
+            pad_amount = context_length - (spectogram.shape[0] % context_length)
+            spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
+            ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)
+            vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
+
+        spectogram = spectogram.reshape(spectogram.shape[0] // context_length, context_length, spectogram.shape[1])
+        ground_truth_labels = ground_truth_labels.reshape(ground_truth_labels.shape[0] // context_length, context_length, ground_truth_labels.shape[1])
+        vocalization = vocalization.reshape(vocalization.shape[0] // context_length, context_length)
+
+        return spectogram, ground_truth_labels, vocalization
+
+    def max_vote(self, predicted_labels):
+        processed_labels = predicted_labels.copy()
+        
+        zero_indices = np.where(predicted_labels == 0)[0]
+        non_zero_indices = np.where(predicted_labels != 0)[0]
+        
+        regions = []
+        current_region = []
+        
+        for i in range(len(non_zero_indices)):
+            if i == 0 or non_zero_indices[i] - non_zero_indices[i-1] == 1:
+                current_region.append(non_zero_indices[i])
+            else:
+                if current_region:
+                    regions.append(current_region)
+                current_region = [non_zero_indices[i]]
+        
+        if current_region:
+            regions.append(current_region)
+        
+        for region in regions:
+            start = region[0]
+            end = region[-1]
+            
+            if (start == 0 or predicted_labels[start-1] == 0) and \
+               (end == len(predicted_labels)-1 or predicted_labels[end+1] == 0):
+                
+                region_labels = predicted_labels[start:end+1]
+                max_vote_label = np.bincount(region_labels).argmax()
+                
+                processed_labels[start:end+1] = max_vote_label
+        
+        return processed_labels
+
+    def convert_to_onset_offset(self, labels):
+        sampling_rate = 44100 
+        NFFT = 1024
+        hop_length = NFFT // 2
+        ms_per_timebin = (hop_length / sampling_rate) * 1000
+
+        onsets = []
+        offsets = []
+        current_label = 0
+
+        for i, label in enumerate(labels):
+            if label != current_label:
+                if current_label != 0:
+                    offsets.append(i * ms_per_timebin)
+                if label != 0:
+                    onsets.append(i * ms_per_timebin)
+                current_label = label
+
+        if current_label != 0:
+            offsets.append(len(labels) * ms_per_timebin)
+
+        return list(zip(onsets, offsets))
+
+    def visualize_spectrogram(self, spec, predicted_labels, file_name):
+        plt.figure(figsize=(15, 10))
+        
+        # Plot spectrogram
+        plt.subplot(2, 1, 1)
+        plt.imshow(spec, aspect='auto', origin='lower', cmap='viridis')
+        plt.title('Spectrogram', fontsize=24)
+        plt.colorbar(format='%+2.0f dB')
+        
+        # Plot predicted labels
+        plt.subplot(2, 1, 2)
+        im = plt.imshow([predicted_labels], aspect='auto', origin='lower', cmap=self.cmap, 
+                        vmin=0, vmax=self.classifier.num_classes-1)
+        plt.title('Predicted Labels', fontsize=24)
+        cbar = plt.colorbar(im, ticks=range(self.classifier.num_classes))
+        cbar.set_label('Syllable Class')
+        cbar.set_ticklabels(['Silence'] + [f'Class {i}' for i in range(1, self.classifier.num_classes)])
+        
+        plt.tight_layout()
+        output_path = os.path.join(self.spec_dst_folder, f"{os.path.splitext(file_name)[0]}_visualization.png")
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    def process_file(self, file_path, visualize=False):
+        spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
+
+        spectogram, _, _ = self.inference_data_class((labels, spec, vocalization), context_length=1000)
+        spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
+
+        logits = self.classifier.classifier_model(spec_tensor.permute(0,1,3,2))
+        logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
+
+        predicted_labels = torch.argmax(logits, dim=1).detach().cpu().numpy()
+        post_processed_labels = self.max_vote(predicted_labels)
+
+        onsets_offsets = self.convert_to_onset_offset(post_processed_labels)
+        
+        song_present = len(onsets_offsets) > 0
+
+        if visualize:
+   
+            self.visualize_spectrogram(spectogram.flatten(0,1).T, post_processed_labels, os.path.basename(file_path))
+
+        return {
+            "file_name": file_path,
+            "song_present": song_present,
+            "syllable_onsets/offsets": onsets_offsets
+        }
+        
+    def process_folder(self, folder_path, visualize=False):
+        results = []
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith('.wav'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        result = self.process_file(file_path, visualize)
+                        results.append(result)
+                    except Exception as e:
+                        print(f"Error processing {file_path}: {e}")
+        
+        return results
+
+    def save_results(self, results, output_path):
+        df = pd.DataFrame(results)
+        df.to_csv(output_path, index=False)
+        print(f"Results saved to {output_path}")
+
+
 # Usage example:
 if __name__ == "__main__":
-    classifier = TweetyBertClassifier(
-        config_path="experiments/PitchShiftTest/config.json",
-        weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
-        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder_test"
-    )
+    # classifier = TweetyBertClassifier(
+    #     config_path="experiments/PitchShiftTest/config.json",
+    #     weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
+    #     linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
+    # )
 
-    classifier.prepare_data("/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_for_training_classifier.npz")
-    classifier.create_dataloaders()
-    classifier.create_classifier()
-    classifier.train_classifier(generate_loss_plot=False)
-    classifier.save_decoder_state()
-    classifier.generate_specs()
+    # classifier.prepare_data("files/labels_for_training_classifier.npz")
+    # classifier.create_dataloaders()
+    # classifier.create_classifier()
+    # classifier.train_classifier(generate_loss_plot=False)
+    # classifier.save_decoder_state()
+    # classifier.generate_specs()
 
     # loaded_classifier = TweetyBertClassifier.load_decoder_state("/media/george-vengrovski/disk1/linear_decoder_test")
     # loaded_classifier.generate_specs()
+
+    classifier_path = "/media/george-vengrovski/disk1/linear_decoder"
+    folder_path = "/media/george-vengrovski/Extreme SSD/20240726_All_Area_X_Lesions/USA5288"
+    output_path = "/media/george-vengrovski/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_specs/song_database.csv"
+    spec_dst_folder = "/media/george-vengrovski/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_specs"
+
+    inference = TweetyBertInference(classifier_path, spec_dst_folder)
+    inference.setup_wav_to_spec(folder_path)
+    
+    results = inference.process_folder(folder_path, visualize=True)
+    inference.save_results(results, output_path)

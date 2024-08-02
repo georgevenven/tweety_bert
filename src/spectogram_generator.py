@@ -29,10 +29,10 @@ class WavtoSpec:
                 result.get()
 
     @staticmethod
-    def process_file(instance, file_path, csv_file_dir):
-        instance.convert_to_spectrogram(file_path, csv_file_dir)
+    def process_file(instance, file_path):
+        return instance.convert_to_spectrogram(file_path, csv_file_dir=None, save_npz=False)
 
-    def convert_to_spectrogram(self, file_path, csv_file_dir, min_length_ms=1025, min_timebins=250):
+    def convert_to_spectrogram(self, file_path, csv_file_dir, min_length_ms=1025, min_timebins=250, save_npz=True):
         try:
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate
@@ -44,16 +44,16 @@ class WavtoSpec:
             length_in_ms = (len(data) / samplerate) * 1000
             if length_in_ms < min_length_ms:
                 print(f"File {file_path} is below the length threshold and will be skipped.")
-                return
+                return None
 
             folder_file_name = '/'.join(file_path.split('/')[-2:])
      
             # Check if there is vocalization in the file
-            if self.use_csv:
+            if self.use_csv or csv_file_dir is not None:
                 vocalization_data = self.check_vocalization(folder_file_name=folder_file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
                 if vocalization_data is None:
                     print(f"No vocalization data found for {folder_file_name}. Skipping spectrogram generation.")
-                    return
+                    return None
             else:
                 vocalization_data = [(0, len(data))]  # Assume entire file is vocalization
 
@@ -83,15 +83,20 @@ class WavtoSpec:
             labels = np.zeros(t.size, dtype=int)
 
             if t.size >= min_timebins:
-                spec_filename = os.path.splitext(os.path.basename(file_path))[0]
-                spec_file_path = os.path.join(self.dst_dir, spec_filename + '.npz')
-                np.savez_compressed(spec_file_path, s=Sxx_log_normalized, vocalization=vocalization_timebins, labels=labels)
-                print(f"Spectrogram, vocalization data, and labels saved to {spec_file_path}")
+                if save_npz:
+                    spec_filename = os.path.splitext(os.path.basename(file_path))[0]
+                    spec_file_path = os.path.join(self.dst_dir, spec_filename + '.npz')
+                    np.savez_compressed(spec_file_path, s=Sxx_log_normalized, vocalization=vocalization_timebins, labels=labels)
+                    print(f"Spectrogram, vocalization data, and labels saved to {spec_file_path}")
+
+                return Sxx_log_normalized, vocalization_timebins, labels
+
             else:
                 print(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
 
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
+            return None
 
         finally:
             plt.close('all')

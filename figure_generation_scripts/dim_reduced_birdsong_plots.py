@@ -12,8 +12,8 @@ os.chdir('/home/george-vengrovski/Documents/projects/tweety_bert_paper')
   
 from analysis import plot_umap_projection, ComputerClusterPerformance, plot_metrics, sliding_window_umap
 
-weights_path = "experiments/PitchShiftTest/saved_weights/model_step_12500.pth"
-config_path = "experiments/PitchShiftTest/config.json"
+weights_path = "experiments/5509_PitchShift_NoPadding/saved_weights/model_step_11500.pth"
+config_path = "experiments/5509_PitchShift_NoPadding/config.json"
 
 model = load_model(config_path, weights_path)
 model = model.to(device)
@@ -23,7 +23,7 @@ model = model.to(device)
 plot_umap_projection(
 model=model, 
 device=device, 
-data_dir="/media/george-vengrovski/disk1/5288_test",
+data_dir="/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Test",
 samples=1e6, 
 file_path="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/category_colors_llb3.pkl", 
 layer_index=-2, 
