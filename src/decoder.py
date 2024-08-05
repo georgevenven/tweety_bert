@@ -261,7 +261,6 @@ class SpecGenerator:
 
         print(f"Generated {processed_specs} spectrograms.")
 
-
 class TweetyBertInference:
     def __init__(self, classifier_path, spec_dst_folder):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
@@ -273,8 +272,8 @@ class TweetyBertInference:
         os.makedirs(self.spec_dst_folder, exist_ok=True)
         
         # Generate color palette
-        base_colors = plt.cm.get_cmap('tab20')(np.linspace(0, 1, 20))
-        additional_colors = plt.cm.get_cmap('Set2')(np.linspace(0, 1, 8))
+        base_colors = plt.colormaps['tab20'](np.linspace(0, 1, 20))
+        additional_colors = plt.colormaps['Set2'](np.linspace(0, 1, 8))
         colors = np.vstack((base_colors, additional_colors))
         colors = colors[np.random.permutation(len(colors))]
         colors = np.vstack(([1, 1, 1, 1], colors))  # Add white at the beginning for silence
@@ -376,6 +375,9 @@ class TweetyBertInference:
                 syllable_dict[current_label] = []
             syllable_dict[current_label].append([start_time, end_time])
 
+        # Convert dictionary keys to strings to avoid issues during JSON serialization
+        syllable_dict = {int(key): value for key, value in syllable_dict.items()}
+
         return syllable_dict
 
     def visualize_spectrogram(self, spec, predicted_labels, file_name):
@@ -418,7 +420,6 @@ class TweetyBertInference:
         song_present = len(onsets_offsets) > 0
 
         if visualize:
-   
             self.visualize_spectrogram(spectogram.flatten(0,1).T, post_processed_labels, os.path.basename(file_path))
 
         return {
@@ -427,7 +428,7 @@ class TweetyBertInference:
             "syllable_onsets/offsets": onsets_offsets
         }
         
-    def process_folder(self, folder_path, visualize=False):
+    def process_folder(self, folder_path, visualize=False, save_interval=1000):
         results = []
         file_count = 0
         for root, _, files in os.walk(folder_path):
@@ -439,13 +440,16 @@ class TweetyBertInference:
                         results.append(result)
                         file_count += 1
 
-                        # Save intermediate results every 100 files
-                        if file_count % 100 == 0:
+                        # Save intermediate results every `save_interval` files
+                        if file_count % save_interval == 0:
                             self.save_results(results, self.output_path)
                             print(f"Intermediate results saved after processing {file_count} files.")
 
                     except Exception as e:
                         print(f"Error processing {file_path}: {e}")
+
+        # Save final results
+        self.save_results(results, self.output_path)
         
         return results
 
@@ -458,26 +462,26 @@ class TweetyBertInference:
 
 # # Usage example:
 if __name__ == "__main__":
-    classifier = TweetyBertClassifier(
-        config_path="experiments/PitchShiftTest/config.json",
-        weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
-        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
-    )
+#     classifier = TweetyBertClassifier(
+#         config_path="experiments/PitchShiftTest/config.json",
+#         weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
+#         linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
+#     )
 
-    classifier.prepare_data("files/labels_for_training_classifier.npz")
-    classifier.create_dataloaders()
-    classifier.create_classifier()
-    classifier.train_classifier(generate_loss_plot=False)
-    classifier.save_decoder_state()
-#     # classifier.generate_specs()
+#     classifier.prepare_data("files/labels_for_training_classifier.npz")
+#     classifier.create_dataloaders()
+#     classifier.create_classifier()
+#     classifier.train_classifier(generate_loss_plot=False)
+#     classifier.save_decoder_state()
+# #     # classifier.generate_specs()
 
-#     # loaded_classifier = TweetyBertClassifier.load_decoder_state("/media/george-vengrovski/disk1/linear_decoder_test")
-#     # loaded_classifier.generate_specs()
+# #     # loaded_classifier = TweetyBertClassifier.load_decoder_state("/media/george-vengrovski/disk1/linear_decoder_test")
+# #     # loaded_classifier.generate_specs()
 
-    classifier_path = "/media/george-vengrovski/disk1/linear_decoder"
-    folder_path = "/media/george-vengrovski/Extreme SSD/20240726_All_Area_X_Lesions/USA5288"
-    output_path = "/media/george-vengrovski/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_specs/song_database.csv"
-    spec_dst_folder = "/media/george-vengrovski/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_specs"
+    classifier_path = "/media/rose/Extreme SSD/new/linear_decoder"
+    folder_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288"
+    output_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/database.csv"
+    spec_dst_folder = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/specs"
 
     inference = TweetyBertInference(classifier_path, spec_dst_folder)
     inference.setup_wav_to_spec(folder_path)
