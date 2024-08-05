@@ -277,7 +277,7 @@ class TweetyBertInference:
         additional_colors = plt.cm.get_cmap('Set2')(np.linspace(0, 1, 8))
         colors = np.vstack((base_colors, additional_colors))
         colors = colors[np.random.permutation(len(colors))]
-        colors = np.vstack(([0, 0, 0, 1], colors))  # Add black at the beginning for silence
+        colors = np.vstack(([1, 1, 1, 1], colors))  # Add white at the beginning for silence
         self.cmap = mcolors.ListedColormap(colors[:self.classifier.num_classes])
 
     def setup_wav_to_spec(self, folder, csv_file_dir=None):
@@ -355,22 +355,28 @@ class TweetyBertInference:
         hop_length = NFFT // 2
         ms_per_timebin = (hop_length / sampling_rate) * 1000
 
-        onsets = []
-        offsets = []
+        syllable_dict = {}
         current_label = 0
+        start_time = 0
 
         for i, label in enumerate(labels):
             if label != current_label:
                 if current_label != 0:
-                    offsets.append(i * ms_per_timebin)
+                    end_time = i * ms_per_timebin
+                    if current_label not in syllable_dict:
+                        syllable_dict[current_label] = []
+                    syllable_dict[current_label].append([start_time, end_time])
                 if label != 0:
-                    onsets.append(i * ms_per_timebin)
+                    start_time = i * ms_per_timebin
                 current_label = label
 
         if current_label != 0:
-            offsets.append(len(labels) * ms_per_timebin)
+            end_time = len(labels) * ms_per_timebin
+            if current_label not in syllable_dict:
+                syllable_dict[current_label] = []
+            syllable_dict[current_label].append([start_time, end_time])
 
-        return list(zip(onsets, offsets))
+        return syllable_dict
 
     def visualize_spectrogram(self, spec, predicted_labels, file_name):
         plt.figure(figsize=(15, 10))
@@ -423,6 +429,7 @@ class TweetyBertInference:
         
     def process_folder(self, folder_path, visualize=False):
         results = []
+        file_count = 0
         for root, _, files in os.walk(folder_path):
             for file in files:
                 if file.lower().endswith('.wav'):
@@ -430,6 +437,13 @@ class TweetyBertInference:
                     try:
                         result = self.process_file(file_path, visualize)
                         results.append(result)
+                        file_count += 1
+
+                        # Save intermediate results every 100 files
+                        if file_count % 100 == 0:
+                            self.save_results(results, self.output_path)
+                            print(f"Intermediate results saved after processing {file_count} files.")
+
                     except Exception as e:
                         print(f"Error processing {file_path}: {e}")
         
@@ -437,6 +451,7 @@ class TweetyBertInference:
 
     def save_results(self, results, output_path):
         df = pd.DataFrame(results)
+        df['syllable_onsets/offsets'] = df['syllable_onsets/offsets'].apply(json.dumps)
         df.to_csv(output_path, index=False)
         print(f"Results saved to {output_path}")
 
@@ -466,6 +481,9 @@ if __name__ == "__main__":
 
     inference = TweetyBertInference(classifier_path, spec_dst_folder)
     inference.setup_wav_to_spec(folder_path)
+    
+    # Set the output_path as an attribute of the inference object
+    inference.output_path = output_path
     
     results = inference.process_folder(folder_path, visualize=True)
     inference.save_results(results, output_path)
