@@ -30,8 +30,8 @@ class LinearProbeModel(nn.Module):
         )
 
         if freeze_layers and model_type == "neural_net":
-            # self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
-            self.freeze_all_but_classifier(self.model)
+            self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
+            # self.freeze_all_but_classifier(self.model)
         if model_type == "pca":
             self.pca = PCA(n_components=classifier_dims, random_state=42)
 

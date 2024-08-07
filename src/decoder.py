@@ -351,7 +351,7 @@ class TweetyBertInference:
     def convert_to_onset_offset(self, labels):
         sampling_rate = 44100 
         NFFT = 1024
-        hop_length = NFFT // 2
+        hop_length = 119
         ms_per_timebin = (hop_length / sampling_rate) * 1000
 
         syllable_dict = {}
@@ -462,33 +462,33 @@ class TweetyBertInference:
 
 # # Usage example:
 if __name__ == "__main__":
-#     classifier = TweetyBertClassifier(
-#         config_path="experiments/PitchShiftTest/config.json",
-#         weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
-#         linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
-#     )
+    classifier = TweetyBertClassifier(
+        config_path="experiments/PitchShiftTest/config.json",
+        weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
+        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
+    )
 
-#     classifier.prepare_data("files/labels_for_training_classifier.npz")
-#     classifier.create_dataloaders()
-#     classifier.create_classifier()
-#     classifier.train_classifier(generate_loss_plot=False)
-#     classifier.save_decoder_state()
-# #     # classifier.generate_specs()
+    classifier.prepare_data("files/labels_for_training_classifier.npz")
+    classifier.create_dataloaders()
+    classifier.create_classifier()
+    classifier.train_classifier(generate_loss_plot=False)
+    classifier.save_decoder_state()
+    classifier.generate_specs()
 
 # #     # loaded_classifier = TweetyBertClassifier.load_decoder_state("/media/george-vengrovski/disk1/linear_decoder_test")
 # #     # loaded_classifier.generate_specs()
 
-    classifier_path = "/media/rose/Extreme SSD/new/linear_decoder"
-    folder_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288"
-    output_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/database.csv"
-    spec_dst_folder = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/specs"
+    # classifier_path = "/media/rose/Extreme SSD/new/linear_decoder"
+    # folder_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288"
+    # output_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/database.csv"
+    # spec_dst_folder = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/specs"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder)
-    inference.setup_wav_to_spec(folder_path)
+    # inference = TweetyBertInference(classifier_path, spec_dst_folder)
+    # inference.setup_wav_to_spec(folder_path)
     
-    # Set the output_path as an attribute of the inference object
-    inference.output_path = output_path
+    # # Set the output_path as an attribute of the inference object
+    # inference.output_path = output_path
     
-    results = inference.process_folder(folder_path, visualize=True)
-    inference.save_results(results, output_path)
+    # results = inference.process_folder(folder_path, visualize=True)
+    # inference.save_results(results, output_path)
 
