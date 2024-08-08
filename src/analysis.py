@@ -297,7 +297,8 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
     plt.tight_layout()
     plt.savefig(save_name + "_ground_truth.png")
 
-def plot_umap_projection_comparison(model, device, dataloaders, samples=100, layer_index=None, dict_key=None, 
+    
+def plot_umap_projection_comparison(model, device, data_dirs, samples=100, layer_index=None, dict_key=None, 
                                     context=1000, save_name=None, raw_spectogram=False, remove_non_vocalization=True):
     all_predictions = []
     all_ground_truth_labels = []
@@ -308,16 +309,19 @@ def plot_umap_projection_comparison(model, device, dataloaders, samples=100, lay
     # Reset Figure
     plt.figure(figsize=(8, 6))
 
-    # to allow sci notation 
-    samples = int(samples)
-    total_samples = 0
 
-    for dataloader_idx, data_loader in enumerate(dataloaders):
+    for dataloader_idx, data_dir in enumerate(data_dirs):
+        data_loader = load_data(data_dir=data_dir, context=context)
         data_loader_iter = iter(data_loader)
         predictions_arr = []
         ground_truth_labels_arr = []
         spec_arr = []
         vocalization_arr = []
+
+
+        # to allow sci notation 
+        samples = int(samples)
+        total_samples = 0
 
         while total_samples < samples:
             try:
@@ -435,7 +439,7 @@ def plot_umap_projection_comparison(model, device, dataloaders, samples=100, lay
 
     # Create a colormap for dataloaders
     cmap_dataloaders = plt.cm.get_cmap('tab10')
-    dataloader_colors = cmap_dataloaders(np.linspace(0, 1, len(dataloaders)))
+    dataloader_colors = cmap_dataloaders(np.linspace(0, 1, len(data_dirs)))
 
     # Plot UMAP projections
     fig, ax = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
@@ -443,7 +447,7 @@ def plot_umap_projection_comparison(model, device, dataloaders, samples=100, lay
     for idx, color in enumerate(dataloader_colors):
         mask = dataloader_indices == idx
         scatter = ax.scatter(embedding_outputs[mask, 0], embedding_outputs[mask, 1], 
-                             c=[color], s=70, alpha=0.1, label=f'Dataloader {idx}')
+                             c=[color], s=70, alpha=0.1, label=f'Dataset {idx}')
 
     ax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     ax.set_xlabel('UMAP 1', fontsize=48)
@@ -466,7 +470,7 @@ def plot_umap_projection_comparison(model, device, dataloaders, samples=100, lay
              dataloader_colors=dataloader_colors)
 
     print(f"Comparison plot saved as {save_name}_comparison.png")
-    print(f"Data saved as files/comparison_{save_name}.npz") 
+    print(f"Data saved as files/comparison_{save_name}.npz")
 
 def apply_windowing(arr, window_size, stride, flatten_predictions=False):
     """
