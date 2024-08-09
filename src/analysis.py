@@ -123,7 +123,8 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
     data_loader = load_data(data_dir=data_dir, context=context)
     data_loader_iter = iter(data_loader)
 
-    while total_samples < samples:
+    # make sure we get the correct number of vocalized samples (not just overall samples which include non vocalized elements)
+    while np.sum(np.concatenate(vocalization_arr, axis=0)) < samples:
         try:
             # Retrieve the next batch
             data, ground_truth_label, vocalization = next(data_loader_iter)

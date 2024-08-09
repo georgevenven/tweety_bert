@@ -5,6 +5,7 @@ experiments
 *.zip
 *.png
 *.pdf
+*.html
 *.npz
 /train
 /test
@@ -25,3 +26,4 @@ test.csv
 temp.ipynb
 WhisperSeg/
 interactive_plot.html
+archive

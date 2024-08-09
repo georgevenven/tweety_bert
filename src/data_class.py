@@ -47,7 +47,7 @@ class SongDataSet_Image(Dataset):
             spectogram = spectogram[20:216]
             # Calculate mean and standard deviation of the spectrogram
             spec_mean = np.mean(spectogram)
-            spec_std = np.std(spectogram)
+            spec_std = np.std(spectogram) + 1e-8  # Add epsilon to avoid division by zero
             # Z-score the spectrogram
             spectogram = (spectogram - spec_mean) / spec_std
 

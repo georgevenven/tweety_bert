@@ -41,14 +41,20 @@ class TweetyBertClassifier:
         data = np.load(data_file)
         vocalization = data['vocalization']
         labels = data['hdbscan_labels']
-        specs = data['original_spectogram']
+        specs = data['s']
 
         specs = np.pad(specs, ((0, 0), (20, 0)), 'constant', constant_values=0)
         
-        temp = np.full_like(vocalization, -1)
-        indexes = np.where(vocalization == 1.0)[0]
-        temp[indexes] = labels
-        labels = temp + 1
+        # temporary lazy solution
+        vocalization = labels 
+
+
+        # temp = np.full_like(vocalization, -1)
+        # indexes = np.where(vocalization == 1.0)[0]
+        # temp[indexes] = labels
+        # labels = temp + 1
+
+        labels = labels + 1
 
         self.num_classes = len(np.unique(labels))
         print(f"Number of classes: {self.num_classes}")
@@ -94,11 +100,11 @@ class TweetyBertClassifier:
             model=self.tweety_bert_model, 
             freeze_layers=True, 
             layer_num=-2, 
-            layer_id="attention_output", 
+            layer_id="embedding", 
             classifier_dims=196
         ).to(self.device)
 
-    def train_classifier(self, lr=1e-5, batches_per_eval=100, desired_total_batches=500, patience=8, generate_loss_plot=False):
+    def train_classifier(self, lr=3e-4, batches_per_eval=25, desired_total_batches=1e4, patience=80, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -463,25 +469,22 @@ class TweetyBertInference:
 # # Usage example:
 if __name__ == "__main__":
     classifier = TweetyBertClassifier(
-        config_path="experiments/PitchShiftTest/config.json",
-        weights_path="experiments/PitchShiftTest/saved_weights/model_step_12500.pth",
-        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
+        config_path="experiments/5288_new_whisperseg/config.json",
+        weights_path="experiments/5288_new_whisperseg/saved_weights/model_step_29000.pth",
+        linear_decoder_dir="/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
     )
 
-    classifier.prepare_data("files/labels_for_training_classifier.npz")
+    classifier.prepare_data("files/labels_5288_new_whisperseg.npz")
     classifier.create_dataloaders()
     classifier.create_classifier()
-    classifier.train_classifier(generate_loss_plot=False)
+    classifier.train_classifier(generate_loss_plot=True)
     classifier.save_decoder_state()
     classifier.generate_specs()
 
-# #     # loaded_classifier = TweetyBertClassifier.load_decoder_state("/media/george-vengrovski/disk1/linear_decoder_test")
-# #     # loaded_classifier.generate_specs()
-
-    # classifier_path = "/media/rose/Extreme SSD/new/linear_decoder"
-    # folder_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288"
-    # output_path = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/database.csv"
-    # spec_dst_folder = "/media/rose/Extreme SSD/20240726_All_Area_X_Lesions/USA5288_Specs/specs"
+    # classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
+    # folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
+    # output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
+    # spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
 
     # inference = TweetyBertInference(classifier_path, spec_dst_folder)
     # inference.setup_wav_to_spec(folder_path)

@@ -8,6 +8,73 @@ import numpy as np
 from sklearn.decomposition import PCA
 from torch.cuda.amp import autocast, GradScaler  # Import autocast and GradScaler for mixed precision
 import torch.nn.functional as F
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+class WeightGradientMonitor:
+    def __init__(self, model, plot_interval=100):
+        self.model = model
+        self.plot_interval = plot_interval
+        self.stats_history = {
+            'weight_mean': [], 'weight_std': [], 'weight_min': [], 'weight_max': [],
+            'grad_mean': [], 'grad_std': [], 'grad_min': [], 'grad_max': []
+        }
+        self.steps = []
+
+    def update(self, step):
+        if step % self.plot_interval == 0:
+            self.steps.append(step)
+            weights = []
+            grads = []
+            for name, param in self.model.named_parameters():
+                weights.extend(param.data.cpu().numpy().flatten())
+                if param.grad is not None:
+                    grads.extend(param.grad.cpu().numpy().flatten())
+            
+            weights = np.array(weights)
+            grads = np.array(grads)
+
+            self.stats_history['weight_mean'].append(np.mean(weights))
+            self.stats_history['weight_std'].append(np.std(weights))
+            self.stats_history['weight_min'].append(np.min(weights))
+            self.stats_history['weight_max'].append(np.max(weights))
+
+            self.stats_history['grad_mean'].append(np.mean(grads))
+            self.stats_history['grad_std'].append(np.std(grads))
+            self.stats_history['grad_min'].append(np.min(grads))
+            self.stats_history['grad_max'].append(np.max(grads))
+
+    def plot(self, save_dir):
+        fig, axs = plt.subplots(2, 2, figsize=(20, 15))
+        fig.suptitle('Weight and Gradient Statistics Over Time', fontsize=16)
+
+        self._plot_stat(axs[0, 0], 'weight', 'mean', 'std')
+        self._plot_stat(axs[0, 1], 'weight', 'min', 'max')
+        self._plot_stat(axs[1, 0], 'grad', 'mean', 'std')
+        self._plot_stat(axs[1, 1], 'grad', 'min', 'max')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'weight_gradient_stats.png'))
+        plt.close()
+
+        print(f"Plot saved in {save_dir}")
+
+    def _plot_stat(self, ax, param_type, stat1, stat2):
+        ax.plot(self.steps, self.stats_history[f'{param_type}_{stat1}'], label=f'{stat1.capitalize()}')
+        ax.plot(self.steps, self.stats_history[f'{param_type}_{stat2}'], label=f'{stat2.capitalize()}')
+        ax.set_title(f'{param_type.capitalize()} {stat1.capitalize()} and {stat2.capitalize()}')
+        ax.set_xlabel('Training Step')
+        ax.set_ylabel('Value')
+        ax.legend()
+        ax.set_yscale('symlog')
+
+    def log_extreme_values(self, threshold=1e3):
+        for step, (w_max, g_max) in enumerate(zip(self.stats_history['weight_max'], self.stats_history['grad_max'])):
+            if abs(w_max) > threshold or abs(g_max) > threshold:
+                print(f"Step {self.steps[step]}: Extreme value detected!")
+                print(f"  Max weight: {w_max:.2e}")
+                print(f"  Max gradient: {g_max:.2e}")
 
 class LinearProbeModel(nn.Module):
     def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", classifier_dims=2):
@@ -22,12 +89,16 @@ class LinearProbeModel(nn.Module):
 
         # Define a 3-layer decoder with ReLU activations
         self.classifier = nn.Sequential(
-            nn.Linear(classifier_dims, 128),
-            nn.ReLU(),
+            nn.Linear(classifier_dims, 128),    
+            nn.GELU(),
             nn.Linear(128, 64),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(64, num_classes)
         )
+        # nn.init.ones_(self.classifier[0].weight)
+        # nn.init.ones_(self.classifier[2].weight)
+        # nn.init.ones_(self.classifier[4].weight)
+
 
         if freeze_layers and model_type == "neural_net":
             self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
@@ -136,6 +207,9 @@ class LinearProbeTrainer():
         self.use_tqdm = use_tqdm
         self.moving_avg_window = moving_avg_window  # Window size for moving average
         self.scaler = GradScaler()  # Initialize GradScaler for mixed precision
+        self.weight_grad_monitor = WeightGradientMonitor(self.model)
+        self.save_dir = "weight_gradient_plots"
+        os.makedirs(self.save_dir, exist_ok=True)
 
     def frame_error_rate(self, y_pred, y_true):
         y_pred = y_pred.permute(0,2,1)
@@ -202,11 +276,23 @@ class LinearProbeTrainer():
             label = label.argmax(dim=-1)
             output = output.permute(0,2,1)
 
+            
+            # print(label.shape)
+            # print(output.shape)
+
+            # # Save first 100 labels and predictions to a text file
+            # np.savetxt(f'batch_{total_batches}_labels.txt', label[0].detach().cpu().numpy(), fmt='%d')
+            # np.savetxt(f'batch_{total_batches}_predictions.txt', output[0].detach().cpu().numpy(), fmt='%.4f')
+
             loss = self.model.cross_entropy_loss(predictions=output, targets=label)
 
             loss.backward()
             self.optimizer.step()
-            self.optimizer.zero_grad()
+            # Update the weight and gradient monitor
+            self.weight_grad_monitor.update(total_batches)
+
+            # Log extreme values
+            self.weight_grad_monitor.log_extreme_values()
 
             total_batches += 1
             if total_batches % self.batches_per_eval == 0:
@@ -237,6 +323,8 @@ class LinearProbeTrainer():
 
             if stop_training:
                 break
+        self.weight_grad_monitor.plot(self.save_dir)
+
 
         if self.plotting:
             self.plot_results(raw_loss_list, moving_avg_val_loss_list, moving_avg_frame_error_list)
