@@ -50,4 +50,6 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
             shutil.copy2(src_file_path, dest_file_path)
 
 # Example usage with moving files
-split_dataset('/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Specs', 0.8, '/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Train', '/media/george-vengrovski/Extreme SSD/5509_data/USA_5509_Test', move_files=False)
+split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data_matrices', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data_matrices_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data_matrices_test', move_files=False)
+split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data_matrices', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data_matrices_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data_matrices_test', move_files=False)
+split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data_matrices', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data_matrices_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data_matrices_test', move_files=False)
