@@ -7,12 +7,12 @@ from bokeh.transform import linear_cmap
 from bokeh.io import show
 
 # Load the data
-f = np.load("/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_5288_new_whisperseg.npz", allow_pickle=True)
+f = np.load("/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_new_whisperseg_test_pitch.npz", allow_pickle=True)
 
 length_to_plot = 50000
 downsample_factor = 5  # Adjust this value to balance between performance and detail
 
-spec = f["original_spectogram"][:length_to_plot]
+spec = f["s"][:length_to_plot]
 vocalization = f["vocalization"][:length_to_plot]
 labels = f["hdbscan_labels"]
 colors = f["hdbscan_colors"]

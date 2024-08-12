@@ -48,14 +48,21 @@ class TweetyBertClassifier:
         # temporary lazy solution
         vocalization = labels 
 
+        # Replace noise labels (-1) with the closest non-noise label
+        for i in range(len(labels)):
+            if labels[i] == -1:
+                left = right = i
+                while left >= 0 or right < len(labels):
+                    if left >= 0 and labels[left] != -1:
+                        labels[i] = labels[left]
+                        break
+                    if right < len(labels) and labels[right] != -1:
+                        labels[i] = labels[right]
+                        break
+                    left -= 1
+                    right += 1
 
-        # temp = np.full_like(vocalization, -1)
-        # indexes = np.where(vocalization == 1.0)[0]
-        # temp[indexes] = labels
-        # labels = temp + 1
-
-        labels = labels + 1
-
+        # Adjust num_classes to compensate for noise label replacement
         self.num_classes = len(np.unique(labels))
         print(f"Number of classes: {self.num_classes}")
 
@@ -99,12 +106,12 @@ class TweetyBertClassifier:
             model_type="neural_net", 
             model=self.tweety_bert_model, 
             freeze_layers=True, 
-            layer_num=-2, 
-            layer_id="embedding", 
+            layer_num=-1, 
+            layer_id="attention_output", 
             classifier_dims=196
         ).to(self.device)
 
-    def train_classifier(self, lr=3e-4, batches_per_eval=25, desired_total_batches=1e4, patience=80, generate_loss_plot=False):
+    def train_classifier(self, lr=1e-4, batches_per_eval=50, desired_total_batches=1e3, patience=40, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -469,12 +476,12 @@ class TweetyBertInference:
 # # Usage example:
 if __name__ == "__main__":
     classifier = TweetyBertClassifier(
-        config_path="experiments/5288_new_whisperseg/config.json",
-        weights_path="experiments/5288_new_whisperseg/saved_weights/model_step_29000.pth",
-        linear_decoder_dir="/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
+        config_path="experiments/5288_new_whisperseg_pitch_shift/config.json",
+        weights_path="experiments/5288_new_whisperseg_pitch_shift/saved_weights/model_step_34500.pth",
+        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
     )
 
-    classifier.prepare_data("files/labels_5288_new_whisperseg.npz")
+    classifier.prepare_data("files/labels_new_whisperseg_test_pitch.npz")
     classifier.create_dataloaders()
     classifier.create_classifier()
     classifier.train_classifier(generate_loss_plot=True)

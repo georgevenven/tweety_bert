@@ -12,6 +12,84 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+class ModifiedCrossEntropyLoss(nn.Module):
+    def __init__(self, similarity_penalty_weight=0.1, entropy_weight=0.01, temperature=1.0):
+        super().__init__()
+        self.ce_loss = nn.CrossEntropyLoss()
+        self.similarity_penalty_weight = similarity_penalty_weight
+        self.entropy_weight = entropy_weight
+        self.temperature = temperature
+
+    def forward(self, predictions, targets):
+        # predictions shape: [batch_size, num_classes, sequence_length]
+        # targets shape: [batch_size, sequence_length]
+        batch_size, num_classes, seq_length = predictions.shape
+        
+        # Apply temperature scaling
+        scaled_predictions = predictions / self.temperature
+        
+        # Reshape predictions to [batch_size * sequence_length, num_classes]
+        predictions_reshaped = scaled_predictions.permute(0, 2, 1).reshape(-1, num_classes)
+        
+        # Reshape targets to [batch_size * sequence_length]
+        targets_reshaped = targets.reshape(-1)
+
+        # Calculate cross-entropy loss
+        ce_loss = self.ce_loss(predictions_reshaped, targets_reshaped)
+
+        # Calculate pairwise cosine similarity between consecutive prediction vectors
+        predictions_norm = F.normalize(scaled_predictions, p=2, dim=1)
+        cosine_sim = F.cosine_similarity(predictions_norm[:, :, :-1].unsqueeze(2), 
+                                         predictions_norm[:, :, 1:].unsqueeze(1), 
+                                         dim=3)
+        
+        # Average similarity across batch, classes, and sequence
+        avg_similarity = cosine_sim.mean()
+
+        # Penalty is inverse of similarity (1 - similarity) to encourage dissimilarity
+        similarity_penalty = 1 - avg_similarity
+
+        # Calculate entropy
+        probs = F.softmax(scaled_predictions, dim=1)
+        entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1).mean()
+
+        # Combine losses
+        total_loss = ce_loss + self.similarity_penalty_weight * similarity_penalty - self.entropy_weight * entropy
+
+        return total_loss, ce_loss, similarity_penalty
+
+
+
+    # def forward(self, predictions, targets):
+    #     # predictions shape: [batch_size, num_classes, sequence_length]
+    #     # targets shape: [batch_size, sequence_length]
+
+    #     batch_size, num_classes, seq_length = predictions.shape
+        
+    #     # Reshape predictions to [batch_size * sequence_length, num_classes]
+    #     predictions_reshaped = predictions.permute(0, 2, 1).reshape(-1, num_classes)
+        
+    #     # Reshape targets to [batch_size * sequence_length]
+    #     targets_reshaped = targets.reshape(-1)
+
+    #     # Calculate cross-entropy loss
+    #     ce_loss = self.ce_loss(predictions_reshaped, targets_reshaped)
+
+    #     # Calculate state switching penalty based on argmax logits
+    #     argmax_predictions = torch.argmax(predictions, dim=1)
+
+    #     # Calculate the number of switches using vectorized operations
+    #     switches = (argmax_predictions[:, 1:] != argmax_predictions[:, :-1]).sum().item()
+    
+    #     switching_penalty = switches / (batch_size * seq_length)
+
+    #     # Combine losses
+    #     total_loss = ce_loss + self.switching_penalty_weight * switching_penalty
+
+    #     total_loss = ce_loss 
+
+    #     return total_loss, ce_loss, switching_penalty
+
 class WeightGradientMonitor:
     def __init__(self, model, plot_interval=100):
         self.model = model
@@ -95,11 +173,7 @@ class LinearProbeModel(nn.Module):
             nn.GELU(),
             nn.Linear(64, num_classes)
         )
-        # nn.init.ones_(self.classifier[0].weight)
-        # nn.init.ones_(self.classifier[2].weight)
-        # nn.init.ones_(self.classifier[4].weight)
-
-
+        
         if freeze_layers and model_type == "neural_net":
             self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
             # self.freeze_all_but_classifier(self.model)
@@ -157,8 +231,11 @@ class LinearProbeModel(nn.Module):
         return logits
     
     def cross_entropy_loss(self, predictions, targets):
-        loss = nn.CrossEntropyLoss()
-        return loss(predictions, targets)
+        
+        loss_fn = ModifiedCrossEntropyLoss()
+        total_loss, ce_loss, switching_penalty = loss_fn(predictions, targets)
+
+        return total_loss
 
     def freeze_all_but_classifier(self, model):
         for name, module in model.named_modules():
@@ -291,8 +368,8 @@ class LinearProbeTrainer():
             # Update the weight and gradient monitor
             self.weight_grad_monitor.update(total_batches)
 
-            # Log extreme values
-            self.weight_grad_monitor.log_extreme_values()
+            # # Log extreme values
+            # self.weight_grad_monitor.log_extreme_values()
 
             total_batches += 1
             if total_batches % self.batches_per_eval == 0:
