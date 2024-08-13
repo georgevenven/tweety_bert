@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 # Directory
-directory_path = '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data_matrices/llb16_data_matrices'
+directory_path = '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data_matrices_test'
 
 # Get the list of files in the directory
 files = os.listdir(directory_path)
@@ -24,7 +24,7 @@ for file in tqdm(files, desc="Processing files"):
         labels = npz_file['labels'].reshape(-1)
 
         # Create vocalizations array
-        vocalizations = np.ones(labels.shape)
+        vocalization = np.ones(labels.shape)
 
         # Save the new .npz file with 's', 'labels', and 'vocalizations'
-        np.savez(file_path, s=npz_file['s'], labels=labels, vocalizations=vocalizations)
+        np.savez(file_path, s=npz_file['s'], labels=labels, vocalization=vocalization)

@@ -31,6 +31,7 @@ configurations = [
         "p": 0.01,
         "alpha": 1,
         "pos_enc_type": "relative",
+        "pitch_shift": True,
         "learning_rate": 3e-4,
         "max_steps": 5e4,
         "eval_interval": 500,
