@@ -169,8 +169,8 @@ class LinearProbeModel(nn.Module):
     
     def cross_entropy_loss(self, predictions, targets):
         
-        loss_fn = ModifiedCrossEntropyLoss()
-        total_loss, ce_loss, switching_penalty = loss_fn(predictions, targets)
+        loss_fn = torch.nn.CrossEntropyLoss()
+        total_loss = loss_fn(predictions, targets)
 
         return total_loss
 

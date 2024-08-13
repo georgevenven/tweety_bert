@@ -11,10 +11,11 @@ import glasbey
 from sklearn.metrics.cluster import completeness_score
 import seaborn as sns
 import pandas as pd
-from sklearn.metrics import homogeneity_score, completeness_score, v_measure_score
+from sklearn.metrics import homogeneity_score, completeness_score, v_measure_score, adjusted_rand_score
 import pickle
 from itertools import cycle
 import torch.nn.functional as F
+from sklearn.neighbors import NearestNeighbors
 
 
 def average_colors_per_sample(ground_truth_labels, cmap):
@@ -661,7 +662,6 @@ class ComputerClusterPerformance():
         # takes a list of paths to files that contain the labels 
         self.labels_paths = labels_path
             
-
     def syllable_to_phrase_labels(self, arr, silence=-1):
         new_arr = np.array(arr, dtype=int)
         current_syllable = None
@@ -708,7 +708,20 @@ class ComputerClusterPerformance():
 
         return np.array(reduced_list)
 
-    def majority_vote(self, data):
+    def majority_vote(self, data, window_size=1):
+        """
+        Apply majority vote on the input data with a specified window size.
+
+        Parameters:
+        - data: list or array-like
+          The input data to apply majority vote on.
+        - window_size: int, default=3
+          The size of the window to apply majority vote. Must be an odd number.
+
+        Returns:
+        - output: ndarray
+          The array with majority vote applied.
+        """
         # Function to find the majority element in a window
         def find_majority(window):
             count = Counter(window)
@@ -716,70 +729,25 @@ class ComputerClusterPerformance():
             for num, freq in count.items():
                 if freq == majority:
                     return num
-            return window[1]  # Return the middle element if no majority found
+            return window[len(window) // 2]  # Return the middle element if no majority found
 
         # Ensure the input data is in list form
         if isinstance(data, str):
             data = [int(x) for x in data.split(',') if x.strip().isdigit()]
 
         # Initialize the output array with a padding at the beginning
-        output = [data[0]]  # Pad with the first element
+        output = [data[0]] * (window_size // 2)  # Pad with the first element
 
         # Apply the majority vote on each window
-        for i in range(1, len(data) - 1):  # Start from 1 and end at len(data) - 1 to avoid index out of range
-            window = data[i-1:i+2]  # Define the window with size 3
+        for i in range(len(data) - window_size + 1):
+            window = data[i:i + window_size]
             output.append(find_majority(window))
 
         # Pad the output array at the end to match the input array size
-        output.append(data[-1])
+        output.extend([data[-1]] * (window_size // 2))
 
         return np.array(output)
 
-    def integer_to_letter(self, match):
-        """Converts an integer match to a corresponding letter (1 -> A, 2 -> B, etc.)."""
-        num = int(match.group())
-        # Subtract 1 from the number to get 0-based indexing for letters, then mod by 26 to handle numbers > 26
-        return chr((num - 1) % 26 + ord('A'))
-
-    def replace_integers_with_letters(self, file_path):
-        """Reads a file, replaces all integers with their corresponding letters, and writes the changes back to the file."""
-        with open(file_path, 'r') as file:
-            content = file.read()
-        
-        # Replace all occurrences of integers in the file with their corresponding letters
-        modified_content = re.sub(r'\b\d+\b', self.integer_to_letter, content)
-        
-        with open(file_path, 'w') as file:
-            file.write(modified_content)    
-
-    def syllable_to_phrase_labels(self, arr, silence=0):
-        new_arr = np.array(arr, dtype=int)
-        current_syllable = None
-        start_of_phrase_index = None
-        first_non_silence_label = None  # To track the first non-silence syllable
-
-        for i, value in enumerate(new_arr):
-            if value != silence and value != current_syllable:
-                if start_of_phrase_index is not None:
-                    new_arr[start_of_phrase_index:i] = current_syllable
-                current_syllable = value
-                start_of_phrase_index = i
-                
-                if first_non_silence_label is None:  # Found the first non-silence label
-                    first_non_silence_label = value
-
-        if start_of_phrase_index is not None:
-            new_arr[start_of_phrase_index:] = current_syllable
-
-        # Replace the initial silence with the first non-silence syllable label
-        if new_arr[0] == silence and first_non_silence_label is not None:
-            for i in range(len(new_arr)):
-                if new_arr[i] != silence:
-                    break
-                new_arr[i] = first_non_silence_label
-
-        return new_arr
-        
     def compute_vmeasure_score(self):
         homogeneity_scores = []
         completeness_scores = []
@@ -817,50 +785,95 @@ class ComputerClusterPerformance():
         }
 
         return metrics 
-
-    # def compute_f1_scores(self, plot=True):
-    #     all_scores = []  # Store F1 scores for each instance in each path
-
-    #     for path_index, path in enumerate(self.labels_paths):
-    #         f = np.load(path)
-    #         hdbscan_labels = f['hdbscan_labels']
-    #         ground_truth_labels = f['ground_truth_labels']
-
-    #         # Remove points marked as noise
-    #         remove_noise_index = np.where(hdbscan_labels == -1)[0]
-    #         hdbscan_labels = np.delete(hdbscan_labels, remove_noise_index)
-    #         ground_truth_labels = np.delete(ground_truth_labels, remove_noise_index)
-
-    #         # Convert to phrase labels and set hdbscan_labels equal to ground_truth_labels for comparison
-    #         hdbscan_labels = self.majority_vote(hdbscan_labels)
-    #         ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=0)
-    #         ground_truth_classes = np.unique(ground_truth_labels)
-
-    #         for c in ground_truth_classes:
-    #             class_index = np.where(ground_truth_labels == c)[0]
-    #             unique_elements, counts = np.unique(hdbscan_labels[class_index], return_counts=True)
-    #             total_number_of_elements = hdbscan_labels[class_index].shape[0]
-
-    #     if plot and all_scores:
-    #         # Convert scores and path indices to a DataFrame for plotting
-    #         scores_df = pd.DataFrame(all_scores, columns=['Path Index', 'Class', 'Precision', 'Recall', 'F1 Score', 'TP', 'FP', 'FN'])
-
-    #         # Simplify the DataFrame for basic plotting (ignoring 'Path Index' and contingency table values)
-    #         simplified_df = scores_df[['Class', 'F1 Score']].copy()
-    #         simplified_df['Class'] = simplified_df['Class'].astype(str)  # Ensure 'Class' is treated as categorical (string) data
-
-    #         plt.figure(figsize=(10, 6))
-    #         sns.barplot(x='Class', y='F1 Score', data=simplified_df)
-    #         plt.title('F1 Scores for Each Class')
-    #         plt.ylabel('F1 Score')
-    #         plt.xlabel('Class')
-    #         plt.tight_layout()
-
-    #         plt.savefig('f1_scores_per_class_plot.png')  # Save the figure as a PNG file
-    #         plt.show()  # Show the plot
                 
-    def compute_mutual_information_score():
-        pass
+    def compute_adjusted_rand_index(self):
+        adjusted_rand_indices = []
+
+        for path_index, path in enumerate(self.labels_paths):
+            f = np.load(path)
+            hdbscan_labels = f['hdbscan_labels']
+            ground_truth_labels = f['ground_truth_labels']
+
+            # Remove points marked as noise
+            remove_noise_index = np.where(hdbscan_labels == -1)[0]
+            hdbscan_labels = np.delete(hdbscan_labels, remove_noise_index)
+            ground_truth_labels = np.delete(ground_truth_labels, remove_noise_index)
+
+            # Convert to phrase labels
+            hdbscan_labels = self.majority_vote(hdbscan_labels)
+            ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=0)
+
+            # Compute Adjusted Rand Index
+            ari = adjusted_rand_score(ground_truth_labels, hdbscan_labels)
+
+            # Append score
+            adjusted_rand_indices.append(ari)
+
+        # Calculate average and standard error
+        metrics = {
+            'Adjusted Rand Index': (np.mean(adjusted_rand_indices), np.std(adjusted_rand_indices, ddof=1) / np.sqrt(len(adjusted_rand_indices)))
+        }
+
+        return metrics
+
+    def compute_hopkins_statistic(self, X):
+        """
+        Compute the Hopkins statistic for the dataset X.
+        
+        Parameters:
+        - X: ndarray of shape (n_samples, n_features)
+          The input data to compute the Hopkins statistic.
+
+        Returns:
+        - hopkins_stat: float
+          The Hopkins statistic value.
+        """
+
+        print(X.shape)
+        n_samples = X.shape[0]
+        n_features = X.shape[1]
+        m = int(0.1 * n_samples)  # Sample size, typically 10% of the dataset
+
+        # Randomly sample m points from the dataset
+        random_indices = np.random.choice(n_samples, m, replace=False)
+        X_m = X[random_indices]
+
+        # Generate m random points within the feature space
+        X_random = np.random.uniform(np.min(X, axis=0), np.max(X, axis=0), (m, n_features))
+
+        # Nearest neighbors model
+        nbrs = NearestNeighbors(n_neighbors=1).fit(X)
+
+        print(X_random[:200])
+
+        # Compute distances from random points to the nearest neighbors in the dataset
+        u_distances, _ = nbrs.kneighbors(X_random, n_neighbors=1)
+        u_distances = u_distances.sum()
+
+        # Compute distances from sampled points to the nearest neighbors in the dataset
+        w_distances, _ = nbrs.kneighbors(X_m, n_neighbors=2)
+        w_distances = w_distances[:, 1].sum()  # Exclude the point itself
+
+        # Compute the Hopkins statistic
+        hopkins_stat = u_distances / (u_distances + w_distances)
+
+        return hopkins_stat
+
+    def compute_hopkins_statistic_from_file(self, file_path):
+        """
+        Compute the Hopkins statistic for the embedding data stored in the given file.
+
+        Parameters:
+        - file_path: str
+          Path to the .npz file containing the embedding data.
+
+        Returns:
+        - hopkins_stat: float
+          The Hopkins statistic value.
+        """
+        data = np.load(file_path)
+        embedding_outputs = data['embedding_outputs']
+        return self.compute_hopkins_statistic(embedding_outputs)
 
 def plot_metrics(metrics_list, model_names):
     num_metrics = 3  # Homogeneity, Completeness, V-measure

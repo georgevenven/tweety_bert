@@ -2,7 +2,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-dir_path = '/home/george-vengrovski/Documents/data/llb16_data_matrices'
+dir_path = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data_matrices'
 
 # Checking if the directory exists
 if not os.path.exists(dir_path):

@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 # Directory
-directory_path = '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data_matrices_test'
+directory_path = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data_matrices'
 
 # Get the list of files in the directory
 files = os.listdir(directory_path)
