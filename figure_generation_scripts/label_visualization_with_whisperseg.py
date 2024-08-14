@@ -7,7 +7,7 @@ from bokeh.transform import linear_cmap
 from bokeh.io import show
 
 # Load the data
-f = np.load("/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_new_whisperseg_test_pitch.npz", allow_pickle=True)
+f = np.load("/media/george-vengrovski/Extreme SSD/labels/labels_llb3_preextracted_with_pitch_shift.npz", allow_pickle=True)
 
 length_to_plot = 50000
 downsample_factor = 5  # Adjust this value to balance between performance and detail
@@ -18,17 +18,22 @@ labels = f["hdbscan_labels"]
 colors = f["hdbscan_colors"]
 embeddings = f["embedding_outputs"]
 
-# Process labels
-temp = np.asarray(vocalization)
-indexes = np.where(temp == 1)[0]
-for i, index in enumerate(indexes):
-    temp[index] = labels[i]
-labels = temp[:length_to_plot]
 
-# Process embedding
-extended_embeddings = np.zeros((length_to_plot, 2))
-for i, index in enumerate(indexes):
-    extended_embeddings[index] = embeddings[i]
+
+# # Process labels
+# temp = np.asarray(vocalization)
+# indexes = np.where(temp == 1)[0]
+# for i, index in enumerate(indexes):
+#     temp[index] = labels[i]
+# labels = temp[:length_to_plot]
+
+# # Process embedding
+# extended_embeddings = np.zeros((length_to_plot, 2))
+# for i, index in enumerate(indexes):
+#     extended_embeddings[index] = embeddings[i]
+
+extended_embeddings = embeddings[:length_to_plot]
+extended_labels = labels[:length_to_plot]
 
 # Downsample data for UMAP plot
 downsampled_embeddings = extended_embeddings[::downsample_factor]

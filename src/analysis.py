@@ -839,12 +839,10 @@ class ComputerClusterPerformance():
         X_m = X[random_indices]
 
         # Generate m random points within the feature space
-        X_random = np.random.uniform(np.min(X, axis=0), np.max(X, axis=0), (m, n_features))
+        X_random = np.random.uniform(np.min(X, axis=0), np.max(sX, axis=0), (m, n_features))
 
         # Nearest neighbors model
         nbrs = NearestNeighbors(n_neighbors=1).fit(X)
-
-        print(X_random[:200])
 
         # Compute distances from random points to the nearest neighbors in the dataset
         u_distances, _ = nbrs.kneighbors(X_random, n_neighbors=1)

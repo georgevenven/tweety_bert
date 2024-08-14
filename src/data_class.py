@@ -9,6 +9,19 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import random
 import logging
 
+def deterimine_number_unique_classes(dir):
+    unique_labels = set()
+
+    for file in os.listdir(dir):
+        data = np.load(os.path.join(dir, file), allow_pickle=True)
+        labels = np.unique(data['labels'])
+
+        # add to set
+        unique_labels.update(labels)
+
+    return len(unique_labels)
+    
+
 class SongDataSet_Image(Dataset):
     def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False):
         self.file_paths = [os.path.join(file_dir, file) for file in os.listdir(file_dir)]

@@ -92,30 +92,31 @@ class ModifiedCrossEntropyLoss(nn.Module):
 
 
 class LinearProbeModel(nn.Module):
-    def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", classifier_dims=2):
+    def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", TweetyBERT_readout_dims=2, classifier_type="decoder"):
         super(LinearProbeModel, self).__init__()
         self.model_type = model_type
         self.freeze_layers = freeze_layers
         self.layer_num = layer_num
         self.layer_id = layer_id
         self.model = model
-        self.classifier_dims = classifier_dims
+        self.TweetyBERT_readout_dims = TweetyBERT_readout_dims
         self.num_classes = num_classes 
 
-        # Define a 3-layer decoder with ReLU activations
-        self.classifier = nn.Sequential(
-            nn.Linear(classifier_dims, 128),    
-            nn.GELU(),
-            nn.Linear(128, 64),
-            nn.GELU(),
-            nn.Linear(64, num_classes)
-        )
-        
-        if freeze_layers and model_type == "neural_net":
+        if classifier_type == "decoder":
+            # Define a 3-layer decoder with ReLU activations
+            self.classifier = nn.Sequential(
+                nn.Linear(TweetyBERT_readout_dims, 128),    
+                nn.GELU(),
+                nn.Linear(128, 64),
+                nn.GELU(),
+                nn.Linear(64, num_classes)
+            )
             self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
-            # self.freeze_all_but_classifier(self.model)
-        if model_type == "pca":
-            self.pca = PCA(n_components=classifier_dims, random_state=42)
+
+
+        elif classifier_type == "linear_probe":
+            self.classifier = nn.Linear(TweetyBERT_readout_dims, num_classes)
+            self.freeze_all_but_classifier(self.model)
 
     def forward(self, input):
         # with autocast():  # Use autocast for the forward pass to enable mixed precision
@@ -221,9 +222,6 @@ class LinearProbeTrainer():
         self.use_tqdm = use_tqdm
         self.moving_avg_window = moving_avg_window  # Window size for moving average
         self.scaler = GradScaler()  # Initialize GradScaler for mixed precision
-        self.weight_grad_monitor = WeightGradientMonitor(self.model)
-        self.save_dir = "weight_gradient_plots"
-        os.makedirs(self.save_dir, exist_ok=True)
 
     def frame_error_rate(self, y_pred, y_true):
         y_pred = y_pred.permute(0,2,1)
@@ -324,8 +322,6 @@ class LinearProbeTrainer():
 
             if stop_training:
                 break
-        self.weight_grad_monitor.plot(self.save_dir)
-
 
         if self.plotting:
             self.plot_results(raw_loss_list, moving_avg_val_loss_list, moving_avg_frame_error_list)
@@ -353,12 +349,11 @@ class LinearProbeTrainer():
 
 
 class ModelEvaluator:
-    def __init__(self, model, test_loader, num_classes=21, device='cuda:0', use_tqdm=True, filter_unseen_classes=False, train_dir=None):
+    def __init__(self, model, test_loader, num_classes=21, device='cuda:0', filter_unseen_classes=False, train_dir=None):
         self.model = model.to(device)
         self.test_loader = test_loader
         self.num_classes = num_classes
         self.device = device
-        self.use_tqdm = use_tqdm
         self.filter_unseen_classes = filter_unseen_classes
         self.seen_classes = set(range(num_classes))  # Assume all classes are seen by default
         if filter_unseen_classes and train_dir:
@@ -374,7 +369,7 @@ class ModelEvaluator:
                 seen_classes.update(unique_labels)
         return seen_classes
 
-    def validate_model_multiple_passes(self, num_passes=1, max_batches=1e4, spec_height=196, context=1000):
+    def evalulate_model(self, num_passes=1, max_batches=1e4, spec_height=196, context=1000):
         self.model.eval()
         errors_per_class = [0] * self.num_classes
         correct_per_class = [0] * self.num_classes
@@ -382,28 +377,16 @@ class ModelEvaluator:
         total_errors = 0
 
         total_iterations = max(max_batches, len(self.test_loader))
-        progress_bar = tqdm(total=total_iterations, desc="Evaluating", unit="batch") if self.use_tqdm else None
         for _ in range(num_passes):
             with torch.no_grad():
                 for spec, label, vocalization in self.test_loader:
                     spec, label, vocalization = spec.to(self.device), label.to(self.device), vocalization.to(self.device)
-                    # Removed print statements as per instructions
 
-                    print(f"spec shape: {spec.shape}, label shape: {label.shape}, vocalization shape: {vocalization.shape}")
-
-                    # this is all done to ensure that all of the eval dataset is seen by the model 
-                    # First, pad spec to the nearest multiple of 500
-                    pad_size = (context - spec.size(1) % context) % context
+                    pad_size = (context - spec.size(-1) % context) % context
                     spec = F.pad(spec, (0, 0, 0, pad_size))
                     label = F.pad(label, (0, 0, 0, pad_size))
 
-                    # Now, reshape this to be [n x length x freq bins]
-                    spec = spec.reshape(-1, context, spec_height)
-                    label = label.reshape(-1, context, self.num_classes)
-
-                    spec = spec.unsqueeze(1)
-
-                    output = self.model.forward(spec.permute(0, 1, 3, 2))
+                    output = self.model.forward(spec)
 
                     label = label.squeeze(1)
 
@@ -425,12 +408,6 @@ class ModelEvaluator:
 
                         total_frames += class_mask.sum().item()
                         total_errors += incorrect_class.sum().item()
-
-                    if progress_bar is not None:
-                        progress_bar.update(1)
-
-        if progress_bar is not None:
-            progress_bar.close()
 
         class_frame_error_rates = {
             cls: (errors / (errors + correct) * 100 if errors + correct > 0 else float('nan'))
