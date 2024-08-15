@@ -234,7 +234,7 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
 
     print(f"shape of array for UMAP {predictions.shape}")
 
-    # Fit the UMAP reducer       
+    #  Fit the UMAP reducer       
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
     reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
 
@@ -258,22 +258,23 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
 
     np.savez(f"files/labels_{save_name}", embedding_outputs=embedding_outputs, hdbscan_labels=hdbscan_labels, ground_truth_labels=ground_truth_labels, s=spec_arr, hdbscan_colors=hdbscan_colors, ground_truth_colors=cmap_ground_truth.colors, original_spectogram=original_spec_arr, vocalization=vocalization_arr)
 
-    # ground_truth_labels = syllable_to_phrase_labels(arr=ground_truth_labels,silence=0)
-    
-    # # sets noise as white  
-    # hdbscan_labels += 1
+    # Function to create density-based heatmap
+    def create_density_heatmap(x, y, bins=300):
+        heatmap, xedges, yedges = np.histogram2d(x, y, bins=bins)
+        heatmap = heatmap.T  # Transpose to match imshow convention
+        extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+        return heatmap, extent
 
-    # # first syllable will be black, make sure no white syllables 
-    # ground_truth_labels += 2
-
-    # # # So that noise is white for HDBSCAN Plot
-    # cmap_hdbscan_labels = glasbey.extend_palette(["#FFFFFF"], palette_size=30)
-    # cmap_hdbscan_labels = mcolors.ListedColormap(cmap_hdbscan_labels)
-
-    # So that silences is black for HDBSCAN Plot
     # Save HDBSCAN labels plot
     fig_hdbscan, ax_hdbscan = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
-    scatter_hdbscan = ax_hdbscan.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=70, alpha=.1, cmap=cmap_hdbscan)
+    
+    for label in np.unique(hdbscan_labels):
+        mask = hdbscan_labels == label
+        x, y = embedding_outputs[mask, 0], embedding_outputs[mask, 1]
+        heatmap, extent = create_density_heatmap(x, y)
+        color = cmap_hdbscan.colors[label % len(cmap_hdbscan.colors)]
+        ax_hdbscan.imshow(heatmap, extent=extent, origin='lower', cmap=mcolors.LinearSegmentedColormap.from_list("", ["white", color]), alpha=0.5)
+
     ax_hdbscan.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     ax_hdbscan.set_xlabel('UMAP 1', fontsize=48)
     ax_hdbscan.set_ylabel('UMAP 2', fontsize=48)
@@ -283,11 +284,18 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
         spine.set_linewidth(2)
     ax_hdbscan.set_title("HDBSCAN Discovered Labels", fontsize=48)
     plt.tight_layout()
-    plt.savefig(save_name + "_hdbscan.png")
+    plt.savefig(save_name + "_hdbscan_heatmap.png")
 
     # Save ground truth labels plot
     fig_ground_truth, ax_ground_truth = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
-    scatter_ground_truth = ax_ground_truth.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=ground_truth_labels, s=70, alpha=.1, cmap=cmap_ground_truth)
+    
+    for label in unique_ground_truth_labels:
+        mask = ground_truth_labels == label
+        x, y = embedding_outputs[mask, 0], embedding_outputs[mask, 1]
+        heatmap, extent = create_density_heatmap(x, y)
+        color = ground_truth_label_colors[label]
+        ax_ground_truth.imshow(heatmap, extent=extent, origin='lower', cmap=mcolors.LinearSegmentedColormap.from_list("", ["white", color]), alpha=0.5)
+
     ax_ground_truth.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
     ax_ground_truth.set_xlabel('UMAP 1', fontsize=48)
     ax_ground_truth.set_ylabel('UMAP 2', fontsize=48)
@@ -297,7 +305,7 @@ def plot_umap_projection(model, device, data_dir="test_llb16",  samples=100, fil
         spine.set_linewidth(2)
     ax_ground_truth.set_title("Ground Truth Labels", fontsize=48)
     plt.tight_layout()
-    plt.savefig(save_name + "_ground_truth.png")
+    plt.savefig(save_name + "_ground_truth_heatmap.png")
 
     
 def plot_umap_projection_comparison(model, device, data_dirs, samples=100, layer_index=None, dict_key=None, 
