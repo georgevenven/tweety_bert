@@ -184,6 +184,20 @@ class LinearProbeModel(nn.Module):
         for param in self.classifier.parameters():
             param.requires_grad = True
 
+    def get_model_state(self):
+        return {name: param.clone().detach() for name, param in self.named_parameters() if "classifier" not in name}
+
+    def compare_model_states(self, state1, state2):
+        differences = {}
+        for name in state1.keys():
+            if not torch.equal(state1[name], state2[name]):
+                differences[name] = {
+                    'max_diff': torch.max(torch.abs(state1[name] - state2[name])).item(),
+                    'mean_diff': torch.mean(torch.abs(state1[name] - state2[name])).item()
+                }
+        return differences
+
+
     def freeze_transformer_blocks(self, model, freeze_up_to_block):
         """
         Freeze all layers up to a certain transformer block, including conv and projection layers.
@@ -262,6 +276,8 @@ class LinearProbeTrainer():
         return sma.tolist()
 
     def train(self):
+        initial_state = self.model.get_model_state()
+
         total_batches = 0
         best_val_loss = float('inf')
         num_val_no_improve = 0
@@ -325,6 +341,12 @@ class LinearProbeTrainer():
 
         if self.plotting:
             self.plot_results(raw_loss_list, moving_avg_val_loss_list, moving_avg_frame_error_list)
+
+        # Compare the final state with the initial state
+        final_state = self.model.get_model_state()
+        differences = self.model.compare_model_states(initial_state, final_state)
+
+        return differences
 
     def plot_results(self, loss_list, val_loss_list, frame_error_rate_list):
         plt.figure(figsize=(10, 5))

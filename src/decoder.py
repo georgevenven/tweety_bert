@@ -436,7 +436,7 @@ class TweetyBertInference:
             self.visualize_spectrogram(spectogram.flatten(0,1).T, post_processed_labels, os.path.basename(file_path))
 
         return {
-            "file_name": file_path,
+            "file_name": os.path.basename(file_path),
             "song_present": song_present,
             "syllable_onsets/offsets": onsets_offsets
         }

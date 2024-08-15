@@ -98,19 +98,19 @@ class WhisperSegProcessor:
             for file in files:
                 if file.endswith('.wav'):
                     file_path = os.path.join(root, file)
-                    relative_path = os.path.relpath(file_path, self.root_dir)
-                    if relative_path not in self.processed_files:
+                    file_name = os.path.basename(file_path)
+                    if file_name not in self.processed_files:
                         segments = self.process_wav_file(file_path)
-                        self.save_csv_database(relative_path, segments)
-                        print(f"Processed: {relative_path}")
+                        self.save_csv_database(file_name, segments)
+                        print(f"Processed: {file_name}")
                     else:
-                        print(f"Skipped (already processed): {relative_path}")
+                        print(f"Skipped (already processed): {file_name}")
 
-    def save_csv_database(self, relative_path: str, segments: List[Tuple[float, float]]):
+    def save_csv_database(self, file_name: str, segments: List[Tuple[float, float]]):
         with open(self.output_csv, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow([relative_path, segments])
-        self.processed_files.add(relative_path)
+            writer.writerow([file_name, segments])
+        self.processed_files.add(file_name)
 
 def main():
     root_dir = "/media/george-vengrovski/disk2/canary/sorted_1/USA5326"  
