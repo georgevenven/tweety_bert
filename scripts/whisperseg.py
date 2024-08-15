@@ -5,6 +5,7 @@ import librosa
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
+from tqdm import tqdm
 
 # Finding WhisperSeg
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,9 +24,10 @@ def simple_visualizer(audio, sr, prediction, output_path):
     librosa.display.specshow(D, sr=sr, x_axis='time', y_axis='hz')
     plt.colorbar(format='%+2.0f dB')
     
-    # Add vocalization blocks
-    for start, end in zip(prediction['onset'], prediction['offset']):
-        plt.axvspan(start, end, color='red', alpha=0.3)
+    # Add vocalization blocks for cluster '0'
+    for start, end, cluster in zip(prediction['onset'], prediction['offset'], prediction['cluster']):
+        if cluster == '1':
+            plt.axvspan(start, end, color='red', alpha=0.3)
     
     plt.title('Spectrogram with Vocalization Blocks')
     plt.tight_layout()
@@ -40,9 +42,10 @@ class WhisperSegProcessor:
         self.output_csv = output_csv
         self.save_spectrograms = save_spectrograms
         self.delete_existing_csv = delete_existing_csv
-        self.segmenter = WhisperSegmenterFast("nccratliri/whisperseg-canary-ct2", device="cpu")
+        self.segmenter = WhisperSegmenterFast("WhisperSeg/model/canary/final_checkpoint_ct2 (1)/final_checkpoint_ct2", device="cuda")     
         self.min_frequency = 0
         self.spec_time_step = 0.001
+
         self.min_segment_length = 0.005
         self.eps = 0.01
         self.num_trials = 3
@@ -70,19 +73,12 @@ class WhisperSegProcessor:
         # Load audio at native sampling rate
         audio, sr = librosa.load(file_path, sr=None)
 
-        # Generate prediction
-        prediction = self.segmenter.segment(
-            audio,
-            sr=sr,
-            min_frequency=self.min_frequency,
-            spec_time_step=self.spec_time_step,
-            min_segment_length=self.min_segment_length,
-            eps=self.eps,
-            num_trials=self.num_trials
-        )
+        prediction = self.segmenter.segment(audio, sr)
 
-        # Extract onset and offset times
-        segments = [(onset, offset) for onset, offset, _ in zip(prediction['onset'], prediction['offset'], prediction['cluster'])]
+        # Extract onset and offset times for cluster '1'
+        segments = [(onset, offset) 
+                    for onset, offset, cluster in zip(prediction['onset'], prediction['offset'], prediction['cluster']) 
+                    if cluster == '1']
 
         # Save spectrogram if enabled
         if self.save_spectrograms:
@@ -94,29 +90,46 @@ class WhisperSegProcessor:
         return segments
 
     def process_directory(self):
-        for root, _, files in os.walk(self.root_dir):
-            for file in files:
-                if file.endswith('.wav'):
-                    file_path = os.path.join(root, file)
-                    file_name = os.path.basename(file_path)
-                    if file_name not in self.processed_files:
-                        segments = self.process_wav_file(file_path)
-                        self.save_csv_database(file_name, segments)
-                        print(f"Processed: {file_name}")
-                    else:
-                        print(f"Skipped (already processed): {file_name}")
+        wav_files = [os.path.join(root, file) for root, _, files in os.walk(self.root_dir) for file in files if file.endswith('.wav')]
+        
+        for file_path in tqdm(wav_files, desc="Processing WAV files"):
+            relative_path = os.path.relpath(file_path, self.root_dir)
+            if relative_path not in self.processed_files:
+                segments = self.process_wav_file(file_path)
+                self.save_csv_database(relative_path, segments)
+                print(f"Processed: {relative_path}")
+            else:
+                print(f"Skipped (already processed): {relative_path}")
 
-    def save_csv_database(self, file_name: str, segments: List[Tuple[float, float]]):
+    def save_csv_database(self, relative_path: str, segments: List[Tuple[float, float]]):
+        # Convert segments to a string format without extra quotes
+        segments_str = "[" + ", ".join(f"({onset}, {offset})" for onset, offset in segments) + "]"
         with open(self.output_csv, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow([file_name, segments])
-        self.processed_files.add(file_name)
+            writer.writerow([relative_path, segments_str])
+        self.processed_files.add(relative_path)
 
 def main():
-    root_dir = "/media/george-vengrovski/disk2/canary/sorted_1/USA5326"  
-    output_csv = "files/segmentation_results.csv"
-    save_spectrograms = True  # Set to True if you want to save spectrograms
-    delete_existing_csv = False  # Set to True if you want to delete existing CSV and start fresh
+    root_dir = "/media/rose/Extreme SSD/yarden_data/llb3_data/llb3_songs"  
+    output_csv = "/home/rose/Documents/tweety_bert_paper/files/llb3_Whisperseg.csv"
+    save_spectrograms = False  # Set to True if you want to save spectrograms
+    delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
+    processor.process_directory()
+
+    root_dir = "/media/rose/Extreme SSD/yarden_data/llb11_data/llb11_songs"  
+    output_csv = "/home/rose/Documents/tweety_bert_paper/files/llb11_Whisperseg.csv"
+    save_spectrograms = False  # Set to True if you want to save spectrograms
+    delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
+    processor.process_directory()
+
+    root_dir = "/media/rose/Extreme SSD/yarden_data/llb16_data/llb16_songs"  
+    output_csv = "/home/rose/Documents/tweety_bert_paper/files/llb16_Whisperseg.csv"
+    save_spectrograms = False  # Set to True if you want to save spectrograms
+    delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
 
     processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
     processor.process_directory()
