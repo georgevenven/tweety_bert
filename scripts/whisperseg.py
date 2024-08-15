@@ -93,26 +93,33 @@ class WhisperSegProcessor:
         wav_files = [os.path.join(root, file) for root, _, files in os.walk(self.root_dir) for file in files if file.endswith('.wav')]
         
         for file_path in tqdm(wav_files, desc="Processing WAV files"):
-            relative_path = os.path.relpath(file_path, self.root_dir)
-            if relative_path not in self.processed_files:
+            base_filename = os.path.basename(file_path)
+            if base_filename not in self.processed_files:
                 segments = self.process_wav_file(file_path)
-                self.save_csv_database(relative_path, segments)
-                print(f"Processed: {relative_path}")
+                self.save_csv_database(file_path, segments)
+                print(f"Processed: {base_filename}")
             else:
-                print(f"Skipped (already processed): {relative_path}")
+                print(f"Skipped (already processed): {base_filename}")
 
-    def save_csv_database(self, relative_path: str, segments: List[Tuple[float, float]]):
+    def save_csv_database(self, file_path: str, segments: List[Tuple[float, float]]):
+        # Extract the base filename
+        base_filename = os.path.basename(file_path)
+        
         # Convert segments to a string format without extra quotes
         segments_str = "[" + ", ".join(f"({onset}, {offset})" for onset, offset in segments) + "]"
+        
+        # Write to the CSV file
         with open(self.output_csv, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow([relative_path, segments_str])
-        self.processed_files.add(relative_path)
+            writer.writerow([base_filename, segments_str])
+        
+        # Add the processed file to the set to avoid reprocessing
+        self.processed_files.add(base_filename)
 
 def main():
     root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271"  
     output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/5271_Whisperseg.csv"
-    save_spectrograms = True  # Set to True if you want to save spectrograms
+    save_spectrograms = False  # Set to True if you want to save spectrograms
     delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
 
     processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
