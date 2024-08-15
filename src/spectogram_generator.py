@@ -9,6 +9,7 @@ import csv
 import sys
 import psutil
 from tqdm import tqdm
+import json
 
 class WavtoSpec:
     def __init__(self, src_dir, dst_dir, csv_file_dir=None):
@@ -48,14 +49,15 @@ class WavtoSpec:
 
             folder_file_name = '/'.join(file_path.split('/')[-2:])
      
-            # Check if there is vocalization in the file
+            # Check if there is vocalization in the file and get phrase labels
             if self.use_csv or csv_file_dir is not None:
-                vocalization_data = self.check_vocalization(folder_file_name=folder_file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
+                vocalization_data, phrase_labels = self.check_vocalization(folder_file_name=folder_file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
                 if vocalization_data is None:
                     print(f"No vocalization data found for {folder_file_name}. Skipping spectrogram generation.")
                     return None
             else:
-                vocalization_data = [(0, len(data))]  # Assume entire file is vocalization
+                vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
+                phrase_labels = {}  # Empty dict if not using CSV
 
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
             data = filtfilt(b, a, data)
@@ -72,15 +74,18 @@ class WavtoSpec:
 
             # Convert vocalization data to timebins
             vocalization_timebins = np.zeros(t.size, dtype=int)
-            for start_sample, end_sample in vocalization_data:
-                start_time = start_sample / samplerate
-                end_time = end_sample / samplerate
-                start_bin = np.searchsorted(t, start_time)
-                end_bin = np.searchsorted(t, end_time)
+            for start_sec, end_sec in vocalization_data:
+                start_bin = np.searchsorted(t, start_sec)
+                end_bin = np.searchsorted(t, end_sec)
                 vocalization_timebins[start_bin:end_bin] = 1
 
-            # Create labels array with all zeros
+            # Convert phrase labels to timebins
             labels = np.zeros(t.size, dtype=int)
+            for label, intervals in phrase_labels.items():
+                for start_sec, end_sec in intervals:
+                    start_bin = np.searchsorted(t, start_sec)
+                    end_bin = np.searchsorted(t, end_sec)
+                    labels[start_bin:end_bin] = int(label)
 
             if t.size >= min_timebins:
                 if save_npz:
@@ -104,24 +109,32 @@ class WavtoSpec:
 
     def check_vocalization(self, folder_file_name, data, samplerate, csv_file_dir):
         if not self.use_csv:
-            return [(0, len(data))]  # Assume entire file is vocalization if not using CSV
+            return [(0, len(data)/samplerate)], {}  # Assume entire file is vocalization if not using CSV
 
         # Open csv file
         csv_file_path = os.path.join(csv_file_dir)
         if not os.path.exists(csv_file_path):
             print(f"CSV file {csv_file_path} does not exist.")
-            return None
+            return None, None
 
         with open(csv_file_path, 'r') as csv_file:
             csv_reader = csv.DictReader(csv_file)
             for row in csv_reader:
                 if row['file_name'] == folder_file_name:
                     onset_offset_list = eval(row['onset/offset'])
-                    sample_list = [(int(onset * samplerate), int(offset * samplerate)) for onset, offset in onset_offset_list]
-                    return sample_list
+                    sample_list = [(onset, offset) for onset, offset in onset_offset_list]
+                    
+                    # Process phrase labels
+                    phrase_labels = {}
+                    if 'phrase_label onset/offsets' in row and row['phrase_label onset/offsets']:
+                        phrase_data = json.loads(row['phrase_label onset/offsets'])
+                        for label, intervals in phrase_data.items():
+                            phrase_labels[label] = intervals  # Already in seconds
+                    
+                    return sample_list, phrase_labels
 
         print(f"No matching row found for {folder_file_name} in {csv_file_path}.")
-        return None
+        return None, None
 
     def get_segments_to_process(self, song_name, csv_file_dir, samplerate):
         if not self.use_csv:

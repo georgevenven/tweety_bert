@@ -1,21 +1,21 @@
 import csv
 import json
-import os
 
 def process_files(source_file, destination_file):
     # Read the source file
     source_data = {}
     with open(source_file, 'r') as f:
-        reader = csv.reader(f, delimiter='\t')
-        next(reader)  # Skip header
+        reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
-            label, onset, offset, _, _, audio_file, _, _, _ = row
-            audio_file = os.path.basename(audio_file)  # Extract filename only
+            audio_file = row['audio_file']
+            label = row['label']
+            onset = float(row['onset_s'])
+            offset = float(row['offset_s'])
             if audio_file not in source_data:
                 source_data[audio_file] = {}
             if label not in source_data[audio_file]:
                 source_data[audio_file][label] = []
-            source_data[audio_file][label].append((float(onset), float(offset)))
+            source_data[audio_file][label].append((onset, offset))
 
     # Process the data to make it contiguous
     for audio_file in source_data:
@@ -32,22 +32,21 @@ def process_files(source_file, destination_file):
     # Read the destination file and update it
     updated_rows = []
     with open(destination_file, 'r') as f:
-        reader = csv.reader(f, delimiter=',')
-        header = next(reader)
-        header.append('phrase_label onset/offsets')
-        updated_rows.append(header)
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames + ['phrase_label onset/offsets']
+        updated_rows.append(fieldnames)
         for row in reader:
-            audio_file = os.path.basename(row[0])
-            if audio_file in source_data:
-                json_data = json.dumps(source_data[audio_file])
-                row.append(json_data)
+            file_name = row['file_name']
+            if file_name in source_data:
+                json_data = json.dumps(source_data[file_name])
+                row['phrase_label onset/offsets'] = json_data
             else:
-                row.append('')
-            updated_rows.append(row)
+                row['phrase_label onset/offsets'] = ''
+            updated_rows.append(row.values())
 
     # Write the updated data back to the destination file
     with open(destination_file, 'w', newline='') as f:
-        writer = csv.writer(f, delimiter=',')
+        writer = csv.writer(f)
         writer.writerows(updated_rows)
 
 # Usage
