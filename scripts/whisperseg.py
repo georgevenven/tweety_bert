@@ -82,7 +82,7 @@ class WhisperSegProcessor:
 
         # Save spectrogram if enabled
         if self.save_spectrograms:
-            spec_dir = os.path.join(current_dir, 'imgs')
+            spec_dir = os.path.join(current_dir, '../imgs/whisperseg')
             os.makedirs(spec_dir, exist_ok=True)
             spec_file = os.path.join(spec_dir, f"{os.path.basename(file_path)}.png")
             simple_visualizer(audio, sr, prediction, spec_file)
@@ -110,24 +110,16 @@ class WhisperSegProcessor:
         self.processed_files.add(relative_path)
 
 def main():
-    root_dir = "/media/rose/Extreme SSD/yarden_data/llb3_data/llb3_songs"  
-    output_csv = "/home/rose/Documents/tweety_bert_paper/files/llb3_Whisperseg.csv"
-    save_spectrograms = False  # Set to True if you want to save spectrograms
+    root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/5271_Whisperseg.csv"
+    save_spectrograms = True  # Set to True if you want to save spectrograms
     delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
 
     processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
     processor.process_directory()
 
-    root_dir = "/media/rose/Extreme SSD/yarden_data/llb11_data/llb11_songs"  
-    output_csv = "/home/rose/Documents/tweety_bert_paper/files/llb11_Whisperseg.csv"
-    save_spectrograms = False  # Set to True if you want to save spectrograms
-    delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
-
-    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
-    processor.process_directory()
-
-    root_dir = "/media/rose/Extreme SSD/yarden_data/llb16_data/llb16_songs"  
-    output_csv = "/home/rose/Documents/tweety_bert_paper/files/llb16_Whisperseg.csv"
+    root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5283_Whisperseg.csv"
     save_spectrograms = False  # Set to True if you want to save spectrograms
     delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
 
