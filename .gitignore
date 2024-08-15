@@ -15,16 +15,6 @@ experiments
 /prototyping
 /WhisperSeg
 temp
-llb3_test
-llb3_train 
-llb11_test
-llb11_train
-llb16_test
-llb16_train
 results 
-temp_storage
-test.csv
-temp.ipynb
 WhisperSeg/
-interactive_plot.html
 archive
