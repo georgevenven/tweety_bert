@@ -125,8 +125,8 @@ def main():
     # processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
     # processor.process_directory()
 
-    root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283"  
-    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5283_Whisperseg.csv"
+    root_dir = "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_songs"  
+    output_csv = "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_whisperseg.csv"
     save_spectrograms = False  # Set to True if you want to save spectrograms
     delete_existing_csv = False  # Set to True if you want to delete existing CSV and start fresh
 

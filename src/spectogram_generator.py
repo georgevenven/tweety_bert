@@ -19,15 +19,19 @@ class WavtoSpec:
         self.use_csv = csv_file_dir is not None
 
     def process_directory(self):
-        audio_files = [os.path.join(root, file) 
-                       for root, dirs, files in os.walk(self.src_dir) 
+        audio_files = [os.path.join(root, file)
+                       for root, dirs, files in os.walk(self.src_dir)
                        for file in files if file.lower().endswith('.wav')]
 
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            results = [pool.apply_async(self.process_file, args=(self, file_path, self.csv_file_dir)) 
-                       for file_path in tqdm(audio_files, desc="Processing files")]
-            for result in results:
-                result.get()
+        skipped_files_count = 0
+
+        for file_path in tqdm(audio_files, desc="Processing files"):
+            result = self.convert_to_spectrogram(file_path, csv_file_dir=self.csv_file_dir, save_npz=True)
+            if result is None:
+                skipped_files_count += 1
+
+        print(f"Total files processed: {len(audio_files)}")
+        print(f"Total files skipped due to no vocalization data: {skipped_files_count}")
 
     @staticmethod
     def process_file(instance, file_path):
@@ -47,13 +51,13 @@ class WavtoSpec:
                 print(f"File {file_path} is below the length threshold and will be skipped.")
                 return None
 
-            folder_file_name = '/'.join(file_path.split('/')[-2:])
+            file_name = os.path.basename(file_path)
      
             # Check if there is vocalization in the file and get phrase labels
             if self.use_csv or csv_file_dir is not None:
-                vocalization_data, phrase_labels = self.check_vocalization(folder_file_name=folder_file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
+                vocalization_data, phrase_labels = self.check_vocalization(file_name=file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
                 if vocalization_data is None:
-                    print(f"No vocalization data found for {folder_file_name}. Skipping spectrogram generation.")
+                    print(f"No vocalization data found for {file_name}. Skipping spectrogram generation.")
                     return None
             else:
                 vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
@@ -107,7 +111,7 @@ class WavtoSpec:
             plt.close('all')
             gc.collect()
 
-    def check_vocalization(self, folder_file_name, data, samplerate, csv_file_dir):
+    def check_vocalization(self, file_name, data, samplerate, csv_file_dir):
         if not self.use_csv:
             return [(0, len(data)/samplerate)], {}  # Assume entire file is vocalization if not using CSV
 
@@ -120,7 +124,7 @@ class WavtoSpec:
         with open(csv_file_path, 'r') as csv_file:
             csv_reader = csv.DictReader(csv_file)
             for row in csv_reader:
-                if row['file_name'] == folder_file_name:
+                if row['file_name'] == file_name:
                     onset_offset_list = eval(row['onset/offset'])
                     sample_list = [(onset, offset) for onset, offset in onset_offset_list]
                     
@@ -133,35 +137,27 @@ class WavtoSpec:
                     
                     return sample_list, phrase_labels
 
-        print(f"No matching row found for {folder_file_name} in {csv_file_path}.")
+        print(f"No matching row found for {file_name} in {csv_file_path}.")
         return None, None
 
-    def get_segments_to_process(self, song_name, csv_file_dir, samplerate):
-        if not self.use_csv:
-            return None  # Not applicable when not using CSV
-
-        segments_to_process = []
-        csv_file_path = os.path.join(csv_file_dir, song_name + '.csv')
-        if not os.path.exists(csv_file_path):
-            print(f"CSV file {csv_file_path} does not exist.")
-            return None
-
-        with open(csv_file_path, 'r') as file:
-            csv_reader = csv.DictReader(file)
-            for row in csv_reader:
-                start_ms = int(row['start_ms'])
-                end_ms = int(row['end_ms'])
-                start_sample = int(start_ms * samplerate / 1000)
-                end_sample = int(end_ms * samplerate / 1000)
-                segments_to_process.append((start_sample, end_sample))
-
-        return segments_to_process
-
-
 def main():
-    src_dir = '/media/george-vengrovski/Extreme SSD/RHV_raw_recordings/USA5288'
-    dst_dir = '/media/george-vengrovski/disk1/5288_specs'
-    csv_file_dir = '/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/segmentation_results.csv'  # Set to None if not using a CSV file
+    # src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_songs'
+    # dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs'
+    # csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/llb3_final_output.csv'  # Set to None if not using a CSV file
+
+    # wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
+    # wav_to_spec.process_directory()
+
+    src_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271'
+    dst_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271_specs'
+    csv_file_dir = 'files/5271_Whisperseg.csv'  # Set to None if not using a CSV file
+
+    wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
+    wav_to_spec.process_directory()
+
+    src_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283'
+    dst_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_specs'
+    csv_file_dir = 'files/USA5283_Whisperseg.csv'  # Set to None if not using a CSV file
 
     wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
     wav_to_spec.process_directory()
