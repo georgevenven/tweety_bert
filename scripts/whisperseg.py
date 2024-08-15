@@ -117,18 +117,18 @@ class WhisperSegProcessor:
         self.processed_files.add(base_filename)
 
 def main():
-    root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271"  
-    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/5271_Whisperseg.csv"
-    save_spectrograms = False  # Set to True if you want to save spectrograms
-    delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
+    # root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271"  
+    # output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/5271_Whisperseg.csv"
+    # save_spectrograms = False  # Set to True if you want to save spectrograms
+    # delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
 
-    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
-    processor.process_directory()
+    # processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
+    # processor.process_directory()
 
     root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283"  
     output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5283_Whisperseg.csv"
     save_spectrograms = False  # Set to True if you want to save spectrograms
-    delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
+    delete_existing_csv = False  # Set to True if you want to delete existing CSV and start fresh
 
     processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
     processor.process_directory()
