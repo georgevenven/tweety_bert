@@ -1,10 +1,11 @@
 import os
 import sys
 import csv
+import json
 import librosa
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from tqdm import tqdm
 
 # Finding WhisperSeg
@@ -37,21 +38,24 @@ def simple_visualizer(audio, sr, prediction, output_path):
     plt.close()
 
 class WhisperSegProcessor:
-    def __init__(self, root_dir: str, output_csv: str, save_spectrograms: bool = False, delete_existing_csv: bool = False):
+    def __init__(self, root_dir: str, output_csv: str, save_spectrograms: bool = False, 
+                 delete_existing_csv: bool = False, phrase_labels_file: str = None):
         self.root_dir = root_dir
         self.output_csv = output_csv
         self.save_spectrograms = save_spectrograms
         self.delete_existing_csv = delete_existing_csv
+        self.phrase_labels_file = phrase_labels_file
         self.segmenter = WhisperSegmenterFast("WhisperSeg/model/canary/final_checkpoint_ct2 (1)/final_checkpoint_ct2", device="cuda")     
         self.min_frequency = 0
         self.spec_time_step = 0.001
-
         self.min_segment_length = 0.005
         self.eps = 0.01
         self.num_trials = 3
         self.initialize_csv()
         self.processed_files = set()
         self.load_processed_files()
+        self.phrase_labels = self.load_phrase_labels() if phrase_labels_file else None
+
 
     def initialize_csv(self):
         if self.delete_existing_csv and os.path.exists(self.output_csv):
@@ -59,7 +63,10 @@ class WhisperSegProcessor:
         if not os.path.exists(self.output_csv):
             with open(self.output_csv, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(["file_name", "onset/offset"])
+                header = ["file_name", "onset/offset"]
+                if self.phrase_labels_file:
+                    header.append("phrase_label onset/offsets")
+                writer.writerow(header)
 
     def load_processed_files(self):
         if os.path.exists(self.output_csv):
@@ -101,36 +108,77 @@ class WhisperSegProcessor:
             else:
                 print(f"Skipped (already processed): {base_filename}")
 
-    def save_csv_database(self, file_path: str, segments: List[Tuple[float, float]]):
-        # Extract the base filename
-        base_filename = os.path.basename(file_path)
+    def load_phrase_labels(self) -> Dict[str, Dict[str, List[Tuple[float, float]]]]:
+        phrase_labels = {}
+        with open(self.phrase_labels_file, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                audio_file = row['audio_file']
+                label = row['label']
+                onset = float(row['onset_s'])
+                offset = float(row['offset_s'])
+                if audio_file not in phrase_labels:
+                    phrase_labels[audio_file] = {}
+                if label not in phrase_labels[audio_file]:
+                    phrase_labels[audio_file][label] = []
+                phrase_labels[audio_file][label].append((onset, offset))
         
-        # Convert segments to a string format without extra quotes
+        # Make the labels contiguous and merge short silences
+        for audio_file in phrase_labels:
+            all_intervals = []
+            for label, intervals in phrase_labels[audio_file].items():
+                all_intervals.extend((onset, offset, label) for onset, offset in intervals)
+            
+            all_intervals.sort()
+            merged_intervals = []
+            
+            for i, (onset, offset, label) in enumerate(all_intervals):
+                if not merged_intervals or onset - merged_intervals[-1][1] >= 0.2:
+                    merged_intervals.append([onset, offset, label])
+                else:
+                    # Check if the gap is less than 200ms and the labels match
+                    if label == merged_intervals[-1][2]:
+                        merged_intervals[-1][1] = offset
+                    else:
+                        merged_intervals.append([onset, offset, label])
+            
+            # Rebuild the phrase_labels dictionary with merged intervals
+            phrase_labels[audio_file] = {}
+            for onset, offset, label in merged_intervals:
+                if label not in phrase_labels[audio_file]:
+                    phrase_labels[audio_file][label] = []
+                phrase_labels[audio_file][label].append((onset, offset))
+        
+        return phrase_labels
+
+    def save_csv_database(self, file_path: str, segments: List[Tuple[float, float]]):
+        base_filename = os.path.basename(file_path)
         segments_str = "[" + ", ".join(f"({onset}, {offset})" for onset, offset in segments) + "]"
         
-        # Write to the CSV file
+        row = [base_filename, segments_str]
+        
+        if self.phrase_labels:
+            if base_filename in self.phrase_labels:
+                json_data = json.dumps(self.phrase_labels[base_filename]).replace('"', "'")
+                row.append(json_data)
+            else:
+                row.append('')
+        
         with open(self.output_csv, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow([base_filename, segments_str])
+            writer.writerow(row)
         
-        # Add the processed file to the set to avoid reprocessing
         self.processed_files.add(base_filename)
 
+
 def main():
-    # root_dir = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271"  
-    # output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/5271_Whisperseg.csv"
-    # save_spectrograms = False  # Set to True if you want to save spectrograms
-    # delete_existing_csv = True  # Set to True if you want to delete existing CSV and start fresh
+    root_dir = "/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data/llb16_songs"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/LLB16_Whisperseg.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = "/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data/llb16_annot.csv"  # Set this to None if you don't want to use phrase labels
 
-    # processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
-    # processor.process_directory()
-
-    root_dir = "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_songs"  
-    output_csv = "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_whisperseg.csv"
-    save_spectrograms = False  # Set to True if you want to save spectrograms
-    delete_existing_csv = False  # Set to True if you want to delete existing CSV and start fresh
-
-    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv)
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
     processor.process_directory()
 
 if __name__ == "__main__":

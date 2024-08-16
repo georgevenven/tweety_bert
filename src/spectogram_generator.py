@@ -127,24 +127,27 @@ class WavtoSpec:
             for row in csv_reader:
                 if row['file_name'] == file_name:
                     onset_offset_list = eval(row['onset/offset'])
-                    sample_list = [(onset, offset) for onset, offset in onset_offset_list]
+                    onsets_offsets = [(onset, offset) for onset, offset in onset_offset_list]
                     
                     # Process phrase labels
                     phrase_labels = {}
                     if 'phrase_label onset/offsets' in row and row['phrase_label onset/offsets']:
-                        phrase_data = json.loads(row['phrase_label onset/offsets'])
-                        for label, intervals in phrase_data.items():
-                            phrase_labels[label] = intervals  # Already in seconds
+                        try:
+                            phrase_data = json.loads(row['phrase_label onset/offsets'].replace("'", '"'))
+                            for label, intervals in phrase_data.items():
+                                phrase_labels[label] = intervals
+                        except json.JSONDecodeError:
+                            print(f"Error decoding JSON for {file_name}. Raw data: {row['phrase_label onset/offsets']}")
                     
-                    return sample_list, phrase_labels
+                    return onsets_offsets, phrase_labels
 
         print(f"No matching row found for {file_name} in {csv_file_path}.")
         return None, None
 
 def main():
-    src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_songs'
-    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs'
-    csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/llb3_final_output.csv'  # Set to None if not using a CSV file
+    src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data/llb11_songs'
+    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_george_specs'
+    csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/LLB11_Whisperseg.csv'  # Set to None if not using a CSV file
 
     wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
     wav_to_spec.process_directory()
