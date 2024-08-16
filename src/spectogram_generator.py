@@ -142,26 +142,12 @@ class WavtoSpec:
         return None, None
 
 def main():
-    # src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_songs'
-    # dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs'
-    # csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/llb3_final_output.csv'  # Set to None if not using a CSV file
-
-    # wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
-    # wav_to_spec.process_directory()
-
-    src_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271'
-    dst_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271_specs'
-    csv_file_dir = 'files/5271_Whisperseg.csv'  # Set to None if not using a CSV file
+    src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_data/llb3_songs'
+    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs'
+    csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/llb3_final_output.csv'  # Set to None if not using a CSV file
 
     wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
     wav_to_spec.process_directory()
-
-    src_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283'
-    dst_dir = '/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_specs'
-    csv_file_dir = 'files/USA5283_Whisperseg.csv'  # Set to None if not using a CSV file
-
-    wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
-    wav_to_spec.process_directory()
-
+    
 if __name__ == "__main__":
     main()
