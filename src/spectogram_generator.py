@@ -56,8 +56,8 @@ class WavtoSpec:
             # Check if there is vocalization in the file and get phrase labels
             if self.use_csv or csv_file_dir is not None:
                 vocalization_data, phrase_labels = self.check_vocalization(file_name=file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
-                if vocalization_data is None:
-                    print(f"No vocalization data found for {file_name}. Skipping spectrogram generation.")
+                if not vocalization_data:
+                    print("file skipped due to no vocalization")
                     return None
             else:
                 vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
@@ -102,6 +102,7 @@ class WavtoSpec:
 
             else:
                 print(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
+                return None 
 
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
