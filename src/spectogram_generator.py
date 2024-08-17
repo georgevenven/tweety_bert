@@ -145,9 +145,9 @@ class WavtoSpec:
         return None, None
 
 def main():
-    src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_data/llb11_songs'
-    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_george_specs'
-    csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/LLB11_Whisperseg.csv'  # Set to None if not using a CSV file
+    src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data/llb16_songs'
+    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_george_specs'
+    csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/LLB16_Whisperseg.csv'  # Set to None if not using a CSV file
 
     wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
     wav_to_spec.process_directory()
