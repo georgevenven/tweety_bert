@@ -345,10 +345,10 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     if plot_comparison:
         fig, ax = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
         colors = ['red', 'blue']  # Set colors to red and blue
-        for idx, color in enumerate(colors):
+        for idx, (color, data_dir) in enumerate(zip(colors, data_dirs)):
             mask = dataloader_indices == idx
             scatter = ax.scatter(embedding_outputs[mask, 0], embedding_outputs[mask, 1], 
-                                 c=color, s=70, alpha=0.1, label=f'Dataset {idx}')
+                                 c=color, s=70, alpha=0.1, label=data_dir)
         ax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
         ax.set_xlabel('UMAP 1', fontsize=48)
         ax.set_ylabel('UMAP 2', fontsize=48)
@@ -357,9 +357,9 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             spine.set_color('black')
             spine.set_linewidth(2)
         ax.set_title("UMAP Projection Comparison", fontsize=48)
-        ax.legend(fontsize=24, markerscale=2)
+        ax.legend(fontsize=24, markerscale=2, loc='upper right', bbox_to_anchor=(1.3, 1))
         plt.tight_layout()
-        plt.savefig(save_name + "_comparison.png")
+        plt.savefig(save_name + "_comparison.png", bbox_inches='tight')
         plt.close()
 
     # Plot 2: Ground Truth Labels
@@ -1031,10 +1031,10 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     if plot_comparison:
         fig, ax = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
         colors = ['red', 'blue']  # Set colors to red and blue
-        for idx, color in enumerate(colors):
+        for idx, (color, data_dir) in enumerate(zip(colors, data_dirs)):
             mask = dataloader_indices == idx
             scatter = ax.scatter(embedding_outputs[mask, 0], embedding_outputs[mask, 1], 
-                                 c=color, s=70, alpha=0.1, label=f'Dataset {idx}')
+                                 c=color, s=70, alpha=0.1, label=data_dir)
         ax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
         ax.set_xlabel('UMAP 1', fontsize=48)
         ax.set_ylabel('UMAP 2', fontsize=48)
@@ -1043,9 +1043,9 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             spine.set_color('black')
             spine.set_linewidth(2)
         ax.set_title("UMAP Projection Comparison", fontsize=48)
-        ax.legend(fontsize=24, markerscale=2)
+        ax.legend(fontsize=24, markerscale=2, loc='upper right', bbox_to_anchor=(1.3, 1))
         plt.tight_layout()
-        plt.savefig(save_name + "_comparison.png")
+        plt.savefig(save_name + "_comparison.png", bbox_inches='tight')
         plt.close()
 
     # Plot 2: Ground Truth Labels
