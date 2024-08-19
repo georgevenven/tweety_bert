@@ -118,6 +118,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     all_specs = []
     all_vocalizations = []
     dataloader_indices = []
+    sample_ids = []  # New list to store sample IDs
 
     # Reset Figure
     plt.figure(figsize=(8, 6))
@@ -143,6 +144,8 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             category_colors = [tuple(int(x) for x in category_colors)]
     else:
         category_colors = None
+
+    sample_id_counter = 0  # Initialize a counter for unique sample IDs
 
     for dataloader_idx, data_dir in enumerate(data_dirs):
         data_loader = load_data(data_dir=data_dir, context=context)
@@ -232,6 +235,11 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
             vocalization_arr.append(vocalization.cpu().numpy())
             
+            # Add sample IDs for this batch
+            batch_sample_ids = [sample_id_counter] * vocalization.shape[0]
+            sample_ids.extend(batch_sample_ids)
+            sample_id_counter += 1
+
             total_samples += spec.shape[0]
 
         # Convert the list of batch * samples * features to samples * features 
@@ -250,6 +258,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             predictions = predictions[vocalization_indices]
             ground_truth_labels = ground_truth_labels[vocalization_indices]
             spec_arr = spec_arr[vocalization_indices]
+            sample_ids = [sample_ids[i] for i in vocalization_indices]
 
         all_predictions.append(predictions)
         all_ground_truth_labels.append(ground_truth_labels)
@@ -265,6 +274,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         all_specs = [spec[:min_length] for spec in all_specs]
         all_vocalizations = [voc[:min_length] for voc in all_vocalizations]
         dataloader_indices = dataloader_indices[:min_length * len(data_dirs)]
+        sample_ids = sample_ids[:min_length * len(data_dirs)]
 
     # Combine all data
     combined_predictions = np.concatenate(all_predictions, axis=0)
@@ -363,7 +373,8 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
                  hdbscan_colors=hdbscan_colors,
                  ground_truth_colors=cmap_ground_truth.colors,
                  dataloader_indices=dataloader_indices,
-                 dataloader_colors=dataloader_colors)
+                 dataloader_colors=dataloader_colors,
+                 sample_ids=np.array(sample_ids))
 
     print(f"Plots saved as {save_name}_comparison.png, {save_name}_ground_truth.png, and {save_name}_hdbscan.png")
     if save_dict_for_analysis:
@@ -776,6 +787,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     all_specs = []
     all_vocalizations = []
     dataloader_indices = []
+    sample_ids = []  # New list to store sample IDs
 
     # Reset Figure
     plt.figure(figsize=(8, 6))
@@ -786,6 +798,8 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         plot_comparison = True
     else:
         plot_comparison = False
+
+    sample_id_counter = 0  # Initialize a counter for unique sample IDs
 
     for dataloader_idx, data_dir in enumerate(data_dirs):
         data_loader = load_data(data_dir=data_dir, context=context)
@@ -875,6 +889,11 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
             vocalization_arr.append(vocalization.cpu().numpy())
 
+            # Add sample IDs for this batch
+            batch_sample_ids = [sample_id_counter] * vocalization.shape[0]
+            sample_ids.extend(batch_sample_ids)
+            sample_id_counter += 1
+
             total_samples += spec.shape[0]
 
         # Convert the list of batch * samples * features to samples * features 
@@ -893,6 +912,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             predictions = predictions[vocalization_indices]
             ground_truth_labels = ground_truth_labels[vocalization_indices]
             spec_arr = spec_arr[vocalization_indices]
+            sample_ids = [sample_ids[i] for i in vocalization_indices]
 
         all_predictions.append(predictions)
         all_ground_truth_labels.append(ground_truth_labels)
@@ -908,6 +928,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         all_specs = [spec[:min_length] for spec in all_specs]
         all_vocalizations = [voc[:min_length] for voc in all_vocalizations]
         dataloader_indices = dataloader_indices[:min_length * len(data_dirs)]
+        sample_ids = sample_ids[:min_length * len(data_dirs)]
 
     # Combine all data
     combined_predictions = np.concatenate(all_predictions, axis=0)
@@ -1006,7 +1027,8 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
                  hdbscan_colors=hdbscan_colors,
                  ground_truth_colors=cmap_ground_truth.colors,
                  dataloader_indices=dataloader_indices,
-                 dataloader_colors=dataloader_colors)
+                 dataloader_colors=dataloader_colors,
+                 sample_ids=np.array(sample_ids))
 
     print(f"Plots saved as {save_name}_comparison.png, {save_name}_ground_truth.png, and {save_name}_hdbscan.png")
     if save_dict_for_analysis:
