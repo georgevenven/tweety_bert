@@ -112,7 +112,7 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
 
 def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_file=None, layer_index=None, dict_key=None, 
                          context=1000, save_name=None, raw_spectogram=False, remove_non_vocalization=True, plot_comparison=False,
-                         save_dict_for_analysis=False, truncate_to_smallest_group=False):
+                         save_dict_for_analysis=True, truncate_to_smallest_group=False):
     all_predictions = []
     all_ground_truth_labels = []
     all_specs = []

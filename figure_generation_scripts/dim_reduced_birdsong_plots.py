@@ -24,8 +24,25 @@ model = model.to(device)
 plot_umap_projection(
     model=model, 
     device=device, 
-    data_dirs=["/media/george-vengrovski/Extreme SSD/yarden_data/llb3_test", "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_train"],
-    samples=1e6, 
+    data_dirs=["/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271_before_3-07", "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271_after_3-07"],
+    samples=1e3, 
+    category_colors_file="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/category_colors_llb3.pkl", 
+    layer_index=-2, 
+    dict_key="attention_output", 
+    context=1000, 
+    raw_spectogram=False,
+    save_dict_for_analysis=False,
+    save_name="test",
+    plot_comparison=True,
+    truncate_to_smallest_group= True
+
+)
+
+plot_umap_projection(
+    model=model, 
+    device=device, 
+    data_dirs=["/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_before_3-05", "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_after_3-05"],
+    samples=1e3, 
     category_colors_file="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/category_colors_llb3.pkl", 
     layer_index=-2, 
     dict_key="attention_output", 
