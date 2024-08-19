@@ -277,7 +277,18 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         truncated_lengths = []
         for i in range(len(all_predictions)):
             sample_ids_group = sample_ids[sum(len(p) for p in all_predictions[:i]):sum(len(p) for p in all_predictions[:i+1])]
-            last_complete_sample = max(id for id in sample_ids_group if sample_ids_group.count(id) <= min_length)
+            
+            # Find the last complete sample that fits within min_length
+            last_complete_sample = None
+            for id in sorted(set(sample_ids_group), reverse=True):
+                if sample_ids_group.count(id) <= min_length:
+                    last_complete_sample = id
+                    break
+            
+            if last_complete_sample is None:
+                # If no complete sample fits, use the first sample
+                last_complete_sample = sample_ids_group[0]
+            
             truncated_length = sum(1 for id in sample_ids_group if id <= last_complete_sample)
             truncated_lengths.append(truncated_length)
         
@@ -952,7 +963,18 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         truncated_lengths = []
         for i in range(len(all_predictions)):
             sample_ids_group = sample_ids[sum(len(p) for p in all_predictions[:i]):sum(len(p) for p in all_predictions[:i+1])]
-            last_complete_sample = max(id for id in sample_ids_group if sample_ids_group.count(id) <= min_length)
+            
+            # Find the last complete sample that fits within min_length
+            last_complete_sample = None
+            for id in sorted(set(sample_ids_group), reverse=True):
+                if sample_ids_group.count(id) <= min_length:
+                    last_complete_sample = id
+                    break
+            
+            if last_complete_sample is None:
+                # If no complete sample fits, use the first sample
+                last_complete_sample = sample_ids_group[0]
+            
             truncated_length = sum(1 for id in sample_ids_group if id <= last_complete_sample)
             truncated_lengths.append(truncated_length)
         
