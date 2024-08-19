@@ -25,7 +25,7 @@ plot_umap_projection(
     model=model, 
     device=device, 
     data_dirs=["/media/george-vengrovski/Extreme SSD/yarden_data/llb3_test", "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_train"],
-    samples=5e3, 
+    samples=1e6, 
     category_colors_file="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/category_colors_llb3.pkl", 
     layer_index=-2, 
     dict_key="attention_output", 
@@ -34,4 +34,6 @@ plot_umap_projection(
     save_dict_for_analysis=False,
     save_name="test",
     plot_comparison=True,
+    truncate_to_smallest_group= True
+
 )
