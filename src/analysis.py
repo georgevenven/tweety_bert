@@ -236,10 +236,30 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
             vocalization_arr.append(vocalization.cpu().numpy())
             
-            # Add sample IDs and data directory for this batch
-            batch_sample_ids = [sample_id_counter] * vocalization.shape[0]
-            sample_ids.extend(batch_sample_ids)
-            data_dir_mapping.extend([data_dir] * vocalization.shape[0])
+            # Filter for vocalization before any processing or visualization
+            if remove_non_vocalization:
+                vocalization_indices = np.where(vocalization_arr == 1)[0]
+                predictions = predictions[vocalization_indices]
+                ground_truth_label = ground_truth_label[vocalization_indices]
+                spec = spec[vocalization_indices]
+                
+                # Update sample_ids and data_dir_mapping here
+                sample_ids = [sample_id_counter] * len(vocalization_indices)
+                data_dir_mapping = [data_dir] * len(vocalization_indices)
+            else:
+                sample_ids = [sample_id_counter] * len(predictions)
+                data_dir_mapping = [data_dir] * len(predictions)
+
+            all_predictions.append(predictions)
+            all_ground_truth_labels.append(ground_truth_label)
+            all_specs.append(spec)
+            all_vocalizations.append(vocalization)
+            dataloader_indices.extend([dataloader_idx] * len(predictions))
+            
+            # Extend the overall lists
+            sample_ids.extend(sample_ids)
+            data_dir_mapping.extend(data_dir_mapping)
+            
             sample_id_counter += 1
 
             total_samples += spec.shape[0]
@@ -253,21 +273,6 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             predictions = np.concatenate(predictions_arr, axis=0)
         else:
             predictions = spec_arr
-
-        # Filter for vocalization before any processing or visualization
-        if remove_non_vocalization:
-            vocalization_indices = np.where(vocalization_arr == 1)[0]
-            predictions = predictions[vocalization_indices]
-            ground_truth_labels = ground_truth_labels[vocalization_indices]
-            spec_arr = spec_arr[vocalization_indices]
-            sample_ids = [sample_ids[i] for i in vocalization_indices]
-            data_dir_mapping = [data_dir_mapping[i] for i in vocalization_indices]
-
-        all_predictions.append(predictions)
-        all_ground_truth_labels.append(ground_truth_labels)
-        all_specs.append(spec_arr)
-        all_vocalizations.append(vocalization_arr)
-        dataloader_indices.extend([dataloader_idx] * len(predictions))
 
     # Truncate to smallest group if requested
     if truncate_to_smallest_group:
@@ -922,12 +927,6 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
             vocalization_arr.append(vocalization.cpu().numpy())
 
-            # Add sample IDs and data directory for this batch
-            batch_sample_ids = [sample_id_counter] * vocalization.shape[0]
-            sample_ids.extend(batch_sample_ids)
-            data_dir_mapping.extend([data_dir] * vocalization.shape[0])
-            sample_id_counter += 1
-
             total_samples += spec.shape[0]
 
         # Convert the list of batch * samples * features to samples * features 
@@ -946,14 +945,23 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             predictions = predictions[vocalization_indices]
             ground_truth_labels = ground_truth_labels[vocalization_indices]
             spec_arr = spec_arr[vocalization_indices]
-            sample_ids = [sample_ids[i] for i in vocalization_indices]
-            data_dir_mapping = [data_dir_mapping[i] for i in vocalization_indices]
+            sample_ids = [sample_id_counter] * len(vocalization_indices)
+            data_dir_mapping = [data_dir] * len(vocalization_indices)
+        else:
+            sample_ids = [sample_id_counter] * len(predictions)
+            data_dir_mapping = [data_dir] * len(predictions)
 
         all_predictions.append(predictions)
         all_ground_truth_labels.append(ground_truth_labels)
         all_specs.append(spec_arr)
         all_vocalizations.append(vocalization_arr)
         dataloader_indices.extend([dataloader_idx] * len(predictions))
+        
+        # Extend the overall lists
+        sample_ids.extend(sample_ids)
+        data_dir_mapping.extend(data_dir_mapping)
+        
+        sample_id_counter += 1
 
     # Truncate to smallest group if requested
     if truncate_to_smallest_group:
