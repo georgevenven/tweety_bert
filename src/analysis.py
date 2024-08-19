@@ -272,13 +272,29 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     # Truncate to smallest group if requested
     if truncate_to_smallest_group:
         min_length = min(len(pred) for pred in all_predictions)
-        all_predictions = [pred[:min_length] for pred in all_predictions]
-        all_ground_truth_labels = [labels[:min_length] for labels in all_ground_truth_labels]
-        all_specs = [spec[:min_length] for spec in all_specs]
-        all_vocalizations = [voc[:min_length] for voc in all_vocalizations]
-        dataloader_indices = dataloader_indices[:min_length * len(data_dirs)]
-        sample_ids = sample_ids[:min_length * len(data_dirs)]
-        data_dir_mapping = data_dir_mapping[:min_length * len(data_dirs)]
+        
+        # Find the last complete sample in each group
+        truncated_lengths = []
+        for i in range(len(all_predictions)):
+            sample_ids_group = sample_ids[sum(len(p) for p in all_predictions[:i]):sum(len(p) for p in all_predictions[:i+1])]
+            last_complete_sample = max(id for id in sample_ids_group if sample_ids_group.count(id) <= min_length)
+            truncated_length = sum(1 for id in sample_ids_group if id <= last_complete_sample)
+            truncated_lengths.append(truncated_length)
+        
+        # Use the smallest truncated length that includes complete samples
+        min_truncated_length = min(truncated_lengths)
+        
+        # Truncate all data to this length
+        all_predictions = [pred[:min_truncated_length] for pred in all_predictions]
+        all_ground_truth_labels = [labels[:min_truncated_length] for labels in all_ground_truth_labels]
+        all_specs = [spec[:min_truncated_length] for spec in all_specs]
+        all_vocalizations = [voc[:min_truncated_length] for voc in all_vocalizations]
+        
+        # Adjust other lists
+        total_length = min_truncated_length * len(data_dirs)
+        dataloader_indices = dataloader_indices[:total_length]
+        sample_ids = sample_ids[:total_length]
+        data_dir_mapping = data_dir_mapping[:total_length]
 
     # Combine all data
     combined_predictions = np.concatenate(all_predictions, axis=0)
@@ -931,13 +947,29 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     # Truncate to smallest group if requested
     if truncate_to_smallest_group:
         min_length = min(len(pred) for pred in all_predictions)
-        all_predictions = [pred[:min_length] for pred in all_predictions]
-        all_ground_truth_labels = [labels[:min_length] for labels in all_ground_truth_labels]
-        all_specs = [spec[:min_length] for spec in all_specs]
-        all_vocalizations = [voc[:min_length] for voc in all_vocalizations]
-        dataloader_indices = dataloader_indices[:min_length * len(data_dirs)]
-        sample_ids = sample_ids[:min_length * len(data_dirs)]
-        data_dir_mapping = data_dir_mapping[:min_length * len(data_dirs)]
+        
+        # Find the last complete sample in each group
+        truncated_lengths = []
+        for i in range(len(all_predictions)):
+            sample_ids_group = sample_ids[sum(len(p) for p in all_predictions[:i]):sum(len(p) for p in all_predictions[:i+1])]
+            last_complete_sample = max(id for id in sample_ids_group if sample_ids_group.count(id) <= min_length)
+            truncated_length = sum(1 for id in sample_ids_group if id <= last_complete_sample)
+            truncated_lengths.append(truncated_length)
+        
+        # Use the smallest truncated length that includes complete samples
+        min_truncated_length = min(truncated_lengths)
+        
+        # Truncate all data to this length
+        all_predictions = [pred[:min_truncated_length] for pred in all_predictions]
+        all_ground_truth_labels = [labels[:min_truncated_length] for labels in all_ground_truth_labels]
+        all_specs = [spec[:min_truncated_length] for spec in all_specs]
+        all_vocalizations = [voc[:min_truncated_length] for voc in all_vocalizations]
+        
+        # Adjust other lists
+        total_length = min_truncated_length * len(data_dirs)
+        dataloader_indices = dataloader_indices[:total_length]
+        sample_ids = sample_ids[:total_length]
+        data_dir_mapping = data_dir_mapping[:total_length]
 
     # Combine all data
     combined_predictions = np.concatenate(all_predictions, axis=0)
