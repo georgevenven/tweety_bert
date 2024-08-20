@@ -194,11 +194,16 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
                 data = data.unsqueeze(1)
                 data = data.permute(0, 1, 3, 2)
 
-                _, layers = model.inference_forward(data.to(device))
+                try:
+                    _, layers = model.inference_forward(data.to(device))
+                except:
+                    print("something went wrong ... likely batch size was too large, batch size:", data.shape[0])
+                    continue
+
+                data = data.detach().cpu()
 
                 layer_output_dict = layers[layer_index]
                 output = layer_output_dict.get(dict_key, None)
-
                 output = output.detach().cpu()
 
                 if output is None:
@@ -234,6 +239,9 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             # Save memory by doing it earlier than later
             if remove_non_vocalization:
                 vocalization_indices = np.where(vocalization == 1)[0]
+                if np.sum(vocalization_indices) == 0:
+                    continue 
+
                 predictions = predictions[vocalization_indices]
                 ground_truth_label = ground_truth_label[vocalization_indices]
                 spec = spec[vocalization_indices]
@@ -252,19 +260,17 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
             group_ids_arr.append(group_ids)
             sample_ids_arr.append(sample_ids)
             
-            # Filter vocalization_arr based on the group_ids matching the current sample_id_counter
-            filtered_vocalization = np.concatenate(
-                [vocalization for vocalization, group_id in zip(vocalization_arr, group_ids_arr) if np.any(group_id == sample_id_counter)], 
-                axis=0
-            )
+            # Concatenate the arrays along axis 0
+            concat = np.concatenate(group_ids_arr, axis=0)
 
-            # Sum the filtered vocalization array
-            vocalization_sum = np.sum(filtered_vocalization)
+            # Create an array of 1s and 0s based on the condition
+            mask = (concat == dataloader_idx).astype(int)
+            mask_sum = np.sum(mask)
 
             # Check if the sum exceeds the required number of samples
-            if vocalization_sum > samples:
+            if mask_sum > samples:
                 loop = False
-                sample_id_counter += 1 
+            sample_id_counter += 1 
 
     if not raw_spectogram:
         predictions = np.concatenate(predictions_arr, axis=0)
@@ -785,292 +791,51 @@ class ComputerClusterPerformance():
         embedding_outputs = data['embedding_outputs']
         return self.compute_hopkins_statistic(embedding_outputs)
 
-# def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_file=None, layer_index=None, dict_key=None, 
-#                          context=1000, save_name=None, raw_spectogram=False, remove_non_vocalization=True, plot_comparison=False,
-#                          save_dict_for_analysis=False, truncate_to_smallest_group=False):
-#     all_predictions = []
-#     all_ground_truth_labels = []
-#     all_specs = []
-#     all_vocalizations = []
-#     dataloader_indices = []
-#     sample_ids = []
-#     data_dir_mapping = []  # New list to store data directory for each sample
 
-#     # Reset Figure
-#     plt.figure(figsize=(8, 6))
 
-#     num_groups = len(data_dirs)
+def plot_metrics(metrics_list, model_names):
+    num_metrics = 3  # Homogeneity, Completeness, V-measure
+    num_models = len(metrics_list)
+    assert num_models == len(model_names), "Number of models and model names must match"
 
-#     if plot_comparison and num_groups > 1:
-#         plot_comparison = True
-#     else:
-#         plot_comparison = False
+    # Define a color palette with enough colors for each model
+    color_palette = plt.cm.viridis(np.linspace(0, 1, num_models))
 
-#     sample_id_counter = 0  # Initialize a counter for unique sample IDs
+    group_width = 0.8  # Total width for a group of bars
+    bar_width = group_width / num_models  # Width of individual bar
 
-#     for dataloader_idx, data_dir in enumerate(data_dirs):
-#         data_loader = load_data(data_dir=data_dir, context=context)
-#         data_loader_iter = iter(data_loader)
-#         predictions_arr = []
-#         ground_truth_labels_arr = []
-#         spec_arr = []
-#         vocalization_arr = []
+    # Positions of the groups
+    group_positions = np.arange(num_metrics)
 
-#         # to allow sci notation 
-#         samples = int(samples)
-#         total_samples = 0
+    plt.figure(figsize=(10, 6))
 
-#         while total_samples < samples:
-#             try:
-#                 # Retrieve the next batch
-#                 data, ground_truth_label, vocalization = next(data_loader_iter)
+    # Plot bars for each metric
+    for i, metric_name in enumerate(['Homogeneity', 'Completeness', 'V-measure']):
+        for j, metrics in enumerate(metrics_list):
+            mean = metrics[metric_name][0]
+            # Center bars within each group
+            position = group_positions[i] + (j - num_models / 2) * bar_width + bar_width / 2
 
-#                 num_classes = ground_truth_label.shape[-1]
-#                 original_data_length = data.shape[1]
-#                 original_label_length = ground_truth_label.shape[1]
+            # Use consistent colors for each model across metrics
+            plt.bar(position, mean, width=bar_width, color=color_palette[j],
+                    label=model_names[j] if i == 0 else "", align='center')
 
-#                 # Pad data to the nearest context size in the time dimension
-#                 total_time = data.shape[1]  # Adjusted for batch first
-#                 pad_size_time = (context - (total_time % context)) % context  # Adjusted padding calculation for time dimension
-#                 data = F.pad(data, (0, 0, 0, pad_size_time), 'constant', 0)  # Adjusted padding for batch first in time dimension
+    plt.xlabel('Metrics', fontsize=42)
+    plt.ylabel('Scores', fontsize=42)
+    plt.title('Comparison of Clustering Metrics Across Models', fontsize=42)
 
-#                 # Calculate the number of context windows in the song
-#                 num_times = data.shape[1] // context  # Adjustment needed here as we're padding time
+    # Set the position and labels for each group
+    plt.xticks(group_positions, ['Homogeneity', 'Completeness', 'V-measure'], fontsize=36)
+    plt.yticks(fontsize=36)
 
-#                 batch, time_bins, freq = data.shape  # Adjusted for batch first
+    plt.ylim(0, 1)  # Setting y-axis from 0 to 1
 
-#                 # Reshape data to fit into multiple context-sized batches
-#                 data = data.reshape(batch * num_times, context, freq)  # Adjusted reshape to exclude padded frequency since we're padding time
+    # Add grid to the plot
+    plt.grid(True, linestyle='--', which='major', color='grey', alpha=.25)
 
-#                 # Pad ground truth labels to match data padding in time dimension
-#                 total_length_labels = ground_truth_label.shape[1]  # Adjusted for batch first
-#                 pad_size_labels_time = (context - (total_length_labels % context)) % context  # Adjusted padding calculation for time dimension
-#                 ground_truth_label = F.pad(ground_truth_label, (0, 0, 0, pad_size_labels_time), 'constant', 0)  # Adjusted padding for batch first in time dimension
-#                 vocalization = F.pad(vocalization, (0, pad_size_labels_time), 'constant', 0)
+    # Enlarge the labels for the legend.
+    plt.legend(loc='upper left', fontsize=36)
+    plt.tight_layout()
+    plt.show()
 
-#                 ground_truth_label = ground_truth_label.reshape(batch * num_times, context, num_classes)  # Adjusted for batch first
-#                 vocalization = vocalization.reshape(batch * num_times, context)
-
-#             except StopIteration:
-#                 print(f"Dataloader {dataloader_idx}: samples collected {len(ground_truth_labels_arr) * context}")
-#                 break
-
-#             if raw_spectogram == False:
-#                 data = data.unsqueeze(1)
-#                 data = data.permute(0, 1, 3, 2)
-
-#                 _, layers = model.inference_forward(data.to(device))
-
-#                 layer_output_dict = layers[layer_index]
-#                 output = layer_output_dict.get(dict_key, None)
-
-#                 if output is None:
-#                     print(f"Invalid key: {dict_key}. Skipping this batch.")
-#                     continue
-
-#                 batches, time_bins, features = output.shape
-#                 predictions = output.reshape(batches, time_bins, features)
-#                 predictions = predictions.flatten(0, 1)
-#                 predictions = predictions[:original_data_length]
-
-#                 predictions_arr.append(predictions.detach().cpu().numpy())
-#             else:
-#                 data = data.unsqueeze(1)
-#                 data = data.permute(0, 1, 3, 2)
-
-#             data = data.squeeze(1)
-#             spec = data
-#             spec = spec.permute(0, 2, 1)
-
-#             spec = spec.flatten(0, 1)
-#             spec = spec[:original_data_length]  # Remove padding from spec
-
-#             ground_truth_label = ground_truth_label.flatten(0, 1)
-#             vocalization = vocalization.flatten(0, 1)
-
-#             ground_truth_label = ground_truth_label[:original_label_length]  # Remove padding from labels
-
-#             ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
-
-#             spec_arr.append(spec.cpu().numpy())
-#             ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
-#             vocalization_arr.append(vocalization.cpu().numpy())
-
-#             total_samples += spec.shape[0]
-
-#         # Convert the list of batch * samples * features to samples * features 
-#         ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
-#         spec_arr = np.concatenate(spec_arr, axis=0)
-#         vocalization_arr = np.concatenate(vocalization_arr, axis=0)
-        
-#         if not raw_spectogram:
-#             predictions = np.concatenate(predictions_arr, axis=0)
-#         else:
-#             predictions = spec_arr
-
-#         # Filter for vocalization before any processing or visualization
-#         if remove_non_vocalization:
-#             vocalization_indices = np.where(vocalization_arr == 1)[0]
-#             predictions = predictions[vocalization_indices]
-#             ground_truth_labels = ground_truth_labels[vocalization_indices]
-#             spec_arr = spec_arr[vocalization_indices]
-#             sample_ids = [sample_id_counter] * len(vocalization_indices)
-#             data_dir_mapping = [data_dir] * len(vocalization_indices)
-#         else:
-#             sample_ids = [sample_id_counter] * len(predictions)
-#             data_dir_mapping = [data_dir] * len(predictions)
-
-#         all_predictions.append(predictions)
-#         all_ground_truth_labels.append(ground_truth_labels)
-#         all_specs.append(spec_arr)
-#         all_vocalizations.append(vocalization_arr)
-#         dataloader_indices.extend([dataloader_idx] * len(predictions))
-        
-#         # Extend the overall lists
-#         sample_ids.extend(sample_ids)
-#         data_dir_mapping.extend(data_dir_mapping)
-        
-#         sample_id_counter += 1
-
-#     # Truncate to smallest group if requested
-#     if truncate_to_smallest_group:
-#         min_length = min(len(pred) for pred in all_predictions)
-        
-#         # Find the last complete sample in each group
-#         truncated_lengths = []
-#         for i in range(len(all_predictions)):
-#             sample_ids_group = sample_ids[sum(len(p) for p in all_predictions[:i]):sum(len(p) for p in all_predictions[:i+1])]
-            
-#             # Find the last complete sample that fits within min_length
-#             last_complete_sample = None
-#             for id in sorted(set(sample_ids_group), reverse=True):
-#                 if sample_ids_group.count(id) <= min_length:
-#                     last_complete_sample = id
-#                     break
-            
-#             if last_complete_sample is None:
-#                 # If no complete sample fits, use the first sample
-#                 last_complete_sample = sample_ids_group[0]
-            
-#             truncated_length = sum(1 for id in sample_ids_group if id <= last_complete_sample)
-#             truncated_lengths.append(truncated_length)
-        
-#         # Use the smallest truncated length that includes complete samples
-#         min_truncated_length = min(truncated_lengths)
-        
-#         # Truncate all data to this length
-#         all_predictions = [pred[:min_truncated_length] for pred in all_predictions]
-#         all_ground_truth_labels = [labels[:min_truncated_length] for labels in all_ground_truth_labels]
-#         all_specs = [spec[:min_truncated_length] for spec in all_specs]
-#         all_vocalizations = [voc[:min_truncated_length] for voc in all_vocalizations]
-        
-#         # Adjust other lists
-#         total_length = min_truncated_length * len(data_dirs)
-#         dataloader_indices = dataloader_indices[:total_length]
-#         sample_ids = sample_ids[:total_length]
-#         data_dir_mapping = data_dir_mapping[:total_length]
-
-#     # Combine all data
-#     combined_predictions = np.concatenate(all_predictions, axis=0)
-#     combined_ground_truth_labels = np.concatenate(all_ground_truth_labels, axis=0)
-#     combined_specs = np.concatenate(all_specs, axis=0)
-#     dataloader_indices = np.array(dataloader_indices)
-
-#     print(f"Shape of combined array for UMAP: {combined_predictions.shape}")
-
-#     # Fit the UMAP reducer
-#     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
-#     reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
-
-#     embedding_outputs = reducer.fit_transform(combined_predictions)
-#     embedding_outputs_cluster = reducer_cluster.fit_transform(combined_predictions)
-
-#     hdbscan_labels = generate_hdbscan_labels(embedding_outputs_cluster, min_samples=1, min_cluster_size=int(combined_predictions.shape[0]/200))
-
-#     # Create colormaps
-#     cmap_dataloaders = plt.cm.get_cmap('tab10')
-#     dataloader_colors = cmap_dataloaders(np.linspace(0, 1, len(data_dirs)))
-
-#     # add the color black as silences
-#     cmap_ground_truth = glasbey.extend_palette(["#000000"], palette_size=30)
-#     cmap_ground_truth = mcolors.ListedColormap(cmap_ground_truth)
-
-#     # Compute unique labels and their corresponding colors for ground truth labels
-#     unique_ground_truth_labels = np.unique(combined_ground_truth_labels)
-#     ground_truth_label_colors = {label: cmap_ground_truth.colors[label % len(cmap_ground_truth.colors)] for label in unique_ground_truth_labels}
-
-#     # Create a colormap for HDBSCAN labels
-#     cmap_hdbscan = glasbey.extend_palette(["#FFFFFF"], palette_size=30)
-#     cmap_hdbscan = mcolors.ListedColormap(cmap_hdbscan)
-#     hdbscan_colors = np.array([cmap_hdbscan.colors[label % len(cmap_hdbscan.colors)] for label in hdbscan_labels])
-
-#     # Plot 1: Comparison plot (if applicable)
-#     if plot_comparison:
-#         fig, ax = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
-#         colors = ['red', 'blue']  # Set colors to red and blue
-#         for idx, (color, data_dir) in enumerate(zip(colors, data_dirs)):
-#             mask = dataloader_indices == idx
-#             scatter = ax.scatter(embedding_outputs[mask, 0], embedding_outputs[mask, 1], 
-#                                  c=color, s=70, alpha=0.1, label=data_dir)
-#         ax.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-#         ax.set_xlabel('UMAP 1', fontsize=48)
-#         ax.set_ylabel('UMAP 2', fontsize=48)
-#         for spine in ax.spines.values():
-#             spine.set_visible(True)
-#             spine.set_color('black')
-#             spine.set_linewidth(2)
-#         ax.set_title("UMAP Projection Comparison", fontsize=48)
-#         ax.legend(fontsize=24, markerscale=2, loc='upper right', bbox_to_anchor=(1.3, 1))
-#         plt.tight_layout()
-#         plt.savefig(save_name + "_comparison.png", bbox_inches='tight')
-#         plt.close()
-
-#     # Plot 2: Ground Truth Labels
-#     fig_ground_truth, ax_ground_truth = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
-#     scatter_ground_truth = ax_ground_truth.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
-#                                                    c=combined_ground_truth_labels, s=70, alpha=0.1, cmap=cmap_ground_truth)
-#     ax_ground_truth.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-#     ax_ground_truth.set_xlabel('UMAP 1', fontsize=48)
-#     ax_ground_truth.set_ylabel('UMAP 2', fontsize=48)
-#     for spine in ax_ground_truth.spines.values():
-#         spine.set_visible(True)
-#         spine.set_color('black')
-#         spine.set_linewidth(2)
-#     ax_ground_truth.set_title("Ground Truth Labels", fontsize=48)
-#     plt.tight_layout()
-#     plt.savefig(save_name + "_ground_truth.png")
-#     plt.close()
-
-#     # Plot 3: HDBSCAN Labels
-#     fig_hdbscan, ax_hdbscan = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
-#     scatter_hdbscan = ax_hdbscan.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
-#                                          c=hdbscan_labels, s=70, alpha=0.1, cmap=cmap_hdbscan)
-#     ax_hdbscan.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
-#     ax_hdbscan.set_xlabel('UMAP 1', fontsize=48)
-#     ax_hdbscan.set_ylabel('UMAP 2', fontsize=48)
-#     for spine in ax_hdbscan.spines.values():
-#         spine.set_visible(True)
-#         spine.set_color('black')
-#         spine.set_linewidth(2)
-#     ax_hdbscan.set_title("HDBSCAN Discovered Labels", fontsize=48)
-#     plt.tight_layout()
-#     plt.savefig(save_name + "_hdbscan.png")
-#     plt.close()
-
-#     # Save the data for further analysis
-#     if save_dict_for_analysis:
-#         np.savez(f"files/labels_{save_name}", 
-#                  embedding_outputs=embedding_outputs,
-#                  hdbscan_labels=hdbscan_labels,
-#                  ground_truth_labels=combined_ground_truth_labels,
-#                  specs=combined_specs,
-#                  hdbscan_colors=hdbscan_colors,
-#                  ground_truth_colors=cmap_ground_truth.colors,
-#                  dataloader_indices=dataloader_indices,
-#                  dataloader_colors=dataloader_colors,
-#                  sample_ids=np.array(sample_ids),
-#                  data_dir_mapping=np.array(data_dir_mapping))
-
-#     print(f"Plots saved as {save_name}_comparison.png, {save_name}_ground_truth.png, and {save_name}_hdbscan.png")
-#     if save_dict_for_analysis:
-#         print(f"Data saved as files/labels_{save_name}.npz")
+    # plt.savefig("metrics_comparison.png", format='png')
