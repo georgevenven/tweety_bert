@@ -76,24 +76,25 @@ class SongDataSet_Image(Dataset):
             ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.num_classes).float()
             vocalization = torch.from_numpy(vocalization).long()
 
-            # Truncate if larger than context window
-            if spectogram.shape[0] > self.segment_length:
-                # Get random view of size segment
-                # Find range of valid starting pts (essentially these are the possible starting pts for the length to equal segment window)
-                starting_points_range = spectogram.shape[0] - self.segment_length        
-                start = torch.randint(0, starting_points_range, (1,)).item()  
-                end = start + self.segment_length     
+            if self.segment_length is not None:
+                # Truncate if larger than context window
+                if spectogram.shape[0] > self.segment_length:
+                    # Get random view of size segment
+                    # Find range of valid starting pts (essentially these are the possible starting pts for the length to equal segment window)
+                    starting_points_range = spectogram.shape[0] - self.segment_length        
+                    start = torch.randint(0, starting_points_range, (1,)).item()  
+                    end = start + self.segment_length     
 
-                spectogram = spectogram[start:end]
-                ground_truth_labels = ground_truth_labels[start:end]
-                vocalization = vocalization[start:end]
+                    spectogram = spectogram[start:end]
+                    ground_truth_labels = ground_truth_labels[start:end]
+                    vocalization = vocalization[start:end]
 
-            # Pad with 0s if shorter
-            if spectogram.shape[0] < self.segment_length:
-                pad_amount = self.segment_length - spectogram.shape[0]
-                spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
-                ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)  # Adjusted padding for labels
-                vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
+                # Pad with 0s if shorter
+                if spectogram.shape[0] < self.segment_length:
+                    pad_amount = self.segment_length - spectogram.shape[0]
+                    spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
+                    ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)  # Adjusted padding for labels
+                    vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
 
 
             return spectogram, ground_truth_labels, vocalization
