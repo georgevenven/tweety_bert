@@ -4,6 +4,8 @@ import seaborn as sns
 import networkx as nx
 from collections import Counter
 from scipy.stats import chi2_contingency
+import json
+import os
 
 class StateSwitchingAnalysis:
     def __init__(self, dir):
@@ -158,22 +160,30 @@ class StateSwitchingAnalysis:
         plt.close()
 
     def calculate_transition_entropy(self, group):
-        self.transition_entropies = {group: {} for group in range(self.num_groups)}
-        self.total_entropy = {group: 0 for group in range(self.num_groups)}
+        if self.transition_matrices[group] is None or self.transition_matrices[group].size == 0:
+            print(f"Warning: Transition matrix for group {group} is empty or not initialized.")
+            self.transition_entropies[group] = {}
+            self.total_entropy[group] = 0
+            return
 
-        for group in range(self.num_groups):
-            transition_matrix = self.transition_matrices_norm[group]
-            state_frequencies = np.sum(self.transition_matrices[group], axis=1)
-            state_frequencies = state_frequencies / np.sum(state_frequencies)
+        transition_matrix = self.transition_matrices_norm[group]
+        state_frequencies = np.sum(self.transition_matrices[group], axis=1)
+        state_frequencies = state_frequencies / np.sum(state_frequencies)
 
-            for i, state in enumerate(self.unique_labels):
-                probabilities = transition_matrix[i]
-                probabilities = probabilities[probabilities > 0]  # Remove zero probabilities
+        self.transition_entropies[group] = {}
+        self.total_entropy[group] = 0
+
+        for i, state in enumerate(self.unique_labels):
+            probabilities = transition_matrix[i]
+            probabilities = probabilities[probabilities > 0]  # Remove zero probabilities
+            if probabilities.size > 0:
                 entropy = -np.sum(probabilities * np.log2(probabilities))
-                self.transition_entropies[group][state] = entropy
+            else:
+                entropy = 0
+            self.transition_entropies[group][state] = entropy
 
-                # Contribute to total entropy
-                self.total_entropy[group] += entropy * state_frequencies[i]
+            # Contribute to total entropy
+            self.total_entropy[group] += entropy * state_frequencies[i]
 
     def calculate_chi_square(self, group1, group2):
         matrix1 = self.transition_matrices[group1]
@@ -191,43 +201,45 @@ class StateSwitchingAnalysis:
 
         return chi2, p_value
 
-    def print_statistics(self, group):
+    def collect_statistics(self, group):
         labels = np.concatenate(self.songs[group])
-        print(f"\nStatistics for Group {group}:")
-        print(f"Number of unique labels (excluding noise state): {self.n_labels}")
-        print("\nTop 5 most common transitions:")
-        transitions = [(labels[i], labels[i+1]) for i in range(len(labels)-1)
+        transitions = [(int(labels[i]), int(labels[i+1])) for i in range(len(labels)-1)
                        if labels[i] != labels[i+1]]
-        for transition, count in Counter(transitions).most_common(5):
-            print(f"From {transition[0]} to {transition[1]}: {count} times")
+        top_transitions = Counter(transitions).most_common(5)
 
-        print("\nTransition matrix:")
-        print(self.transition_matrices[group])
-
-        print("\nNormalized transition matrix:")
-        print(self.transition_matrices_norm[group])
-
-        print(f"\nMean switching time: {np.mean(self.switching_times[group]):.2f}")
-        print(f"Median switching time: {np.median(self.switching_times[group]):.2f}")
-        print(f"Maximum switching time: {np.max(self.switching_times[group])}")
-        print(f"Minimum switching time: {np.min(self.switching_times[group])}")
-        print(f"Standard deviation of switching times: {np.std(self.switching_times[group]):.2f}")
-        print(f"Total number of switches: {len(self.switching_times[group])}")
-
-        print(f"\nTotal Transition Entropy: {self.total_entropy[group]:.4f}")
-        print("\nTransition Entropies per state:")
-        for state, entropy in self.transition_entropies[group].items():
-            print(f"State {state}: {entropy:.4f}")
+        stats = {
+            "group": int(group),
+            "unique_labels": int(self.n_labels),
+            "top_5_transitions": [{"from": int(t[0][0]), "to": int(t[0][1]), "count": int(t[1])} for t in top_transitions],
+            "transition_matrix": self.transition_matrices[group].tolist(),
+            "normalized_transition_matrix": self.transition_matrices_norm[group].tolist(),
+            "switching_times": {
+                "mean": float(np.mean(self.switching_times[group])),
+                "median": float(np.median(self.switching_times[group])),
+                "max": int(np.max(self.switching_times[group])),
+                "min": int(np.min(self.switching_times[group])),
+                "std_dev": float(np.std(self.switching_times[group])),
+                "total_switches": int(len(self.switching_times[group]))
+            },
+            "total_transition_entropy": float(self.total_entropy[group]),
+            "transition_entropies": {str(state): float(entropy) for state, entropy in self.transition_entropies[group].items()}
+        }
+        return stats
 
     def run_analysis(self):
+        results = {"groups": [], "chi_square_tests": []}
+
         for group in range(self.num_groups):
             if self.songs[group]:  # Only analyze groups with songs
-                self.calculate_transition_matrix(group)
-                self.plot_transition_graph_and_matrix(group)
-                self.calculate_switching_times(group)
-                self.plot_switching_times_histogram(group)
-                self.calculate_transition_entropy(group)
-                self.print_statistics(group)
+                try:
+                    self.calculate_transition_matrix(group)
+                    self.plot_transition_graph_and_matrix(group)
+                    self.calculate_switching_times(group)
+                    self.plot_switching_times_histogram(group)
+                    self.calculate_transition_entropy(group)
+                    results["groups"].append(self.collect_statistics(group))
+                except Exception as e:
+                    print(f"Error processing group {group}: {str(e)}")
             else:
                 print(f"Group {group} has no songs after removing noise cluster. Skipping analysis.")
 
@@ -236,11 +248,27 @@ class StateSwitchingAnalysis:
             for i in range(self.num_groups):
                 for j in range(i+1, self.num_groups):
                     if self.songs[i] and self.songs[j]:
-                        chi2, p_value = self.calculate_chi_square(i, j)
-                        print(f"\nChi-square test between Group {i} and Group {j}:")
-                        print(f"Chi-square statistic: {chi2:.4f}")
-                        print(f"p-value: {p_value:.4f}")
+                        try:
+                            chi2, p_value = self.calculate_chi_square(i, j)
+                            results["chi_square_tests"].append({
+                                "group1": int(i),
+                                "group2": int(j),
+                                "chi_square_statistic": float(chi2),
+                                "p_value": float(p_value)
+                            })
+                        except Exception as e:
+                            print(f"Error calculating Chi-square test for groups {i} and {j}: {str(e)}")
+
+        # Ensure the results directory exists
+        results_dir = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/results"
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Save results as JSON
+        with open(os.path.join(results_dir, "state_switching_analysis.json"), "w") as f:
+            json.dump(results, f, indent=2)
+
+        print(f"Analysis complete. Results saved to {os.path.join(results_dir, 'state_switching_analysis.json')}")
 
 # Usage
-analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/tweety_bert/files/labels_Yarden_LLB3_Whisperseg.npz")
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/flash-drive/labels_Yarden_LLB3_Whisperseg.npz")
 analysis.run_analysis()
