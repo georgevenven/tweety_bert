@@ -13,7 +13,8 @@ sys.path.append("src")
 from utils import load_model
 from analysis import plot_umap_projection
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# THIS SHOULD ALWAYS BE CPU SO YOU CAN FIT SUPER LONG SONGS IN MODEL UNLESS YOU HAVE A100 or BETTER!
+device = torch.device("cpu")
 
 weights_path = "experiments/Sham_Lesion_5271/saved_weights/model_step_23500.pth"
 config_path = "experiments/Sham_Lesion_5271/config.json"
