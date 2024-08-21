@@ -148,6 +148,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
 
     sample_id_counter = 0  # Initialize a counter for unique sample IDs
     
+    print("Starting data loading and processing...")
     for dataloader_idx, data_dir in enumerate(data_dirs):
 
         data_loader = load_data(data_dir=data_dir, context=context)
@@ -298,18 +299,25 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     for group, count in zip(unique_groups, group_counts):
         print(f"Group {group}: {count} elements")
 
+    print("Data loading and processing completed.")
+    print("Starting UMAP and HDBSCAN...")
 
     import time
     start_time = time.time()
 
-    # Fit the UMAP reducer
+    print("Fitting UMAP reducer...")
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
-    reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
-
     embedding_outputs = reducer.fit_transform(combined_predictions)
-    embedding_outputs_cluster = reducer_cluster.fit_transform(combined_predictions)
+    print("UMAP fitting completed.")
 
+    print("Fitting UMAP reducer for clustering...")
+    reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
+    embedding_outputs_cluster = reducer_cluster.fit_transform(combined_predictions)
+    print("UMAP fitting for clustering completed.")
+
+    print("Generating HDBSCAN labels...")
     hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=int(combined_predictions.shape[0]/200))
+    print("HDBSCAN labeling completed.")
 
     end_time = time.time()
     print(f"UMAP + HDBSCAN time: {end_time - start_time} seconds")
@@ -331,6 +339,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     cmap_hdbscan = mcolors.ListedColormap(cmap_hdbscan)
     hdbscan_colors = np.array([cmap_hdbscan.colors[label % len(cmap_hdbscan.colors)] for label in hdbscan_labels])
 
+    print("Creating plots...")
     # Plot 1: Comparison plot (if applicable)
     if plot_comparison:
         fig, ax = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
@@ -384,8 +393,11 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     plt.savefig(save_name + "_hdbscan.png")
     plt.close()
 
+    print("Plots created.")
+
     # Save the data for further analysis
     if save_dict_for_analysis:
+        print("Saving data for further analysis...")
         np.savez(f"files/labels_{save_name}", 
         embedding_outputs=embedding_outputs,
         hdbscan_labels=hdbscan_labels,
@@ -396,6 +408,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         combined_group_ids=combined_group_ids,
         combined_sample_ids=combined_sample_ids,
         data_dir_mapping=[(idx, data_dir) for idx, data_dir in enumerate(data_dirs)])
+        print("Data saved for further analysis.")
 
     print(f"Plots saved as {save_name}_comparison.png, {save_name}_ground_truth.png, and {save_name}_hdbscan.png")
     if save_dict_for_analysis:
