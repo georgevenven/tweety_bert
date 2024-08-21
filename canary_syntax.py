@@ -33,6 +33,13 @@ class StateSwitchingAnalysis:
         self.transition_entropies = {group: {} for group in range(self.num_groups)}
         self.total_entropy = {group: 0 for group in range(self.num_groups)}
 
+        # Set up results directory
+        self.results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
+        os.makedirs(self.results_dir, exist_ok=True)
+
+        # Create fixed positions for graph nodes
+        self.fixed_positions = self.create_fixed_positions()
+
     def group_songs(self):
         grouped_songs = {group: [] for group in range(self.num_groups)}
         unique_song_ids = np.unique(self.song_ids)
@@ -65,6 +72,12 @@ class StateSwitchingAnalysis:
         self.transition_matrices[group] = transition_matrix
         self.transition_matrices_norm[group] = transition_matrix_norm
 
+    def create_fixed_positions(self):
+        # Create a fixed layout for all nodes
+        G = nx.Graph()
+        G.add_nodes_from(self.unique_labels)
+        return nx.spring_layout(G, k=0.5, iterations=50)
+
     def create_transition_graph(self, group):
         G = nx.DiGraph()
         for label in self.unique_labels:
@@ -82,16 +95,15 @@ class StateSwitchingAnalysis:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 12))
 
         # Plot graph
-        pos = nx.spring_layout(G, k=0.01, iterations=50)
         node_sizes = [300 * (1 + G.degree(node)) for node in G.nodes()]
         edge_weights = [G[u][v]['weight'] for u, v in G.edges()]
         max_weight = max(edge_weights) if edge_weights else 1
         normalized_weights = [w / max_weight for w in edge_weights]
         edge_colors = plt.cm.YlOrRd(normalized_weights)
 
-        nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='lightblue', ax=ax1)
-        nx.draw_networkx_labels(G, pos, font_size=8, font_weight='bold', ax=ax1)
-        nx.draw_networkx_edges(G, pos, width=[w * 3 for w in normalized_weights],
+        nx.draw_networkx_nodes(G, self.fixed_positions, node_size=node_sizes, node_color='lightblue', ax=ax1)
+        nx.draw_networkx_labels(G, self.fixed_positions, font_size=8, font_weight='bold', ax=ax1)
+        nx.draw_networkx_edges(G, self.fixed_positions, width=[w * 3 for w in normalized_weights],
                                edge_color=edge_colors, arrows=True,
                                arrowsize=20, ax=ax1, connectionstyle="arc3,rad=0.1")
 
@@ -111,7 +123,7 @@ class StateSwitchingAnalysis:
         ax2.set_yticklabels(self.unique_labels)
 
         plt.tight_layout()
-        plt.savefig(f'transition_graph_and_matrix_group_{group}.png', dpi=300)
+        plt.savefig(os.path.join(self.results_dir, f'transition_graph_and_matrix_group_{group}.png'), dpi=300)
         plt.close()
 
     def calculate_switching_times(self, group):
@@ -156,7 +168,7 @@ class StateSwitchingAnalysis:
                  horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5), fontsize=10)
 
         plt.tight_layout()
-        plt.savefig(f'switching_times_histogram_group_{group}.png', dpi=300)
+        plt.savefig(os.path.join(self.results_dir, f'switching_times_histogram_group_{group}.png'), dpi=300)
         plt.close()
 
     def calculate_transition_entropy(self, group):
@@ -260,15 +272,15 @@ class StateSwitchingAnalysis:
                             print(f"Error calculating Chi-square test for groups {i} and {j}: {str(e)}")
 
         # Ensure the results directory exists
-        results_dir = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/results"
+        results_dir = "results"
         os.makedirs(results_dir, exist_ok=True)
 
         # Save results as JSON
-        with open(os.path.join(results_dir, "state_switching_analysis.json"), "w") as f:
+        with open(os.path.join(self.results_dir, "state_switching_analysis.json"), "w") as f:
             json.dump(results, f, indent=2)
 
-        print(f"Analysis complete. Results saved to {os.path.join(results_dir, 'state_switching_analysis.json')}")
+        print(f"Analysis complete. Results saved to {os.path.join(self.results_dir, 'state_switching_analysis.json')}")
 
 # Usage
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/flash-drive/labels_Yarden_LLB3_Whisperseg.npz")
+analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/tweety_bert/files/labels_Yarden_LLB3_Whisperseg.npz")
 analysis.run_analysis()
