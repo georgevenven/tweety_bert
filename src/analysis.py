@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from sklearn.neighbors import NearestNeighbors
 import warnings
 from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
+
 warnings.filterwarnings("ignore", category=NumbaDeprecationWarning)
 warnings.filterwarnings("ignore", category=NumbaPendingDeprecationWarning)
 
@@ -146,6 +147,7 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
         category_colors = None
 
     sample_id_counter = 0  # Initialize a counter for unique sample IDs
+    
     for dataloader_idx, data_dir in enumerate(data_dirs):
 
         data_loader = load_data(data_dir=data_dir, context=context)
@@ -296,6 +298,10 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     for group, count in zip(unique_groups, group_counts):
         print(f"Group {group}: {count} elements")
 
+
+    import time
+    start_time = time.time()
+
     # Fit the UMAP reducer
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
     reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
@@ -303,7 +309,10 @@ def plot_umap_projection(model, device, data_dirs, samples=100, category_colors_
     embedding_outputs = reducer.fit_transform(combined_predictions)
     embedding_outputs_cluster = reducer_cluster.fit_transform(combined_predictions)
 
-    hdbscan_labels = generate_hdbscan_labels(embedding_outputs_cluster, min_samples=1, min_cluster_size=int(combined_predictions.shape[0]/200))
+    hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=int(combined_predictions.shape[0]/200))
+
+    end_time = time.time()
+    print(f"UMAP + HDBSCAN time: {end_time - start_time} seconds")
 
     # Create colormaps
     cmap_dataloaders = plt.cm.get_cmap('tab10')
