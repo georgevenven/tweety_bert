@@ -3,35 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import networkx as nx
 from collections import Counter
-
-
-# we will compare the syntactic structure of the song between baseline and DOI conditions by
-# measuring syllable variability, phrase transition entropy, phrase duration distributions, and other syntax
-# measures described previously by the lab including prediction suffix trees (Koparkar et al.; Markowitz et
-# al.). We will also determine the overall variability of the song by calculating the total transition entropy over all
-# phrases, which considers the transition entropies at each phrase and weights them by their frequency of
-# occurrence. Additionally, we will calculate the percentage of transitions from phrase to phrase and create
-# transition matrices for the baseline and DOI conditions. We will then perform a Chi-square test of
-# independence on these matrices to determine if new transitions were observed or certain transitions have
-# disappeared. The Chi-square test will compare the observed percentages of each transition in the baseline and
-# DOI conditions to the expected percentages assuming independence.Transition entropy
-# Transition entropy is a measure of uncertainty of sequence at a given syllable (Sakata and Brainard, 2006). With c different outputs from the given syllable ‘a’ and P(i) the probability of the ith outcome, we calculate the entropy Ha as
-# Ha=−∑ci=1P(i)logP(i)��=-∑�=1��������
-# We call this value ‘transition entropy per branchpoint’ in Figure 3A.
-# To determine the overall variability of song before and after mMAN lesions, we calculated total transition entropy TE, over all syllables ‘b’ as:
-# TE=−∑nb=1HbP(b)��=-∑�=1�����
-# where Hb is the transition entropy at ‘b’ and P(b) is the frequency of syllable ‘b’ (Chatfield and Lemon, 1970; Katahira et al., 2013).
-# History dependence
-# History dependence is a previously established metric that measures the extent to which the most common transition at a given syllable is influenced by the transition at the last occurrence of this syllable (Warren et al., 2012). It has been used to characterize instances of apparent sequence variability, where seemingly variable transitions are always strictly alternating. For example, if the possible transitions from syllable ‘a’ are ‘ab’ or ‘ac’ but these strictly alternated (‘ab … ac … ab … ac’ and so on), then the seemingly variable branchpoint ‘a’ is perfectly predictable based on its history (Warren et al., 2012). Such apparent variability should be largely eliminated in our sequence analysis by the introduction of context-dependent states (i.e., in this example, the ‘a’ would be re-labeled as ‘a1’ or ‘a2’ depending on the context in which it occurs) and identification of chunks. However, if higher-order dependencies in the song determine the order of chunks, we might still expect some variable transitions to be governed by history dependence. If ‘ab’ is the most frequently occurring transition from ‘a’, and ‘ac’ is the collection of all other transitions from ‘a’, we define history dependence D of ‘a’ as:
-# D=P(abn|abn−1)−P(abn|acn−1)∨�=�������-1-�������-1∨
-# where P(abn|abn−1)�������-1 is the conditional probability of ‘ab’ transition given that ‘ab’ transition occurred at the previous instance of ‘a’ and P(abn|acn−1)�������-1 is the conditional probability of ‘ab’ transition given that ‘ac’ transition occurred at the previous instance of ‘a’.
-# Chunk consistency
-# As defined above, a chunk is defined by a single dominant sequence, but may have a small amount of variability across different instances. To quantify the stereotypy of chunks, we used a measure based on sequence consistency previously defined for relatively stereotyped zebra finch songs (Scharff and Nottebohm, 1991). Across all instances of a given chunk, we identified the syllable sequence that occurred most often as the ‘dominant sequence’. We then defined ‘n_dominant’ as the number of instances of the dominant sequence, and ‘n_other’ as the number of instances of other sequence variants for the chunk.
-# We quantified chunk consistency C as the proportion of total instances that were the dominant sequence:
-# C=ndominantndominant+nother�=������������������+���ℎ��
-# To compare a chunk before and after mMAN lesions, the dominant sequence for the pre-lesion chunk was used as a reference, regardless of whether the same sequence qualified as a chunk post lesion. To quantify chunk consistency post lesion, the most dominant sequence post lesion was used (even if that was not the same as the most dominant sequence pre lesion).
-# Repeat number variability
-# To study the influence of mMAN on repeat phrases, we examined the distribution of repeat numbers before and after lesions. We quantified the variability of these distributions as their coefficient of variation (CV = standard deviation/mean). ~~~~ Integrate these caclulations into the syntax code ... do so carefully and double check your code and work!
+from scipy.stats import chi2_contingency
 
 class StateSwitchingAnalysis:
     def __init__(self, dir):
@@ -56,6 +28,8 @@ class StateSwitchingAnalysis:
         self.transition_matrices = {group: None for group in range(self.num_groups)}
         self.transition_matrices_norm = {group: None for group in range(self.num_groups)}
         self.switching_times = {group: None for group in range(self.num_groups)}
+        self.transition_entropies = {group: {} for group in range(self.num_groups)}
+        self.total_entropy = {group: 0 for group in range(self.num_groups)}
 
     def group_songs(self):
         grouped_songs = {group: [] for group in range(self.num_groups)}
@@ -183,6 +157,40 @@ class StateSwitchingAnalysis:
         plt.savefig(f'switching_times_histogram_group_{group}.png', dpi=300)
         plt.close()
 
+    def calculate_transition_entropy(self, group):
+        self.transition_entropies = {group: {} for group in range(self.num_groups)}
+        self.total_entropy = {group: 0 for group in range(self.num_groups)}
+
+        for group in range(self.num_groups):
+            transition_matrix = self.transition_matrices_norm[group]
+            state_frequencies = np.sum(self.transition_matrices[group], axis=1)
+            state_frequencies = state_frequencies / np.sum(state_frequencies)
+
+            for i, state in enumerate(self.unique_labels):
+                probabilities = transition_matrix[i]
+                probabilities = probabilities[probabilities > 0]  # Remove zero probabilities
+                entropy = -np.sum(probabilities * np.log2(probabilities))
+                self.transition_entropies[group][state] = entropy
+
+                # Contribute to total entropy
+                self.total_entropy[group] += entropy * state_frequencies[i]
+
+    def calculate_chi_square(self, group1, group2):
+        matrix1 = self.transition_matrices[group1]
+        matrix2 = self.transition_matrices[group2]
+
+        # Ensure matrices have the same shape
+        max_shape = max(matrix1.shape[0], matrix2.shape[0])
+        if matrix1.shape[0] < max_shape:
+            matrix1 = np.pad(matrix1, ((0, max_shape - matrix1.shape[0]), (0, max_shape - matrix1.shape[1])))
+        if matrix2.shape[0] < max_shape:
+            matrix2 = np.pad(matrix2, ((0, max_shape - matrix2.shape[0]), (0, max_shape - matrix2.shape[1])))
+
+        # Perform Chi-square test
+        chi2, p_value, dof, expected = chi2_contingency([matrix1, matrix2])
+
+        return chi2, p_value
+
     def print_statistics(self, group):
         labels = np.concatenate(self.songs[group])
         print(f"\nStatistics for Group {group}:")
@@ -206,22 +214,10 @@ class StateSwitchingAnalysis:
         print(f"Standard deviation of switching times: {np.std(self.switching_times[group]):.2f}")
         print(f"Total number of switches: {len(self.switching_times[group])}")
 
-        print(f"\nTotal Transition Entropy: {self.total_entropy[group]}")
+        print(f"\nTotal Transition Entropy: {self.total_entropy[group]:.4f}")
         print("\nTransition Entropies per state:")
         for state, entropy in self.transition_entropies[group].items():
-            print(f"State {state}: {entropy}")
-
-        print("\nHistory Dependence per state:")
-        for state, dependence in self.history_dependence[group].items():
-            print(f"State {state}: {dependence}")
-
-        print("\nChunk Consistency:")
-        for chunk, consistency in self.chunk_consistency[group].items():
-            print(f"Chunk {chunk}: {consistency}")
-
-        print("\nRepeat Number Variability (CV):")
-        for phrase, cv in self.repeat_variability[group].items():
-            print(f"Phrase {phrase}: {cv}")
+            print(f"State {state}: {entropy:.4f}")
 
     def run_analysis(self):
         for group in range(self.num_groups):
@@ -230,9 +226,20 @@ class StateSwitchingAnalysis:
                 self.plot_transition_graph_and_matrix(group)
                 self.calculate_switching_times(group)
                 self.plot_switching_times_histogram(group)
+                self.calculate_transition_entropy(group)
                 self.print_statistics(group)
             else:
                 print(f"Group {group} has no songs after removing noise cluster. Skipping analysis.")
+
+        # Compare transition matrices between groups using Chi-square test
+        if self.num_groups > 1:
+            for i in range(self.num_groups):
+                for j in range(i+1, self.num_groups):
+                    if self.songs[i] and self.songs[j]:
+                        chi2, p_value = self.calculate_chi_square(i, j)
+                        print(f"\nChi-square test between Group {i} and Group {j}:")
+                        print(f"Chi-square statistic: {chi2:.4f}")
+                        print(f"p-value: {p_value:.4f}")
 
 # Usage
 analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/tweety_bert/files/labels_Yarden_LLB3_Whisperseg.npz")
