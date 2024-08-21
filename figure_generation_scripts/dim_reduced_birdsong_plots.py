@@ -25,7 +25,7 @@ plot_umap_projection(
     model=model, 
     device=device, 
     data_dirs=["/media/george-vengrovski/Extreme SSD/yarden_data/llb3_test", "/media/george-vengrovski/Extreme SSD/yarden_data/llb3_train"],
-    samples=2e6, 
+    samples=1e6, 
     category_colors_file="/home/george-vengrovski/Downloads/category_colors_llb3.pkl", 
     layer_index=-2, 
     dict_key="attention_output", 
