@@ -282,5 +282,5 @@ class StateSwitchingAnalysis:
         print(f"Analysis complete. Results saved to {os.path.join(self.results_dir, 'state_switching_analysis.json')}")
 
 # Usage
-analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/tweety_bert/files/labels_Yarden_LLB3_Whisperseg.npz")
+analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_TEST_SYNTAX.npz")
 analysis.run_analysis()
