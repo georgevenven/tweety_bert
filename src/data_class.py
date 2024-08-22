@@ -55,6 +55,7 @@ class SongDataSet_Image(Dataset):
         try:
             # Load data and preprocess
             data = np.load(file_path, allow_pickle=True)
+            file_name = os.path.basename(file_path)
             spectogram = data['s']
             
             spectogram = spectogram[20:216]
@@ -97,7 +98,7 @@ class SongDataSet_Image(Dataset):
                     vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
 
 
-            return spectogram, ground_truth_labels, vocalization
+            return spectogram, ground_truth_labels, vocalization, file_name
 
         except Exception as e:
             print(f"Error loading file {file_path}: {str(e)}")
@@ -118,14 +119,14 @@ class CollateFunction:
     def __init__(self, segment_length=1000):
         pass
     def __call__(self, batch):
-        # Unzip the batch (a list of (spectogram, ground_truth_labels) tuples)
-        spectograms, ground_truth_labels, vocalization = zip(*batch)
+        # Unzip the batch (a list of (spectogram, ground_truth_labels, vocalization, file_path) tuples)
+        spectograms, ground_truth_labels, vocalization, file_names = zip(*batch)
 
         # Stack tensors along a new dimension to match the BERT input size.
         spectograms = torch.stack(spectograms, dim=0)
         ground_truth_labels = torch.stack(ground_truth_labels, dim=0)
         vocalization = torch.stack(vocalization, dim=0)
-
+        # Keep file_paths as a list
         # Final reshape for model
         spectograms = spectograms.unsqueeze(1).permute(0,1,3,2)
-        return spectograms, ground_truth_labels, vocalization
+        return spectograms, ground_truth_labels, vocalization, file_names

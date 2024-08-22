@@ -216,8 +216,8 @@ class ModelTrainer:
         # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
         while step < self.max_steps:
             try:
-                spec, ground_truth, vocalization = next(train_iter)
-                validation_spec, validation_ground_truth, validation_vocalization = next(test_iter)
+                spec, ground_truth, vocalization, file_paths = next(train_iter)
+                validation_spec, validation_ground_truth, validation_vocalization, validation_file_paths = next(test_iter)
         
             except Exception as e:
                 # This block will execute if there is any exception in the try block

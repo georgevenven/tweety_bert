@@ -6,52 +6,95 @@ from collections import Counter
 from scipy.stats import chi2_contingency
 import json
 import os
+from datetime import datetime
+import pandas as pd
 
 class StateSwitchingAnalysis:
     def __init__(self, dir):
         data = np.load(dir, allow_pickle=True)
 
         self.hdbscan_labels = data['hdbscan_labels']
-        self.song_ids = data['combined_sample_ids']
-        self.group_ids = data['combined_group_ids']
+        self.file_info = data['file_indices']
+        self.file_map = data['file_map']
+
+        print(f"file info {self.file_info}")
+        print(f"file map {self.file_map}")
+
+        self.database = self.create_song_database()
+
+        # save database to csv
+        self.database.to_csv("song_database.csv", index=False)
+
+        # # Remove noise cluster (-1) and update related arrays
+        # non_noise_mask = self.hdbscan_labels != -1
+        # self.hdbscan_labels = self.hdbscan_labels[non_noise_mask]
+        # self.song_ids = self.song_ids[non_noise_mask]
+        # self.group_ids = self.group_ids[non_noise_mask]
+
+        # self.unique_labels = np.unique(self.hdbscan_labels)
+        # self.n_labels = len(self.unique_labels)
+        # self.num_groups = len(np.unique(self.group_ids))
+
+        # self.songs = self.group_songs()
+
+        # self.transition_matrices = {group: None for group in range(self.num_groups)}
+        # self.transition_matrices_norm = {group: None for group in range(self.num_groups)}
+        # self.switching_times = {group: None for group in range(self.num_groups)}
+        # self.transition_entropies = {group: {} for group in range(self.num_groups)}
+        # self.total_entropy = {group: 0 for group in range(self.num_groups)}
+
+        # # Set up results directory
+        # self.results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
+        # os.makedirs(self.results_dir, exist_ok=True)
+
+        # # Create fixed positions for graph nodes
+        # self.fixed_positions = self.create_fixed_positions()
+
+    def parse_date_time(self, file_path):
+        parts = file_path.split('_')
+        # remove .npz at the end of the last part
+        parts[-1] = parts[-1].replace('.npz', '')
+        try:
+            print(f"parts {parts}")
+            month, day, hour, minute, second = int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6])
+            file_date = datetime(2024, month, day, hour, minute, second)
+        except ValueError:
+            print(f"Invalid date format in file path: {file_path}")
+            return None
+               
+        return file_date
+
+
+    def create_song_database(self):
+        db = pd.DataFrame(columns=["song_id", "file_name", "date_time", "labels"])
+
+        if isinstance(self.file_map, np.ndarray) and self.file_map.ndim == 0:
+            # If file_map is a 0-d array, convert it to a dict
+            self.file_map = self.file_map.item()
         
-        # Remove noise cluster (-1) and update related arrays
-        non_noise_mask = self.hdbscan_labels != -1
-        self.hdbscan_labels = self.hdbscan_labels[non_noise_mask]
-        self.song_ids = self.song_ids[non_noise_mask]
-        self.group_ids = self.group_ids[non_noise_mask]
+        if isinstance(self.file_map, dict):
+            for file_id, file_info in self.file_map.items():
+                # Assuming file_info is a tuple with one element
+                file_path = file_info[0] if isinstance(file_info, tuple) else file_info
+                print(f"File ID: {file_id}, File Path: {file_path}")
 
-        self.unique_labels = np.unique(self.hdbscan_labels)
-        self.n_labels = len(self.unique_labels)
-        self.num_groups = len(np.unique(self.group_ids))
+                date_time = self.parse_date_time(file_path)
 
-        self.songs = self.group_songs()
+                index = np.where(self.file_info == file_id)
 
-        self.transition_matrices = {group: None for group in range(self.num_groups)}
-        self.transition_matrices_norm = {group: None for group in range(self.num_groups)}
-        self.switching_times = {group: None for group in range(self.num_groups)}
-        self.transition_entropies = {group: {} for group in range(self.num_groups)}
-        self.total_entropy = {group: 0 for group in range(self.num_groups)}
+                db.loc[len(db)] = [file_id, file_path, date_time, self.hdbscan_labels[index]]
+                
+                # Here you can add the file information to your database
+                # For example:
+                # self.song_database[file_id] = {'file_path': file_path, 'other_info': ...}
 
-        # Set up results directory
-        self.results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
-        os.makedirs(self.results_dir, exist_ok=True)
+        else:
+            print(f"Unexpected file_map type: {type(self.file_map)}")
+            print(f"File map content: {self.file_map}")
 
-        # Create fixed positions for graph nodes
-        self.fixed_positions = self.create_fixed_positions()
-
-    def group_songs(self):
-        grouped_songs = {group: [] for group in range(self.num_groups)}
-        unique_song_ids = np.unique(self.song_ids)
         
-        for id in unique_song_ids:
-            song_mask = self.song_ids == id
-            hdbscan_labels_masked = self.hdbscan_labels[song_mask]
-            if len(hdbscan_labels_masked) > 0:
-                group_id = self.group_ids[song_mask][0]
-                grouped_songs[group_id].append(hdbscan_labels_masked)
-        
-        return grouped_songs
+        return db
+    
 
     def calculate_transition_matrix(self, group):
         transition_matrix = np.zeros((self.n_labels, self.n_labels))
@@ -282,5 +325,5 @@ class StateSwitchingAnalysis:
         print(f"Analysis complete. Results saved to {os.path.join(self.results_dir, 'state_switching_analysis.json')}")
 
 # Usage
-analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_TEST_SYNTAX.npz")
-analysis.run_analysis()
+analysis = StateSwitchingAnalysis(dir="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_TEST_NEW_APPROACH.npz")
+# analysis.run_analysis()
