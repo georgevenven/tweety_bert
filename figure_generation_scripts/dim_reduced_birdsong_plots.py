@@ -25,13 +25,55 @@ model = model.to(device)
 plot_umap_projection(
     model=model, 
     device=device, 
-    data_dir="/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5271_specs",
-    samples=1e4, 
+    data_dir="/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs",
+    samples=1e6, 
     category_colors_file="/home/george-vengrovski/Downloads/category_colors_llb3.pkl", 
     layer_index=-2, 
     dict_key="attention_output", 
     context=1000, 
     raw_spectogram=False,
     save_dict_for_analysis=True,
-    save_name="TEST_NEW_APPROACH"
+    save_name="LLB3"
+)
+
+
+weights_path = "experiments/Sham_Lesion_5271/saved_weights/model_step_23500.pth"
+config_path = "experiments/Sham_Lesion_5271/config.json"
+
+model = load_model(config_path, weights_path)
+model = model.to(device)
+
+plot_umap_projection(
+    model=model, 
+    device=device, 
+    data_dir="/media/george-vengrovski/Extreme SSD/sham lesioned birds/Sham_Lesion_5271",
+    samples=1e6, 
+    category_colors_file="/home/george-vengrovski/Downloads/category_colors_llb3.pkl", 
+    layer_index=-2, 
+    dict_key="attention_output", 
+    context=1000, 
+    raw_spectogram=False,
+    save_dict_for_analysis=True,
+    save_name="SHAM_5271"
+)
+
+
+weights_path = "experiments/Sham_Lesion_5283/saved_weights/model_step_36500.pth"
+config_path = "experiments/Sham_Lesion_5283/config.json"
+
+model = load_model(config_path, weights_path)
+model = model.to(device)
+
+plot_umap_projection(
+    model=model, 
+    device=device, 
+    data_dir="/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_specs",
+    samples=1e6, 
+    category_colors_file="/home/george-vengrovski/Downloads/category_colors_llb3.pkl", 
+    layer_index=-2, 
+    dict_key="attention_output", 
+    context=1000, 
+    raw_spectogram=False,
+    save_dict_for_analysis=True,
+    save_name="SHAM_5283"
 )
