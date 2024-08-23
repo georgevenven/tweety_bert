@@ -3,6 +3,7 @@ files
 experiments
 *.pyc
 *.zip
+*.csv
 *.png
 *.pdf
 *.html

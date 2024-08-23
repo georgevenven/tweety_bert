@@ -112,7 +112,7 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
     return labels
 
 
-def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb16",  samples=100, file_path='category_colors.pkl',
+def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb16",  samples=1e6, file_path='category_colors.pkl',
                          layer_index=None, dict_key=None, time_bins_per_umap_point=100,
                          context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=False, remove_non_vocalization=True):
     predictions_arr = []
@@ -277,8 +277,8 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
     reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
 
-    embedding_outputs = reducer.fit_transform(predictions)
-    embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)
+    embedding_outputs = reducer.fit(predictions)
+    embedding_outputs_cluster = reducer_cluster.fit(predictions)
 
     hdbscan_labels = generate_hdbscan_labels(embedding_outputs_cluster, min_samples=1, min_cluster_size=int(predictions.shape[0]/200))
 
