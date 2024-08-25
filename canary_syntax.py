@@ -35,14 +35,61 @@ class StateSwitchingAnalysis:
         self.total_entropy = {}
         self.group_labels = {}  # New attribute to store labels for each group
 
-    def parse_date_time(self, file_path):
+    def smooth_labels(self, labels, min_state_length=50):
+        """
+        Smooth labels by removing contiguous segments shorter than the specified minimum length.
+        
+        Args:
+        - labels: np.array, the label data to be smoothed.
+        - min_state_length: int, minimum length for a segment to be kept.
+
+        Returns:
+        - np.array: The smoothed labels.
+        """
+        smoothed_labels = []  # List to store smoothed labels
+
+        # Initialize counters
+        contg_counter = 0
+        current_label_start_index = 0
+
+        for i in range(len(labels) - 1):  # Iterate up to the second-last element
+            current_label = labels[i]
+
+            if labels[i + 1] == current_label:
+                contg_counter += 1
+            else:
+                # If the next label is different, check the length of the current sequence
+                contg_counter += 1  # Include the current label in the count
+
+                if contg_counter >= min_state_length:
+                    # Keep this segment because it's long enough
+                    smoothed_labels.extend(labels[current_label_start_index:i+1])
+                
+                # Reset counters for the new segment
+                contg_counter = 0
+                current_label_start_index = i + 1
+
+        # Check the last segment
+        contg_counter += 1  # Include the last label in the count
+        if contg_counter >= min_state_length:
+            smoothed_labels.extend(labels[current_label_start_index:])
+
+        return np.array(smoothed_labels)
+
+    def parse_date_time(self, file_path, format="yarden"):
         parts = file_path.split('_')
         # remove .npz at the end of the last part
         parts[-1] = parts[-1].replace('.npz', '')
         try:
-            file_name, month, day, hour, minute, second = parts[1], int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6])
-            file_date = datetime(2024, month, day, hour, minute, second)
+            if format == "yarden":
+                file_name, year, month, day, hour, minute, second = parts[1], int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6]), int(parts[7])
+                file_date = datetime(year, month, day, hour, minute, second)
+            elif format == "standard":
+                file_name, month, day, hour, minute, second = parts[1], int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6])
+                file_date = datetime(2024, month, day, hour, minute, second)
         except ValueError:
+            print("parts:", *[f" {part}" for part in parts])
+
             print(f"Invalid date format in file path: {file_path}")
             return None
                
@@ -63,7 +110,7 @@ class StateSwitchingAnalysis:
 
                 index = np.where(self.file_info == file_id)
 
-                db.loc[len(db)] = [file_name, None, file_path, date_time, self.hdbscan_labels[index].tolist()]
+                db.loc[len(db)] = [file_name, None, file_path, date_time, self.smooth_labels(self.hdbscan_labels[index].tolist())]
 
         else:
             print(f"Unexpected file_map type: {type(self.file_map)}")
@@ -461,5 +508,5 @@ class StateSwitchingAnalysis:
         print(f"Total song entropy visualization saved to {os.path.join(self.results_dir, 'total_song_entropy_per_group.png')}")
 
 # Usage
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/flash-drive/labels_SHAM_5271.npz")
+analysis = StateSwitchingAnalysis(dir="files/labels_LLB3_WHISPERSEG.npz")
 analysis.run_analysis()

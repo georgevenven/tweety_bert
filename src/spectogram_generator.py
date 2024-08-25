@@ -73,8 +73,8 @@ class WavtoSpec:
 
             f, t, Sxx = spectrogram(data, fs=samplerate, window=window, nperseg=NFFT, noverlap=overlap_samples)
             Sxx_log = 10 * np.log10(Sxx + 1e-6)
-            Sxx_log_clipped = np.clip(Sxx_log, a_min=-2, a_max=None)
-            Sxx_log_normalized = (Sxx_log_clipped - np.min(Sxx_log_clipped)) / (np.max(Sxx_log_clipped) - np.min(Sxx_log_clipped))
+            # Sxx_log_clipped = np.clip(Sxx_log, a_min=-2, a_max=None)
+            # Sxx_log_normalized = (Sxx_log_clipped - np.min(Sxx_log_clipped)) / (np.max(Sxx_log_clipped) - np.min(Sxx_log_clipped))
 
             # Convert vocalization data to timebins
             vocalization_timebins = np.zeros(t.size, dtype=int)
@@ -95,10 +95,10 @@ class WavtoSpec:
                 if save_npz:
                     spec_filename = os.path.splitext(os.path.basename(file_path))[0]
                     spec_file_path = os.path.join(self.dst_dir, spec_filename + '.npz')
-                    np.savez_compressed(spec_file_path, s=Sxx_log_normalized, vocalization=vocalization_timebins, labels=labels)
+                    np.savez_compressed(spec_file_path, s=Sxx_log, vocalization=vocalization_timebins, labels=labels)
                     print(f"Spectrogram, vocalization data, and labels saved to {spec_file_path}")
 
-                return Sxx_log_normalized, vocalization_timebins, labels
+                return Sxx_log, vocalization_timebins, labels
 
             else:
                 print(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
@@ -146,7 +146,7 @@ class WavtoSpec:
 
 def main():
     src_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data/llb16_songs'
-    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_george_specs'
+    dst_dir = '/media/george-vengrovski/Extreme SSD/yarden_data/llb16_no_threshold_no_norm'
     csv_file_dir = '/home/george-vengrovski/Documents/tweety_bert/files/LLB16_Whisperseg.csv'  # Set to None if not using a CSV file
 
     wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
