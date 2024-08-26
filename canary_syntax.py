@@ -17,7 +17,7 @@ class StateSwitchingAnalysis:
         self.visualize = visualize
 
         self.hdbscan_labels = data['hdbscan_labels']
-        self.ground_truth_labels = data['hdbscan_labels']
+        self.ground_truth_labels = data['ground_truth_labels']
 
         self.spectrograms = data['s']  # Assuming 's' is the key for spectrograms
         self.file_info = data['file_indices']
@@ -26,6 +26,8 @@ class StateSwitchingAnalysis:
         self.database = self.create_song_database()
         if self.database is not None:
             self.database = self.group_time_of_day(self.database)
+            self.database_to_csv(self.database)
+            
         else:
             print("Error: Database creation failed.")
 
@@ -389,15 +391,20 @@ class StateSwitchingAnalysis:
 
     def plot_switching_times_violin(self, group):
         """
-        Plot a violin plot with dot plots of the duration distributions for each label in the group.
+        Plot a violin plot with dot plots of the duration distributions for each label in the group,
+        sorted in ascending order of the labels.
 
         Args:
         - group: str, the group identifier for which the violin plots are plotted.
         """
         plt.figure(figsize=(14, 8))
 
-        data = [durations for durations in self.switching_times[group].values()]
-        labels = [f'Label {label}' for label in self.switching_times[group].keys()]
+        # Sort labels based on their numeric or string value
+        sorted_labels = sorted(self.switching_times[group].keys(), key=lambda x: int(x) if isinstance(x, (int, np.integer)) else x)
+        
+        # Sort data according to sorted labels
+        data = [self.switching_times[group][label] for label in sorted_labels]
+        labels = [f'Label {label}' for label in sorted_labels]
 
         # Plot the violin plot
         sns.violinplot(data=data, bw_method=0.2, cut=0, inner=None, orient='v')
@@ -422,6 +429,7 @@ class StateSwitchingAnalysis:
         plt.tight_layout()
         plt.savefig(os.path.join(self.results_dir, f'switching_times_violin_group_{group}.png'), dpi=300)
         plt.close()
+
 
 
     def calculate_transition_entropy(self, group):
@@ -644,6 +652,6 @@ class StateSwitchingAnalysis:
 
         print(f"Total song entropy visualization saved to {os.path.join(self.results_dir, 'total_song_entropy_per_group.png')}")
 
-# Usage
-analysis = StateSwitchingAnalysis(dir="files/labels_LLB3_WHISPERSEG.npz")
+# Usage  
+analysis = StateSwitchingAnalysis(dir="files/labels_LLB16_WHISPERSEG.npz")
 analysis.run_analysis()

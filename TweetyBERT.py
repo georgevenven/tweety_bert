@@ -17,7 +17,7 @@ experiment_runner = ExperimentRunner(device="cuda")
 configurations = [
         {
         "experiment_name": "USA5271_Whisperseg_NoNormNoThresholding",
-        "continue_training": False,
+        "continue_training": True,
         "train_dir": "/media/george-vengrovski/Extreme SSD1/sham lesioned birds/USA5271_no_threshold_no_norm_train",
         "test_dir": "/media/george-vengrovski/Extreme SSD1/sham lesioned birds/USA5271_no_threshold_no_norm_no_norm_test",
         "batch_size": 42,
