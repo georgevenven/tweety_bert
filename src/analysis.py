@@ -277,8 +277,9 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
     reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
 
-    embedding_outputs = reducer.fit(predictions)
-    embedding_outputs_cluster = reducer_cluster.fit(predictions)
+
+    embedding_outputs = reducer.fit_transform(predictions)
+    embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)
 
     hdbscan_labels = generate_hdbscan_labels(embedding_outputs_cluster, min_samples=1, min_cluster_size=int(predictions.shape[0]/200))
 

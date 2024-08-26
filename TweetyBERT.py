@@ -16,10 +16,10 @@ experiment_runner = ExperimentRunner(device="cuda")
 
 configurations = [
         {
-        "experiment_name": "LLB16_Whisperseg_NoNormNoThresholding",
+        "experiment_name": "USA5271_Whisperseg_NoNormNoThresholding",
         "continue_training": False,
-        "train_dir": "/media/george-vengrovski/Extreme SSD/yarden_data/llb16_no_threshold_no_norm_train",
-        "test_dir": "/media/george-vengrovski/Extreme SSD/yarden_data/llb16_no_threshold_no_norm_test",
+        "train_dir": "/media/george-vengrovski/Extreme SSD1/sham lesioned birds/USA5271_no_threshold_no_norm_train",
+        "test_dir": "/media/george-vengrovski/Extreme SSD1/sham lesioned birds/USA5271_no_threshold_no_norm_no_norm_test",
         "batch_size": 42,
         "d_transformer": 196,   
         "nhead_transformer": 4,

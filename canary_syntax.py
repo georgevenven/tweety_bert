@@ -10,10 +10,16 @@ from datetime import datetime
 import pandas as pd
 
 class StateSwitchingAnalysis:
-    def __init__(self, dir):
+    def __init__(self, dir, visualize=False):
         data = np.load(dir, allow_pickle=True)
+        # Set up image directory for debugging visualizations
+        self.img_dir = "/home/george-vengrovski/Documents/tweety_bert/imgs/vis_smoothed"
+        self.visualize = visualize
 
         self.hdbscan_labels = data['hdbscan_labels']
+        self.ground_truth_labels = data['hdbscan_labels']
+
+        self.spectrograms = data['s']  # Assuming 's' is the key for spectrograms
         self.file_info = data['file_indices']
         self.file_map = data['file_map']
 
@@ -37,8 +43,9 @@ class StateSwitchingAnalysis:
 
     def smooth_labels(self, labels, min_state_length=50):
         """
-        Smooth labels by removing contiguous segments shorter than the specified minimum length.
-        
+        Smooth labels by first removing all '-1' labels, then removing contiguous 
+        segments shorter than the specified minimum length.
+
         Args:
         - labels: np.array, the label data to be smoothed.
         - min_state_length: int, minimum length for a segment to be kept.
@@ -46,28 +53,36 @@ class StateSwitchingAnalysis:
         Returns:
         - np.array: The smoothed labels.
         """
+        # Remove all '-1' labels first
+        labels = np.array(labels)
+        indices = np.where(labels != -1)
+        labels = labels[indices]
+
         smoothed_labels = []  # List to store smoothed labels
 
         # Initialize counters
         contg_counter = 0
         current_label_start_index = 0
 
-        for i in range(len(labels) - 1):  # Iterate up to the second-last element
-            current_label = labels[i]
+        try:
+            for i in range(len(labels) - 1):  # Iterate up to the second-last element
+                current_label = labels[i]
 
-            if labels[i + 1] == current_label:
-                contg_counter += 1
-            else:
-                # If the next label is different, check the length of the current sequence
-                contg_counter += 1  # Include the current label in the count
+                if labels[i + 1] == current_label:
+                    contg_counter += 1
+                else:
+                    # If the next label is different, check the length of the current sequence
+                    contg_counter += 1  # Include the current label in the count
 
-                if contg_counter >= min_state_length:
-                    # Keep this segment because it's long enough
-                    smoothed_labels.extend(labels[current_label_start_index:i+1])
-                
-                # Reset counters for the new segment
-                contg_counter = 0
-                current_label_start_index = i + 1
+                    if contg_counter >= min_state_length:
+                        # Keep this segment because it's long enough
+                        smoothed_labels.extend(labels[current_label_start_index:i+1])
+                    
+                    # Reset counters for the new segment
+                    contg_counter = 0
+                    current_label_start_index = i + 1
+        except:
+            print(len(labels))
 
         # Check the last segment
         contg_counter += 1  # Include the last label in the count
@@ -75,6 +90,47 @@ class StateSwitchingAnalysis:
             smoothed_labels.extend(labels[current_label_start_index:])
 
         return np.array(smoothed_labels)
+
+    def visualize_labels(self, song_id, original_labels, smoothed_labels, spectrogram):
+        """
+        Visualize the original and smoothed labels over the spectrogram.
+
+        Args:
+        - song_id: str, identifier of the song.
+        - original_labels: np.array, original HDBSCAN labels.
+        - smoothed_labels: np.array, smoothed labels.
+        - spectrogram: np.array, the spectrogram corresponding to the labels.
+        """
+        plt.figure(figsize=(14, 8))
+
+        # Plot the transposed spectrogram
+        plt.subplot(3, 1, 1)
+        plt.imshow(spectrogram.T, aspect='auto', origin='lower', cmap='viridis')
+        plt.title(f"Spectrogram of {song_id}")
+        plt.ylabel("Frequency")
+        # Remove colorbar to match the length
+        #plt.colorbar(format='%+2.0f dB')
+
+        # Plot the original labels
+        plt.subplot(3, 1, 2)
+        plt.plot(original_labels, label='Original Labels', color='red', linewidth=1)
+        plt.title(f"Original HDBSCAN Labels for {song_id}")
+        plt.ylabel("Label")
+        plt.ylim([min(original_labels)-1, max(original_labels)+1])
+
+        # Plot the smoothed labels
+        plt.subplot(3, 1, 3)
+        plt.plot(smoothed_labels, label='Smoothed Labels', color='blue', linewidth=1)
+        plt.title(f"Smoothed Labels for {song_id}")
+        plt.ylabel("Label")
+        plt.ylim([min(smoothed_labels)-1, max(smoothed_labels)+1])
+
+        plt.xlabel("Time")
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.img_dir, f'{song_id}_labels_comparison.png'))
+        plt.close()
+
+        print(f"Visualization for {song_id} saved to {os.path.join(self.img_dir, f'{song_id}_labels_comparison.png')}")
 
     def parse_date_time(self, file_path, format="yarden"):
         parts = file_path.split('_')
@@ -110,7 +166,16 @@ class StateSwitchingAnalysis:
 
                 index = np.where(self.file_info == file_id)
 
-                db.loc[len(db)] = [file_name, None, file_path, date_time, self.smooth_labels(self.hdbscan_labels[index].tolist())]
+                # Get original labels and smooth them
+                original_labels = self.hdbscan_labels[index].tolist()
+                smoothed_labels = self.smooth_labels(original_labels)
+
+                # Add data to the database
+                db.loc[len(db)] = [file_name, None, file_path, date_time, smoothed_labels]
+
+                if self.visualize:
+                    # Visualize original vs smoothed labels
+                    self.visualize_labels(file_name, original_labels, smoothed_labels, self.spectrograms[index[0]])
 
         else:
             print(f"Unexpected file_map type: {type(self.file_map)}")
@@ -243,51 +308,121 @@ class StateSwitchingAnalysis:
         plt.close()
 
     def calculate_switching_times(self, group):
-        switching_times = []
+        """
+        Calculate the durations of each state (or phrase) in the group of songs.
+        
+        This function will create a dictionary where each unique label (state) is a key,
+        and the value is a list containing the durations of that state across all songs.
+
+        Args:
+        - group: str, the group identifier for which the switching times are calculated.
+        """
+        switching_times_dict = {}
         group_songs = self.database[self.database['group_id'] == group]['labels']
+        
         for song in group_songs:
-            for i in range(len(song) - 1):
-                current_state = song[i]
-                current_duration = 1
-                for label in song[i+1:]:
-                    if label == current_state:
-                        current_duration += 1
-                    else:
-                        if current_duration < 1000:
-                            switching_times.append(current_duration)
-                        current_state = label
-                        current_duration = 1
-                if current_duration < 1000:
-                    switching_times.append(current_duration)
-        self.switching_times[group] = np.array(switching_times)
+            if len(song) == 0:
+                continue
+            
+            current_state = song[0]
+            current_duration = 1
+            
+            for i in range(1, len(song)):
+                if song[i] == current_state:
+                    current_duration += 1
+                else:
+                    # Record the duration of the current state
+                    if current_state not in switching_times_dict:
+                        switching_times_dict[current_state] = []
+                    switching_times_dict[current_state].append(current_duration)
+                    
+                    # Reset for the next state
+                    current_state = song[i]
+                    current_duration = 1
+            
+            # Record the duration of the final state in the song
+            if current_state not in switching_times_dict:
+                switching_times_dict[current_state] = []
+            switching_times_dict[current_state].append(current_duration)
+        
+        self.switching_times[group] = switching_times_dict
+
 
     def plot_switching_times_histogram(self, group):
-        plt.figure(figsize=(14, 8))
-        bins = np.linspace(0, 100, 501)
-        counts, bins, _ = plt.hist(self.switching_times[group], bins=bins, edgecolor='black', alpha=0.7)
+        """
+        Plot a combined histogram of switching times for all labels in the group.
 
-        plt.title(f'Histogram of State Switching Times for Group {group}\n(Excluding Noise State, Times < 1000)', fontsize=16)
+        Args:
+        - group: str, the group identifier for which the histograms are plotted.
+        """
+        plt.figure(figsize=(14, 8))
+
+        # Combine all durations from all labels
+        all_durations = [duration for durations in self.switching_times[group].values() for duration in durations]
+
+        plt.hist(all_durations, bins=50, edgecolor='black', alpha=0.7)
+
+        mean_time = np.mean(all_durations)
+        median_time = np.median(all_durations)
+        max_time = np.max(all_durations)
+        min_time = np.min(all_durations)
+        std_time = np.std(all_durations)
+
+        plt.title(f'Combined Histogram of State Switching Times for Group {group}', fontsize=16)
         plt.xlabel('Duration (number of time steps)', fontsize=12)
         plt.ylabel('Frequency', fontsize=12)
-
-        mean_time = np.mean(self.switching_times[group])
-        median_time = np.median(self.switching_times[group])
         plt.axvline(mean_time, color='r', linestyle='dashed', linewidth=2, label=f'Mean: {mean_time:.2f}')
         plt.axvline(median_time, color='g', linestyle='dashed', linewidth=2, label=f'Median: {median_time:.2f}')
 
-        plt.legend(fontsize=10)
-
         stats_text = (f'Mean: {mean_time:.2f}\n'
                       f'Median: {median_time:.2f}\n'
-                      f'Max: {np.max(self.switching_times[group])}\n'
-                      f'Min: {np.min(self.switching_times[group])}\n'
-                      f'Std Dev: {np.std(self.switching_times[group]):.2f}')
+                      f'Max: {max_time}\n'
+                      f'Min: {min_time}\n'
+                      f'Std Dev: {std_time:.2f}')
+        plt.legend(fontsize=10)
         plt.text(0.95, 0.95, stats_text, transform=plt.gca().transAxes, verticalalignment='top',
                  horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5), fontsize=10)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.results_dir, f'switching_times_histogram_group_{group}.png'), dpi=300)
+        plt.savefig(os.path.join(self.results_dir, f'switching_times_combined_histogram_group_{group}.png'), dpi=300)
         plt.close()
+
+    def plot_switching_times_violin(self, group):
+        """
+        Plot a violin plot with dot plots of the duration distributions for each label in the group.
+
+        Args:
+        - group: str, the group identifier for which the violin plots are plotted.
+        """
+        plt.figure(figsize=(14, 8))
+
+        data = [durations for durations in self.switching_times[group].values()]
+        labels = [f'Label {label}' for label in self.switching_times[group].keys()]
+
+        # Plot the violin plot
+        sns.violinplot(data=data, bw_method=0.2, cut=0, inner=None, orient='v')
+
+        # Overlay dot plots
+        for i, durations in enumerate(data):
+            # Adding scatter plot on the same plot
+            plt.scatter(np.random.normal(i, 0.04, size=len(durations)), durations, color='black', alpha=0.6, s=10)
+
+            # Calculate statistics for annotation
+            median = np.median(durations)
+            std_dev = np.std(durations)
+
+            # Annotate the plot with statistics
+            plt.text(i, max(durations), f'Median: {median:.2f}\nStd: {std_dev:.2f}', 
+                    ha='center', va='bottom', fontsize=10)
+
+        plt.xticks(ticks=np.arange(len(labels)), labels=labels, rotation=45)
+        plt.title(f'Distribution of Durations for Each Phrase in Group {group}', fontsize=16)
+        plt.xlabel('Phrase')
+        plt.ylabel('Duration')
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_dir, f'switching_times_violin_group_{group}.png'), dpi=300)
+        plt.close()
+
 
     def calculate_transition_entropy(self, group):
         if self.transition_matrices[group] is None or self.transition_matrices[group].size == 0:
@@ -452,11 +587,13 @@ class StateSwitchingAnalysis:
                     self.plot_transition_graph_and_matrix(group)
                     self.calculate_switching_times(group)
                     self.plot_switching_times_histogram(group)
+                    self.plot_switching_times_violin(group)  # Plot violin plots for phrase durations
                     self.calculate_transition_entropy(group)
                     group_stats = self.collect_statistics(group)
                     group_stats["phrase_entropy"] = self.transition_entropies[group]
                     group_stats["total_song_entropy"] = self.total_entropy[group]
                     results["groups"].append(group_stats)
+
                 except Exception as e:
                     print(f"Error processing group {group}: {str(e)}")
                     import traceback
