@@ -36,6 +36,63 @@ class TweetyBertClassifier:
     def load_tweety_bert(self, config_path, weights_path):
         return load_model(config_path, weights_path)
 
+    def smooth_labels(self, labels, min_state_length=50):
+        """
+        Smooth labels by first removing all '-1' labels, then removing contiguous 
+        segments shorter than the specified minimum length. Replace removed states with 0.
+
+        Args:
+        - labels: np.array, the label data to be smoothed.
+        - min_state_length: int, minimum length for a segment to be kept.
+
+        Returns:
+        - np.array: The smoothed labels.
+        """
+        # Increment all states by 1
+        labels = np.array(labels) + 1
+
+        # Remove all '-1' labels first
+        indices = np.where(labels != 0)
+        labels = labels[indices]
+
+        smoothed_labels = []  # List to store smoothed labels
+
+        # Initialize counters
+        contg_counter = 0
+        current_label_start_index = 0
+
+        try:
+            for i in range(len(labels) - 1):  # Iterate up to the second-last element
+                current_label = labels[i]
+
+                if labels[i + 1] == current_label:
+                    contg_counter += 1
+                else:
+                    # If the next label is different, check the length of the current sequence
+                    contg_counter += 1  # Include the current label in the count
+
+                    if contg_counter >= min_state_length:
+                        # Keep this segment because it's long enough
+                        smoothed_labels.extend(labels[current_label_start_index:i+1])
+                    else:
+                        # Replace short segments with 0
+                        smoothed_labels.extend([0] * contg_counter)
+                    
+                    # Reset counters for the new segment
+                    contg_counter = 0
+                    current_label_start_index = i + 1
+        except:
+            print(len(labels))
+
+        # Check the last segment
+        contg_counter += 1  # Include the last label in the count
+        if contg_counter >= min_state_length:
+            smoothed_labels.extend(labels[current_label_start_index:])
+        else:
+            smoothed_labels.extend([0] * contg_counter)
+
+        return np.array(smoothed_labels)
+
     def prepare_data(self, data_file, test_train_split=0.8, length=1000):
         self.data_file = data_file
         data = np.load(data_file)
@@ -62,8 +119,11 @@ class TweetyBertClassifier:
                     left -= 1
                     right += 1
 
-        # Adjust num_classes to compensate for noise label replacement
-        self.num_classes = len(np.unique(labels))
+        # Smooth labels by removing contiguous segments shorter than the specified minimum length
+        labels = self.smooth_labels(labels, min_state_length=500)
+
+        # Adjust num_classes to compensate for noise label replacement and increment
+        self.num_classes = len(np.unique(labels)) + 10
         print(f"Number of classes: {self.num_classes}")
 
         list_of_data = [
@@ -108,7 +168,7 @@ class TweetyBertClassifier:
             freeze_layers=True, 
             layer_num=-1, 
             layer_id="attention_output", 
-            classifier_dims=196
+            TweetyBERT_readout_dims=196
         ).to(self.device)
 
     def train_classifier(self, lr=1e-4, batches_per_eval=50, desired_total_batches=1e3, patience=40, generate_loss_plot=False):
@@ -476,12 +536,12 @@ class TweetyBertInference:
 # # Usage example:
 if __name__ == "__main__":
     classifier = TweetyBertClassifier(
-        config_path="experiments/5288_new_whisperseg_pitch_shift/config.json",
-        weights_path="experiments/5288_new_whisperseg_pitch_shift/saved_weights/model_step_34500.pth",
+        config_path="/media/george-vengrovski/flash-drive/LLB16_Whisperseg_NoNormNoThresholding/config.json",
+        weights_path="/media/george-vengrovski/flash-drive/LLB16_Whisperseg_NoNormNoThresholding/saved_weights/model_step_21000.pth",
         linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
     )
 
-    classifier.prepare_data("files/labels_new_whisperseg_test_pitch.npz")
+    classifier.prepare_data("/media/george-vengrovski/flash-drive/labels_LLB16NONORM.npz")
     classifier.create_dataloaders()
     classifier.create_classifier()
     classifier.train_classifier(generate_loss_plot=True)

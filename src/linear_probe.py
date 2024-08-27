@@ -167,11 +167,19 @@ class LinearProbeModel(nn.Module):
             logits = logits.reshape(output_shape[0],output_shape[2],self.num_classes)
 
         return logits
-    
+        
     def cross_entropy_loss(self, predictions, targets):
+        # Create a mask to ignore the loss for label 0
+        mask = targets != 0
+        
+        # Apply the mask to the targets
+        masked_targets = targets[mask]
+        
+        # Apply the mask to the predictions
+        masked_predictions = predictions.permute(0, 2, 1)[mask]
         
         loss_fn = torch.nn.CrossEntropyLoss()
-        total_loss = loss_fn(predictions, targets)
+        total_loss = loss_fn(masked_predictions, masked_targets)
 
         return total_loss
 
@@ -252,10 +260,10 @@ class LinearProbeTrainer():
 
         with torch.no_grad():
             try:
-                spectrogram, label, vocalization = next(test_iter)
+                spectrogram, label, vocalization, _ = next(test_iter)
             except StopIteration:
                 test_iter = iter(self.test_loader)  # Reinitialize the iterator
-                spectrogram, label, vocalization = next(test_iter)
+                spectrogram, label, vocalization, _ = next(test_iter)
 
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             # with autocast():  # Use autocast for the validation pass
@@ -291,10 +299,10 @@ class LinearProbeTrainer():
 
         while total_batches < self.desired_total_batches and not stop_training:
             try:
-                spectrogram, label, vocalization = next(train_iter)
+                spectrogram, label, vocalization, _ = next(train_iter)
             except StopIteration:
                 train_iter = iter(self.train_loader)  # Reinitialize the iterator
-                spectrogram, label, vocalization = next(train_iter)
+                spectrogram, label, vocalization, _ = next(train_iter)
 
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             self.optimizer.zero_grad()

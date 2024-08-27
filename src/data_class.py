@@ -94,7 +94,7 @@ class SongDataSet_Image(Dataset):
                 if spectogram.shape[0] < self.segment_length:
                     pad_amount = self.segment_length - spectogram.shape[0]
                     spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
-                    ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)  # Adjusted padding for labels
+                    ground_truth_labels = F.pad(ground_truth_labels, (0, pad_amount), 'constant', 0)
                     vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
 
 
@@ -124,8 +124,8 @@ class CollateFunction:
 
         # Stack tensors along a new dimension to match the BERT input size.
         spectograms = torch.stack(spectograms, dim=0)
-        ground_truth_labels = torch.stack(ground_truth_labels, dim=0)
         vocalization = torch.stack(vocalization, dim=0)
+        ground_truth_labels = torch.stack(ground_truth_labels, dim=0)
         # Keep file_paths as a list
         # Final reshape for model
         spectograms = spectograms.unsqueeze(1).permute(0,1,3,2)
