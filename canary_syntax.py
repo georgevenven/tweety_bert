@@ -26,7 +26,6 @@ class StateSwitchingAnalysis:
         self.database = self.create_song_database()
         if self.database is not None:
             self.database = self.group_time_of_day(self.database)
-            self.database_to_csv(self.database)
             
         else:
             print("Error: Database creation failed.")
@@ -134,7 +133,7 @@ class StateSwitchingAnalysis:
 
         print(f"Visualization for {song_id} saved to {os.path.join(self.img_dir, f'{song_id}_labels_comparison.png')}")
 
-    def parse_date_time(self, file_path, format="yarden"):
+    def parse_date_time(self, file_path, format="standard"):
         parts = file_path.split('_')
         # remove .npz at the end of the last part
         parts[-1] = parts[-1].replace('.npz', '')
@@ -171,7 +170,6 @@ class StateSwitchingAnalysis:
                 # Get original labels and smooth them
                 original_labels = self.hdbscan_labels[index].tolist()
                 smoothed_labels = self.smooth_labels(original_labels)
-
                 # Add data to the database
                 db.loc[len(db)] = [file_name, None, file_path, date_time, smoothed_labels]
 
@@ -186,6 +184,10 @@ class StateSwitchingAnalysis:
         return db
 
     def database_to_csv(self, db):
+        # Convert each array in 'labels' column to a JSON-formatted string
+        db['labels'] = db['labels'].apply(lambda x: json.dumps(x.tolist()))
+
+        # Save to CSV
         db.to_csv("song_database.csv", index=False)
 
     def group_time_of_day(self, db):
@@ -653,5 +655,7 @@ class StateSwitchingAnalysis:
         print(f"Total song entropy visualization saved to {os.path.join(self.results_dir, 'total_song_entropy_per_group.png')}")
 
 # Usage  
-analysis = StateSwitchingAnalysis(dir="files/labels_LLB16_WHISPERSEG.npz")
+analysis = StateSwitchingAnalysis(dir="files/labels_SHAM_5283.npz")
 analysis.run_analysis()
+analysis.database_to_csv()
+
