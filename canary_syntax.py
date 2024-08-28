@@ -25,7 +25,7 @@ class StateSwitchingAnalysis:
 
         self.database = self.create_song_database()
         if self.database is not None:
-            self.database = self.group_time_of_day(self.database)
+            self.database = self.group_before_after_trial(self.database)
             self.database_to_csv(self.database)
             
         else:
@@ -134,7 +134,7 @@ class StateSwitchingAnalysis:
 
         print(f"Visualization for {song_id} saved to {os.path.join(self.img_dir, f'{song_id}_labels_comparison.png')}")
 
-    def parse_date_time(self, file_path, format="yarden"):
+    def parse_date_time(self, file_path, format="standard"):
         parts = file_path.split('_')
         # remove .npz at the end of the last part
         parts[-1] = parts[-1].replace('.npz', '')
@@ -201,6 +201,28 @@ class StateSwitchingAnalysis:
             elif 16 <= hour < 18:
                 new_row = row.copy()
                 new_row['group_id'] = 'late_night'
+                filtered_db = pd.concat([filtered_db, pd.DataFrame([new_row])], ignore_index=True)
+
+        # Assign the filtered DataFrame back to the class attribute
+        self.database = filtered_db
+        return filtered_db
+
+    # USA5271 03.07.24, USA5283 03.05.24
+    def group_before_after_trial(self, db, trial_date="2024-03-07 00:00:00"):
+        # Convert trial_date string to datetime
+        trial_date = datetime.strptime(trial_date, "%Y-%m-%d %H:%M:%S")
+
+        # Create a new empty DataFrame to store the filtered results
+        filtered_db = pd.DataFrame(columns=db.columns)
+
+        for index, row in db.iterrows():
+            if row['date_time'] < trial_date:
+                new_row = row.copy()
+                new_row['group_id'] = 'before_trial'
+                filtered_db = pd.concat([filtered_db, pd.DataFrame([new_row])], ignore_index=True)
+            else:
+                new_row = row.copy()
+                new_row['group_id'] = 'after_trial'
                 filtered_db = pd.concat([filtered_db, pd.DataFrame([new_row])], ignore_index=True)
 
         # Assign the filtered DataFrame back to the class attribute
@@ -653,5 +675,5 @@ class StateSwitchingAnalysis:
         print(f"Total song entropy visualization saved to {os.path.join(self.results_dir, 'total_song_entropy_per_group.png')}")
 
 # Usage  
-analysis = StateSwitchingAnalysis(dir="files/labels_LLB16_WHISPERSEG.npz")
+analysis = StateSwitchingAnalysis(dir="files/labels_SHAM_NO_NORM_NO_THRES.npz")
 analysis.run_analysis()

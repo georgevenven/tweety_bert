@@ -120,7 +120,7 @@ class TweetyBertClassifier:
                     right += 1
 
         # Smooth labels by removing contiguous segments shorter than the specified minimum length
-        labels = self.smooth_labels(labels, min_state_length=500)
+        labels = self.smooth_labels(labels, min_state_length=50)
 
         # Adjust num_classes to compensate for noise label replacement and increment
         self.num_classes = len(np.unique(labels)) + 10
