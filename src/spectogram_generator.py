@@ -44,15 +44,15 @@ class WavtoSpec:
                 data = wav_file.read(dtype='int16')
                 if wav_file.channels > 1:
                     data = data[:, 0]
-
+            
             # Skip small files (less than 1 second)
             length_in_ms = (len(data) / samplerate) * 1000
             if length_in_ms < min_length_ms:
                 print(f"File {file_path} is below the length threshold and will be skipped.")
                 return None
-
+            
             file_name = os.path.basename(file_path)
-     
+            
             # Check if there is vocalization in the file and get phrase labels
             if self.use_csv or csv_file_dir is not None:
                 vocalization_data, phrase_labels = self.check_vocalization(file_name=file_name, data=data, samplerate=samplerate, csv_file_dir=csv_file_dir)
@@ -62,27 +62,18 @@ class WavtoSpec:
             else:
                 vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
                 phrase_labels = {}  # Empty dict if not using CSV
-
+            
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
             data = filtfilt(b, a, data)
-
+            
             NFFT = 1024
             step_size = 119
             overlap_samples = NFFT - step_size
             window = windows.gaussian(NFFT, std=NFFT/8)
-
+            
             f, t, Sxx = spectrogram(data, fs=samplerate, window=window, nperseg=NFFT, noverlap=overlap_samples)
             Sxx_log = 10 * np.log10(Sxx + 1e-6)
-            # Sxx_log_clipped = np.clip(Sxx_log, a_min=-2, a_max=None)
-            # Sxx_log_normalized = (Sxx_log_clipped - np.min(Sxx_log_clipped)) / (np.max(Sxx_log_clipped) - np.min(Sxx_log_clipped))
-
-            # Convert vocalization data to timebins
-            vocalization_timebins = np.zeros(t.size, dtype=int)
-            for start_sec, end_sec in vocalization_data:
-                start_bin = np.searchsorted(t, start_sec)
-                end_bin = np.searchsorted(t, end_sec)
-                vocalization_timebins[start_bin:end_bin] = 1
-
+            
             # Convert phrase labels to timebins
             labels = np.zeros(t.size, dtype=int)
             for label, intervals in phrase_labels.items():
@@ -90,24 +81,35 @@ class WavtoSpec:
                     start_bin = np.searchsorted(t, start_sec)
                     end_bin = np.searchsorted(t, end_sec)
                     labels[start_bin:end_bin] = int(label)
-
+            
             if t.size >= min_timebins:
-                if save_npz:
-                    spec_filename = os.path.splitext(os.path.basename(file_path))[0]
-                    spec_file_path = os.path.join(self.dst_dir, spec_filename + '.npz')
-                    np.savez_compressed(spec_file_path, s=Sxx_log, vocalization=vocalization_timebins, labels=labels)
-                    print(f"Spectrogram, vocalization data, and labels saved to {spec_file_path}")
-
-                return Sxx_log, vocalization_timebins, labels
-
+                for i, (start_sec, end_sec) in enumerate(vocalization_data):
+                    start_bin = np.searchsorted(t, start_sec)
+                    end_bin = np.searchsorted(t, end_sec)
+                    
+                    segment_Sxx_log = Sxx_log[:, start_bin:end_bin]
+                    segment_labels = labels[start_bin:end_bin]
+                    segment_vocalization = np.ones(end_bin - start_bin, dtype=int)  # All 1s since this is a vocalization segment
+                    
+                    if save_npz:
+                        spec_filename = os.path.splitext(os.path.basename(file_path))[0]
+                        segment_spec_file_path = os.path.join(self.dst_dir, f"{spec_filename}_segment_{i}.npz")
+                        np.savez_compressed(segment_spec_file_path, 
+                                            s=segment_Sxx_log, 
+                                            vocalization=segment_vocalization, 
+                                            labels=segment_labels)
+                        print(f"Segment {i} spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+                
+                return Sxx_log, vocalization_data, labels
+            
             else:
                 print(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
-                return None 
-
+                return None
+        
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
             return None
-
+        
         finally:
             plt.close('all')
             gc.collect()
