@@ -172,11 +172,101 @@ class WhisperSegProcessor:
 
 
 def main():
-    root_dir = "/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data/llb16_songs"  
-    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/LLB16_Whisperseg.csv"
+    root_dir = "/home/george-vengrovski/Documents/data/USA5288"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5288.csv"
     save_spectrograms = False
     delete_existing_csv = True
-    phrase_labels_file = "/media/george-vengrovski/Extreme SSD/yarden_data/llb16_data/llb16_annot.csv"  # Set this to None if you don't want to use phrase labels
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5325"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5325.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5326"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5326.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5336"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5336.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5337"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5337.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5347"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5347.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5371"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5371.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5443"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5443.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5468_RC3"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5468_RC3.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5505"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5505.csv"
+    save_spectrograms = False
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
+
+    processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
+    processor.process_directory()
+
+    root_dir = "/home/george-vengrovski/Documents/data/USA5509"  
+    output_csv = "/home/george-vengrovski/Documents/tweety_bert/files/USA5509.csv"
+    save_spectrograms = True
+    delete_existing_csv = True
+    phrase_labels_file = None  # Set this to None if you don't want to use phrase labels
 
     processor = WhisperSegProcessor(root_dir, output_csv, save_spectrograms, delete_existing_csv, phrase_labels_file)
     processor.process_directory()
