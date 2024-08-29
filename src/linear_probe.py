@@ -11,6 +11,7 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import time  # Add this import at the top of the file
 
 class ModifiedCrossEntropyLoss(nn.Module):
     def __init__(self, similarity_penalty_weight=0.1, entropy_weight=0.01, temperature=1.0):
@@ -168,10 +169,7 @@ class LinearProbeModel(nn.Module):
 
         return logits
         
-    def cross_entropy_loss(self, predictions, targets):
-        # Create a mask to ignore the loss for label 0
-        mask = targets != 0
-        
+    def cross_entropy_loss(self, predictions, targets, mask):
         # Apply the mask to the targets
         masked_targets = targets[mask]
         
@@ -195,15 +193,15 @@ class LinearProbeModel(nn.Module):
     def get_model_state(self):
         return {name: param.clone().detach() for name, param in self.named_parameters() if "classifier" not in name}
 
-    def compare_model_states(self, state1, state2):
-        differences = {}
-        for name in state1.keys():
-            if not torch.equal(state1[name], state2[name]):
-                differences[name] = {
-                    'max_diff': torch.max(torch.abs(state1[name] - state2[name])).item(),
-                    'mean_diff': torch.mean(torch.abs(state1[name] - state2[name])).item()
-                }
-        return differences
+    # def compare_model_states(self, state1, state2):
+    #     differences = {}
+    #     for name in state1.keys():
+    #         if not torch.equal(state1[name], state2[name]):
+    #             differences[name] = {
+    #                 'max_diff': torch.max(torch.abs(state1[name] - state2[name])).item(),
+    #                 'mean_diff': torch.mean(torch.abs(state1[name] - state2[name])).item()
+    #             }
+    #     return differences
 
 
     def freeze_transformer_blocks(self, model, freeze_up_to_block):
@@ -245,12 +243,16 @@ class LinearProbeTrainer():
         self.moving_avg_window = moving_avg_window  # Window size for moving average
         self.scaler = GradScaler()  # Initialize GradScaler for mixed precision
 
-    def frame_error_rate(self, y_pred, y_true):
-        y_pred = y_pred.permute(0,2,1)
+    def frame_error_rate(self, y_pred, y_true, mask):
+        y_pred = y_pred.permute(0, 2, 1)
         y_pred = y_pred.argmax(-1)
 
-        mismatches = (y_pred != y_true).float()
-        error = mismatches.sum() / y_true.numel()
+        # Apply the mask to the predictions and targets
+        masked_y_pred = y_pred[mask]
+        masked_y_true = y_true[mask]
+
+        mismatches = (masked_y_pred != masked_y_true).float()
+        error = mismatches.sum() / masked_y_true.numel()
         return error * 100
 
     def validate_model(self, test_iter):
@@ -266,22 +268,21 @@ class LinearProbeTrainer():
                 spectrogram, label, vocalization, _ = next(test_iter)
 
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
-            # with autocast():  # Use autocast for the validation pass
-            output = self.model.forward(spectrogram)
-            label = label.argmax(dim=-1)
-            output = output.permute(0,2,1)
+            
+            # Subset spectrogram and label where vocalization is equal to 1
+            mask = vocalization == 1
 
-            loss = self.model.cross_entropy_loss(predictions=output, targets=label)
+            output = self.model.forward(spectrogram)
+
+            label = label.argmax(dim=-1)
+            output = output.permute(0, 2, 1)
+
+            loss = self.model.cross_entropy_loss(predictions=output, targets=label, mask=mask)
+
             total_val_loss = loss.item()
-            total_frame_error = self.frame_error_rate(output, label).item()
+            total_frame_error = self.frame_error_rate(output, label, mask).item()
 
         return total_val_loss, total_frame_error
-
-    def moving_average(self, values, window):
-        """Simple moving average over a list of values"""
-        weights = np.repeat(1.0, window) / window
-        sma = np.convolve(values, weights, 'valid')
-        return sma.tolist()
 
     def train(self):
         initial_state = self.model.get_model_state()
@@ -307,12 +308,15 @@ class LinearProbeTrainer():
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             self.optimizer.zero_grad()
          
+            # Subset spectrogram and label where vocalization is equal to 1
+            mask = vocalization == 1
+
             output = self.model.forward(spectrogram)
 
             label = label.argmax(dim=-1)
-            output = output.permute(0,2,1)
+            output = output.permute(0, 2, 1)
 
-            loss = self.model.cross_entropy_loss(predictions=output, targets=label)
+            loss = self.model.cross_entropy_loss(predictions=output, targets=label, mask=mask)
 
             loss.backward()
             self.optimizer.step()
@@ -350,11 +354,11 @@ class LinearProbeTrainer():
         if self.plotting:
             self.plot_results(raw_loss_list, moving_avg_val_loss_list, moving_avg_frame_error_list)
 
-        # Compare the final state with the initial state
-        final_state = self.model.get_model_state()
-        differences = self.model.compare_model_states(initial_state, final_state)
+        # # Compare the final state with the initial state
+        # final_state = self.model.get_model_state()
+        # differences = self.model.compare_model_states(initial_state, final_state)
 
-        return differences
+        # return differences
 
     def plot_results(self, loss_list, val_loss_list, frame_error_rate_list):
         plt.figure(figsize=(10, 5))
@@ -409,7 +413,7 @@ class ModelEvaluator:
         total_iterations = max(max_batches, len(self.test_loader))
         for _ in range(num_passes):
             with torch.no_grad():
-                for spec, label, vocalization in self.test_loader:
+                for spec, label, vocalization, _ in self.test_loader:
                     spec, label, vocalization = spec.to(self.device), label.to(self.device), vocalization.to(self.device)
 
                     pad_size = (context - spec.size(-1) % context) % context

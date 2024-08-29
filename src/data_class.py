@@ -48,7 +48,6 @@ class SongDataSet_Image(Dataset):
 
     def __getitem__(self, idx):
         if self.infinite_loader:
-            original_idx = idx  # Store the original index for logging
             idx = random.randint(0, len(self.file_paths) - 1)
         file_path = self.file_paths[idx]
 
@@ -80,8 +79,6 @@ class SongDataSet_Image(Dataset):
             if self.segment_length is not None:
                 # Truncate if larger than context window
                 if spectogram.shape[0] > self.segment_length:
-                    # Get random view of size segment
-                    # Find range of valid starting pts (essentially these are the possible starting pts for the length to equal segment window)
                     starting_points_range = spectogram.shape[0] - self.segment_length        
                     start = torch.randint(0, starting_points_range, (1,)).item()  
                     end = start + self.segment_length     
@@ -94,9 +91,8 @@ class SongDataSet_Image(Dataset):
                 if spectogram.shape[0] < self.segment_length:
                     pad_amount = self.segment_length - spectogram.shape[0]
                     spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
-                    ground_truth_labels = F.pad(ground_truth_labels, (0, pad_amount), 'constant', 0)
+                    ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)
                     vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
-
 
             return spectogram, ground_truth_labels, vocalization, file_name
 

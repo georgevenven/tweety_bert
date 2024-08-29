@@ -94,7 +94,7 @@ class WavtoSpec:
                     if save_npz:
                         spec_filename = os.path.splitext(os.path.basename(file_path))[0]
                         segment_spec_file_path = os.path.join(self.dst_dir, f"{spec_filename}_segment_{i}.npz")
-                        np.savez_compressed(segment_spec_file_path, 
+                        np.savez(segment_spec_file_path, 
                                             s=segment_Sxx_log, 
                                             vocalization=segment_vocalization, 
                                             labels=segment_labels)

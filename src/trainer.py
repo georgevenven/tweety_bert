@@ -220,7 +220,6 @@ class ModelTrainer:
                 validation_spec, validation_ground_truth, validation_vocalization, validation_file_paths = next(test_iter)
         
             except Exception as e:
-                # This block will execute if there is any exception in the try block
                 print(f"An error occurred: {e}")
                 continue
 
