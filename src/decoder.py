@@ -119,11 +119,11 @@ class TweetyBertClassifier:
                     left -= 1
                     right += 1
 
-        # Smooth labels by removing contiguous segments shorter than the specified minimum length
-        labels = self.smooth_labels(labels, min_state_length=50)
+        # # Smooth labels by removing contiguous segments shorter than the specified minimum length
+        # labels = self.smooth_labels(labels, min_state_length=50)
 
         # Adjust num_classes to compensate for noise label replacement and increment
-        self.num_classes = len(np.unique(labels)) + 10
+        self.num_classes = len(np.unique(labels))
         print(f"Number of classes: {self.num_classes}")
 
         list_of_data = [
@@ -171,7 +171,7 @@ class TweetyBertClassifier:
             TweetyBERT_readout_dims=196
         ).to(self.device)
 
-    def train_classifier(self, lr=1e-4, batches_per_eval=50, desired_total_batches=1e3, patience=40, generate_loss_plot=False):
+    def train_classifier(self, lr=1e-4, batches_per_eval=5, desired_total_batches=1e3, patience=4, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -541,24 +541,24 @@ if __name__ == "__main__":
         linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
     )
 
-    classifier.prepare_data("/media/george-vengrovski/flash-drive/labels_LLB16NONORM.npz")
+    classifier.prepare_data("files/labels_LLB16NONORM.npz")
     classifier.create_dataloaders()
     classifier.create_classifier()
     classifier.train_classifier(generate_loss_plot=True)
     classifier.save_decoder_state()
     classifier.generate_specs()
 
-    # classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
-    # folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
-    # output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
-    # spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
+    classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
+    folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
+    output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
+    spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
 
-    # inference = TweetyBertInference(classifier_path, spec_dst_folder)
-    # inference.setup_wav_to_spec(folder_path)
+    inference = TweetyBertInference(classifier_path, spec_dst_folder)
+    inference.setup_wav_to_spec(folder_path)
     
-    # # Set the output_path as an attribute of the inference object
-    # inference.output_path = output_path
+    # Set the output_path as an attribute of the inference object
+    inference.output_path = output_path
     
-    # results = inference.process_folder(folder_path, visualize=True)
-    # inference.save_results(results, output_path)
+    results = inference.process_folder(folder_path, visualize=True)
+    inference.save_results(results, output_path)
 
