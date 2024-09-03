@@ -13,7 +13,8 @@ class StateSwitchingAnalysis:
     def __init__(self, dir, visualize=False):
         data = np.load(dir, allow_pickle=True)
         # Set up image directory for debugging visualizations
-        self.img_dir = "/home/george-vengrovski/Documents/tweety_bert/imgs/vis_smoothed"
+        self.img_dir = "imgs/vis_smoothed"
+        os.makedirs(self.img_dir, exist_ok=True)  # Create the directory if it doesn't exist
         self.visualize = visualize
 
         self.hdbscan_labels = data['hdbscan_labels']
@@ -43,55 +44,44 @@ class StateSwitchingAnalysis:
         self.total_entropy = {}
         self.group_labels = {}  # New attribute to store labels for each group
 
-    def smooth_labels(self, labels, min_state_length=50):
+    def smooth_labels(self, labels, window_size=50):
         """
-        Smooth labels by first removing all '-1' labels, then removing contiguous 
-        segments shorter than the specified minimum length.
+        Smooth labels by replacing -1 labels with the closest non-negative label,
+        then applying a majority vote with the specified window size.
 
         Args:
         - labels: np.array, the label data to be smoothed.
-        - min_state_length: int, minimum length for a segment to be kept.
+        - window_size: int, size of the window for majority vote.
 
         Returns:
         - np.array: The smoothed labels.
         """
-        # Remove all '-1' labels first
         labels = np.array(labels)
-        indices = np.where(labels != -1)
-        labels = labels[indices]
 
-        smoothed_labels = []  # List to store smoothed labels
+        # Replace -1 labels with the closest non-negative label
+        for i in range(len(labels)):
+            if labels[i] == -1:
+                left = right = i
+                while left >= 0 or right < len(labels):
+                    if left >= 0 and labels[left] != -1:
+                        labels[i] = labels[left]
+                        break
+                    if right < len(labels) and labels[right] != -1:
+                        labels[i] = labels[right]
+                        break
+                    left -= 1
+                    right += 1
 
-        # Initialize counters
-        contg_counter = 0
-        current_label_start_index = 0
+        # Apply majority vote
+        smoothed_labels = np.zeros_like(labels)
+        for i in range(len(labels)):
+            start = max(0, i - window_size // 2)
+            end = min(len(labels), i + window_size // 2 + 1)
+            window = labels[start:end]
+            unique, counts = np.unique(window, return_counts=True)
+            smoothed_labels[i] = unique[np.argmax(counts)]
 
-        try:
-            for i in range(len(labels) - 1):  # Iterate up to the second-last element
-                current_label = labels[i]
-
-                if labels[i + 1] == current_label:
-                    contg_counter += 1
-                else:
-                    # If the next label is different, check the length of the current sequence
-                    contg_counter += 1  # Include the current label in the count
-
-                    if contg_counter >= min_state_length:
-                        # Keep this segment because it's long enough
-                        smoothed_labels.extend(labels[current_label_start_index:i+1])
-                    
-                    # Reset counters for the new segment
-                    contg_counter = 0
-                    current_label_start_index = i + 1
-        except:
-            print(len(labels))
-
-        # Check the last segment
-        contg_counter += 1  # Include the last label in the count
-        if contg_counter >= min_state_length:
-            smoothed_labels.extend(labels[current_label_start_index:])
-
-        return np.array(smoothed_labels)
+        return smoothed_labels
 
     def visualize_labels(self, song_id, original_labels, smoothed_labels, spectrogram):
         """
@@ -135,7 +125,6 @@ class StateSwitchingAnalysis:
         print(f"Visualization for {song_id} saved to {os.path.join(self.img_dir, f'{song_id}_labels_comparison.png')}")
 
     def parse_date_time(self, file_path, format="standard"):
-    def parse_date_time(self, file_path, format="standard"):
         parts = file_path.split('_')
         # remove .npz at the end of the last part
         parts[-1] = parts[-1].replace('.npz', '')
@@ -155,29 +144,42 @@ class StateSwitchingAnalysis:
         return file_date, file_name
 
     def create_song_database(self):
-        db = pd.DataFrame(columns=["song_id", "group_id", "file_name", "date_time", "labels"])
+        db = pd.DataFrame(columns=["song_id", "group_id", "file_name", "date_time", "labels", "syllable_labels", "file_id", "spectrogram"])
 
         if isinstance(self.file_map, np.ndarray) and self.file_map.ndim == 0:
-            # If file_map is a 0-d array, convert it to a dict
             self.file_map = self.file_map.item()
         
         if isinstance(self.file_map, dict):
             for file_id, file_info in self.file_map.items():
-                # Assuming file_info is a tuple with one element
                 file_path = file_info[0] if isinstance(file_info, tuple) else file_info
                 date_time, file_name = self.parse_date_time(file_path)
 
-                index = np.where(self.file_info == file_id)
+                index = np.where(self.file_info == file_id)[0]
 
-                # Get original labels and smooth them
+                if len(index) == 0:
+                    print(f"Warning: No data found for file_id {file_id}")
+                    continue
+
                 original_labels = self.hdbscan_labels[index].tolist()
                 smoothed_labels = self.smooth_labels(original_labels)
-                # Add data to the database
-                db.loc[len(db)] = [file_name, None, file_path, date_time, smoothed_labels]
+
+                spectrogram = self.spectrograms[index]
+                envelope = self.calculate_envelope(spectrogram)
+                syllable_labels = self.create_syllable_labels(smoothed_labels, spectrogram, envelope)
+                new_row = {
+                    "song_id": file_name,
+                    "group_id": None,
+                    "file_name": file_path,
+                    "date_time": date_time,
+                    "labels": np.array(smoothed_labels),
+                    "syllable_labels": np.array(syllable_labels),
+                    "file_id": file_id,
+                    "spectrogram": spectrogram
+                }
+                db = pd.concat([db, pd.DataFrame([new_row])], ignore_index=True)
 
                 if self.visualize:
-                    # Visualize original vs smoothed labels
-                    self.visualize_labels(file_name, original_labels, smoothed_labels, self.spectrograms[index[0]])
+                    self.visualize_labels(file_name, original_labels, smoothed_labels, spectrogram)
 
         else:
             print(f"Unexpected file_map type: {type(self.file_map)}")
@@ -185,9 +187,39 @@ class StateSwitchingAnalysis:
         
         return db
 
+    def calculate_envelope(self, spectrogram):
+        spectrogram_segment = spectrogram[:,0:30]
+        
+        # Z-score normalization
+        spectrogram_mean = np.mean(spectrogram_segment)
+        spectrogram_std = np.std(spectrogram_segment)
+        spectrogram_segment = (spectrogram_segment - spectrogram_mean) / spectrogram_std
+        
+        # Calculate vocal envelope
+        mu_s = np.mean(spectrogram_segment, axis=1)  # Average power over frequency components
+        max_s = np.max(spectrogram_segment, axis=1)  # Maximum power over frequency components
+        
+        # Use absolute values to avoid sqrt of negative numbers
+        envelope = np.sqrt(np.abs(mu_s)) * max_s  # Vocal envelope
+
+        
+        return envelope
+
+    def create_syllable_labels(self, phrase_labels, spectrogram, envelope):
+        syllable_labels = np.array(phrase_labels)
+        
+        # Calculate the mean power across frequency bins for each time bin
+        mean_power = np.mean(spectrogram, axis=1)
+
+        # Set syllable label to -1 where mean power is below the envelope
+        syllable_labels[mean_power < envelope] = -1
+        
+        return syllable_labels  # Return as numpy array
+
     def database_to_csv(self, db):
-        # Convert each array in 'labels' column to a JSON-formatted string
+        # Convert each array in 'labels' and 'syllable_labels' columns to a JSON-formatted string
         db['labels'] = db['labels'].apply(lambda x: json.dumps(x.tolist()))
+        db['syllable_labels'] = db['syllable_labels'].apply(lambda x: json.dumps(x.tolist()))
 
         # Save to CSV
         db.to_csv("song_database.csv", index=False)
@@ -456,8 +488,6 @@ class StateSwitchingAnalysis:
         plt.savefig(os.path.join(self.results_dir, f'switching_times_violin_group_{group}.png'), dpi=300)
         plt.close()
 
-
-
     def calculate_transition_entropy(self, group):
         if self.transition_matrices[group] is None or self.transition_matrices[group].size == 0:
             self.transition_entropies[group] = {}
@@ -602,65 +632,123 @@ class StateSwitchingAnalysis:
 
         print(f"Transition matrix difference plot saved to {os.path.join(self.results_dir, f'transition_matrix_difference_{group1}_{group2}.png')}")
 
+    def visualize_spectrogram_with_labels(self, song_id):
+        """
+        Visualize the spectrogram with both syllable and phrase labels for a given song.
+        
+        Args:
+        - song_id: str, identifier of the song to visualize.
+        """
+        # Find the song in the database
+        song_data = self.database[self.database['song_id'] == song_id].iloc[0]
+        
+        # Get the spectrogram, phrase labels, and syllable labels
+        spectrogram = song_data['spectrogram']
+        phrase_labels = np.array(json.loads(song_data['labels']))
+        syllable_labels = np.array(json.loads(song_data['syllable_labels']))
+        
+        # Create the plot
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 10), sharex=True, gridspec_kw={'height_ratios': [3, 1, 1]})
+        
+        # Plot the spectrogram
+        im = ax1.imshow(spectrogram.T, aspect='auto', origin='lower', cmap='viridis')
+        ax1.set_title(f"Spectrogram and Labels for Song {song_id}")
+        ax1.set_ylabel("Frequency")
+        
+        # Plot phrase labels
+        ax2.plot(phrase_labels, color='red', linewidth=2)
+        ax2.set_ylabel("Phrase Label")
+        ax2.set_ylim(phrase_labels.min() - 1, phrase_labels.max() + 1)
+        
+        # Plot syllable labels
+        ax3.plot(syllable_labels, color='blue', linewidth=2)
+        ax3.set_ylabel("Syllable Label")
+        ax3.set_ylim(syllable_labels.min() - 1, syllable_labels.max() + 1)
+        ax3.set_xlabel("Time")
+        
+        plt.tight_layout()
+        
+        # Ensure the directory exists
+        os.makedirs(self.img_dir, exist_ok=True)
+        
+        # Save the figure
+        save_path = os.path.join(self.img_dir, f'{song_id}_spectrogram_with_labels.png')
+        plt.savefig(save_path)
+        plt.close()
+        
+        print(f"Visualization for {song_id} saved to {save_path}")
+
+    def visualize_all_spectrograms(self):
+        """
+        Visualize spectrograms with labels for all songs in the database.
+        """
+        for song_id in self.database['song_id']:
+            self.visualize_spectrogram_with_labels(song_id)
+
     def run_analysis(self):
         results = {"groups": []}
 
-        self.unique_labels = np.unique(np.concatenate(self.database['labels']))
+        # Flatten the list of lists into a single list
+        all_labels = [label for labels in self.database['labels'] for label in labels]
+        self.unique_labels = np.unique(all_labels)
         self.n_labels = len(self.unique_labels)
         self.num_groups = len(self.database['group_id'].unique())
 
         self.fixed_positions = self.create_fixed_positions()
 
-        unique_groups = self.database['group_id'].unique()
+        # unique_groups = self.database['group_id'].unique()
 
-        for group in unique_groups:
-            group_songs = self.database[self.database['group_id'] == group]['labels']
-            if not group_songs.empty:
-                try:
-                    self.calculate_transition_matrix(group)
-                    self.plot_transition_graph_and_matrix(group)
-                    self.calculate_switching_times(group)
-                    self.plot_switching_times_histogram(group)
-                    self.plot_switching_times_violin(group)  # Plot violin plots for phrase durations
-                    self.calculate_transition_entropy(group)
-                    group_stats = self.collect_statistics(group)
-                    group_stats["phrase_entropy"] = self.transition_entropies[group]
-                    group_stats["total_song_entropy"] = self.total_entropy[group]
-                    results["groups"].append(group_stats)
+        # for group in unique_groups:
+        #     group_songs = self.database[self.database['group_id'] == group]['labels']
+        #     if not group_songs.empty:
+        #         try:
+        #             self.calculate_transition_matrix(group)
+        #             self.plot_transition_graph_and_matrix(group)
+        #             self.calculate_switching_times(group)
+        #             self.plot_switching_times_histogram(group)
+        #             self.plot_switching_times_violin(group)  # Plot violin plots for phrase durations
+        #             self.calculate_transition_entropy(group)
+        #             group_stats = self.collect_statistics(group)
+        #             group_stats["phrase_entropy"] = self.transition_entropies[group]
+        #             group_stats["total_song_entropy"] = self.total_entropy[group]
+        #             results["groups"].append(group_stats)
 
-                except Exception as e:
-                    print(f"Error processing group {group}: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
-            else:
-                print(f"Group {group} has no songs. Skipping analysis.")
+        #         except Exception as e:
+        #             print(f"Error processing group {group}: {str(e)}")
+        #             import traceback
+        #             traceback.print_exc()
+        #     else:
+        #         print(f"Group {group} has no songs. Skipping analysis.")
 
-        self.visualize_group_data()
-        self.plot_entropy_values(results)
+        # self.visualize_group_data()
+        # self.plot_entropy_values(results)
 
-        # Example usage for plotting the difference between two groups
-        if self.num_groups == 2:
-            unique_groups = self.database['group_id'].unique()
-            self.plot_transition_matrix_difference(unique_groups[0], unique_groups[1])
+        # # Example usage for plotting the difference between two groups
+        # if self.num_groups == 2:
+        #     unique_groups = self.database['group_id'].unique()
+        #     self.plot_transition_matrix_difference(unique_groups[0], unique_groups[1])
 
-        # Convert all keys to strings
-        def convert_keys_to_str(d):
-            if isinstance(d, dict):
-                return {str(k): convert_keys_to_str(v) for k, v in d.items()}
-            elif isinstance(d, list):
-                return [convert_keys_to_str(i) for i in d]
-            else:
-                return d
+        # # Convert all keys to strings
+        # def convert_keys_to_str(d):
+        #     if isinstance(d, dict):
+        #         return {str(k): convert_keys_to_str(v) for k, v in d.items()}
+        #     elif isinstance(d, list):
+        #         return [convert_keys_to_str(i) for i in d]
+        #     else:
+        #         return d
 
-        results = convert_keys_to_str(results)
+        # results = convert_keys_to_str(results)
 
-        results_dir = "results"
-        os.makedirs(results_dir, exist_ok=True)
+        # results_dir = "results"
+        # os.makedirs(results_dir, exist_ok=True)
 
-        with open(os.path.join(self.results_dir, "state_switching_analysis.json"), "w") as f:
-            json.dump(results, f, indent=2)
+        # with open(os.path.join(self.results_dir, "state_switching_analysis.json"), "w") as f:
+        #     json.dump(results, f, indent=2)
 
-        print(f"Analysis complete. Results saved to {os.path.join(self.results_dir, 'state_switching_analysis.json')}")
+        # print(f"Analysis complete. Results saved to {os.path.join(self.results_dir, 'state_switching_analysis.json')}")
+
+        # Add this line at the end of the run_analysis method
+        self.visualize_all_spectrograms()
 
     def plot_entropy_values(self, results):
         groups = [group["group"] for group in results["groups"]]

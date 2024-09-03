@@ -416,11 +416,18 @@ class ModelEvaluator:
                 for spec, label, vocalization, _ in self.test_loader:
                     spec, label, vocalization = spec.to(self.device), label.to(self.device), vocalization.to(self.device)
 
-                    pad_size = (context - spec.size(-1) % context) % context
-                    spec = F.pad(spec, (0, 0, 0, pad_size))
-                    label = F.pad(label, (0, 0, 0, pad_size))
+                    pad_size = (context - spec.size(-2) % context) % context
 
-                    output = self.model.forward(spec)
+                    spec = F.pad(spec, (0, 0, 0, pad_size), 'constant', 0)
+                    label = F.pad(label, (0, 0, 0, pad_size), 'constant', 0)
+
+                    # Reshape spec and labels into batches if they are too long
+                    batch, time_bins, freq = spec.shape
+                    num_times = time_bins // context
+                    spec = spec.reshape(batch * num_times, context, freq)
+                    label = label.reshape(batch * num_times, context, -1)
+
+                    output = self.model.forward(spec.unsqueeze(1).permute(0,1,3,2))
 
                     label = label.squeeze(1)
 
@@ -450,24 +457,25 @@ class ModelEvaluator:
         total_frame_error_rate = (total_errors / total_frames * 100 if total_frames > 0 else float('nan'))
         return class_frame_error_rates, total_frame_error_rate
 
-    def save_results(self, class_frame_error_rates, total_frame_error_rate, folder_path, layer_id=None, layer_num=None):
+    def save_results(self, class_frame_error_rates, total_frame_error_rate, folder_path, layer_id=None, layer_num=None, plot=False):
         # Conditional filename based on whether layer_id and layer_num are provided
         if layer_id is not None and layer_num is not None:
             suffix = f'_{layer_id}_{layer_num}'
         else:
             suffix = ''
 
-        # Save plot
-        plot_filename = f'frame_error_rate_plot{suffix}.png'
-        self.plot_error_rates(class_frame_error_rates, plot_filename, folder_path)
+        # Save plot if plot parameter is True
+        if plot:
+            plot_filename = f'{folder_path}_frame_error_rate_plot{suffix}.png'
+            self.plot_error_rates(class_frame_error_rates, plot_filename, os.path.dirname(folder_path))
 
         # Save data to JSON
         results_data = {
             'class_frame_error_rates': class_frame_error_rates,
             'total_frame_error_rate': total_frame_error_rate
         }
-        json_filename = f'results{suffix}.json'
-        with open(os.path.join(folder_path, json_filename), 'w') as file:
+        json_filename = f'{folder_path}_results{suffix}.json'
+        with open(json_filename, 'w') as file:
             json.dump(results_data, file)
 
     def plot_error_rates(self, class_frame_error_rates, plot_filename, save_path):
