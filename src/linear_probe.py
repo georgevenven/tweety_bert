@@ -13,51 +13,51 @@ import matplotlib.pyplot as plt
 import os
 import time  # Add this import at the top of the file
 
-class ModifiedCrossEntropyLoss(nn.Module):
-    def __init__(self, similarity_penalty_weight=0.1, entropy_weight=0.01, temperature=1.0):
-        super().__init__()
-        self.ce_loss = nn.CrossEntropyLoss()
-        self.similarity_penalty_weight = similarity_penalty_weight
-        self.entropy_weight = entropy_weight
-        self.temperature = temperature
+# class ModifiedCrossEntropyLoss(nn.Module):
+#     def __init__(self, similarity_penalty_weight=0.1, entropy_weight=0.01, temperature=1.0):
+#         super().__init__()
+#         self.ce_loss = nn.CrossEntropyLoss()
+#         self.similarity_penalty_weight = similarity_penalty_weight
+#         self.entropy_weight = entropy_weight
+#         self.temperature = temperature
 
-    def forward(self, predictions, targets):
-        # predictions shape: [batch_size, num_classes, sequence_length]
-        # targets shape: [batch_size, sequence_length]
-        batch_size, num_classes, seq_length = predictions.shape
+#     def forward(self, predictions, targets):
+#         # predictions shape: [batch_size, num_classes, sequence_length]
+#         # targets shape: [batch_size, sequence_length]
+#         batch_size, num_classes, seq_length = predictions.shape
         
-        # Apply temperature scaling
-        scaled_predictions = predictions / self.temperature
+#         # Apply temperature scaling
+#         scaled_predictions = predictions / self.temperature
         
-        # Reshape predictions to [batch_size * sequence_length, num_classes]
-        predictions_reshaped = scaled_predictions.permute(0, 2, 1).reshape(-1, num_classes)
+#         # Reshape predictions to [batch_size * sequence_length, num_classes]
+#         predictions_reshaped = scaled_predictions.permute(0, 2, 1).reshape(-1, num_classes)
         
-        # Reshape targets to [batch_size * sequence_length]
-        targets_reshaped = targets.reshape(-1)
+#         # Reshape targets to [batch_size * sequence_length]
+#         targets_reshaped = targets.reshape(-1)
 
-        # Calculate cross-entropy loss
-        ce_loss = self.ce_loss(predictions_reshaped, targets_reshaped)
+#         # Calculate cross-entropy loss
+#         ce_loss = self.ce_loss(predictions_reshaped, targets_reshaped)
 
-        # Calculate pairwise cosine similarity between consecutive prediction vectors
-        predictions_norm = F.normalize(scaled_predictions, p=2, dim=1)
-        cosine_sim = F.cosine_similarity(predictions_norm[:, :, :-1].unsqueeze(2), 
-                                         predictions_norm[:, :, 1:].unsqueeze(1), 
-                                         dim=3)
+#         # Calculate pairwise cosine similarity between consecutive prediction vectors
+#         predictions_norm = F.normalize(scaled_predictions, p=2, dim=1)
+#         cosine_sim = F.cosine_similarity(predictions_norm[:, :, :-1].unsqueeze(2), 
+#                                          predictions_norm[:, :, 1:].unsqueeze(1), 
+#                                          dim=3)
         
-        # Average similarity across batch, classes, and sequence
-        avg_similarity = cosine_sim.mean()
+#         # Average similarity across batch, classes, and sequence
+#         avg_similarity = cosine_sim.mean()
 
-        # Penalty is inverse of similarity (1 - similarity) to encourage dissimilarity
-        similarity_penalty = 1 - avg_similarity
+#         # Penalty is inverse of similarity (1 - similarity) to encourage dissimilarity
+#         similarity_penalty = 1 - avg_similarity
 
-        # Calculate entropy
-        probs = F.softmax(scaled_predictions, dim=1)
-        entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1).mean()
+#         # Calculate entropy
+#         probs = F.softmax(scaled_predictions, dim=1)
+#         entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1).mean()
 
-        # Combine losses
-        total_loss = ce_loss + self.similarity_penalty_weight * similarity_penalty - self.entropy_weight * entropy
+#         # Combine losses
+#         total_loss = ce_loss + self.similarity_penalty_weight * similarity_penalty - self.entropy_weight * entropy
 
-        return total_loss, ce_loss, similarity_penalty
+#         return total_loss, ce_loss, similarity_penalty
 
 
 
@@ -171,13 +171,13 @@ class LinearProbeModel(nn.Module):
         
     def cross_entropy_loss(self, predictions, targets, mask):
         # Apply the mask to the targets
-        masked_targets = targets[mask]
+        # masked_targets = targets[mask]
         
-        # Apply the mask to the predictions
-        masked_predictions = predictions.permute(0, 2, 1)[mask]
+        # # Apply the mask to the predictions
+        # masked_predictions = predictions.permute(0, 2, 1)[mask]
         
         loss_fn = torch.nn.CrossEntropyLoss()
-        total_loss = loss_fn(masked_predictions, masked_targets)
+        total_loss = loss_fn(predictions, targets)
 
         return total_loss
 
