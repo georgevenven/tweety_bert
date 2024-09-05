@@ -24,6 +24,9 @@ class StateSwitchingAnalysis:
         self.file_info = data['file_indices']
         self.file_map = data['file_map']
 
+        # Extract the base name from the directory path
+        self.base_name = os.path.splitext(os.path.basename(dir))[0]
+
         self.database = self.create_song_database()
         if self.database is not None:
             self.database = self.group_before_after_trial(self.database)
@@ -218,11 +221,31 @@ class StateSwitchingAnalysis:
 
     def database_to_csv(self, db):
         # Convert each array in 'labels' and 'syllable_labels' columns to a JSON-formatted string
-        db['labels'] = db['labels'].apply(lambda x: json.dumps(x.tolist()))
-        db['syllable_labels'] = db['syllable_labels'].apply(lambda x: json.dumps(x.tolist()))
+        for index, row in db.iterrows():
+            try:
+                # Check if 'labels' is already a string
+                if isinstance(row['labels'], str):
+                    # If it's a string, assume it's already in JSON format
+                    db.at[index, 'labels'] = row['labels']
+                else:
+                    # If it's not a string, convert to list and then to JSON
+                    db.at[index, 'labels'] = json.dumps(row['labels'].tolist())
 
-        # Save to CSV
-        db.to_csv("song_database.csv", index=False)
+                # Do the same for 'syllable_labels'
+                if isinstance(row['syllable_labels'], str):
+                    db.at[index, 'syllable_labels'] = row['syllable_labels']
+                else:
+                    db.at[index, 'syllable_labels'] = json.dumps(row['syllable_labels'].tolist())
+
+            except Exception as e:
+                print(f"Error processing row {index}: {e}")
+                print(f"Row {index} labels: {row['labels']}")
+                print(f"Row {index} syllable_labels: {row['syllable_labels']}")
+
+        # Save to CSV using the base name
+        csv_filename = f"{self.base_name}_database.csv"
+        db.to_csv(csv_filename, index=False)
+        print(f"Database saved to {csv_filename}")
 
     def group_time_of_day(self, db):
         # Create a new empty DataFrame to store the filtered results
@@ -767,7 +790,17 @@ class StateSwitchingAnalysis:
         print(f"Total song entropy visualization saved to {os.path.join(self.results_dir, 'total_song_entropy_per_group.png')}")
 
 # Usage  
-analysis = StateSwitchingAnalysis(dir="files/labels_SHAM_NO_NORM_NO_THRES.npz")
-analysis.run_analysis()
-analysis.database_to_csv()
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5326_AreaX_Rose.npz")
+analysis.database_to_csv(analysis.database)
 
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5336_AreaX_Rose.npz")
+analysis.database_to_csv(analysis.database)
+
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5347_AreaX_Rose.npz")
+analysis.database_to_csv(analysis.database)
+
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5371_AreaX_Rose.npz")
+analysis.database_to_csv(analysis.database)
+
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5443_AreaX_Rose.npz")
+analysis.database_to_csv(analysis.database)
