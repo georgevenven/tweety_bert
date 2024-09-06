@@ -99,8 +99,8 @@ class ExperimentRunner:
             
         # Data Loading
         collate_fn = CollateFunction(segment_length=config['context'])
-        train_dataset = SongDataSet_Image(config['train_dir'], num_classes=config['num_ground_truth_labels'], pitch_shift=config['pitch_shift'])
-        test_dataset = SongDataSet_Image(config['test_dir'], num_classes=config['num_ground_truth_labels'], pitch_shift=config['pitch_shift'])
+        train_dataset = SongDataSet_Image(config['train_dir'], num_classes=config['num_ground_truth_labels'], pitch_shift=config['pitch_shift'], segment_length=config['context'])
+        test_dataset = SongDataSet_Image(config['test_dir'], num_classes=config['num_ground_truth_labels'], pitch_shift=config['pitch_shift'], segment_length=config['context'])
         train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn, num_workers=16)
         test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn, num_workers=16)
         
