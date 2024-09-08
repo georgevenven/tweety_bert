@@ -103,6 +103,10 @@ class LinearProbeModel(nn.Module):
         self.TweetyBERT_readout_dims = TweetyBERT_readout_dims
         self.num_classes = num_classes 
 
+        if self.num_classes == 2:
+            self.num_classes = 1
+            self.logits_dim = 1 
+
         if classifier_type == "decoder":
             # Define a 3-layer decoder with ReLU activations
             self.classifier = nn.Sequential(
@@ -110,17 +114,16 @@ class LinearProbeModel(nn.Module):
                 nn.GELU(),
                 nn.Linear(128, 64),
                 nn.GELU(),
-                nn.Linear(64, num_classes)
+                nn.Linear(64, self.logits_dim)
             )
             self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
 
 
         elif classifier_type == "linear_probe":
-            self.classifier = nn.Linear(TweetyBERT_readout_dims, num_classes)
+            self.classifier = nn.Linear(TweetyBERT_readout_dims, self.logits_dim)
             self.freeze_all_but_classifier(self.model)
 
     def forward(self, input):
-        # with autocast():  # Use autocast for the forward pass to enable mixed precision
         if self.model_type == "neural_net":
             outputs, layers = self.model.inference_forward(input)
 
@@ -169,16 +172,15 @@ class LinearProbeModel(nn.Module):
 
         return logits
         
-    def cross_entropy_loss(self, predictions, targets, mask):
-        # Apply the mask to the targets
-        # masked_targets = targets[mask]
+    def cross_entropy_loss(self, predictions, targets):
+        if self.num_classes == 1:
+            predictions = predictions.squeeze(1)
+            targets = targets.float()
+            loss_fn = torch.nn.BCEWithLogitsLoss()
+        else:
+            loss_fn = torch.nn.CrossEntropyLoss()
         
-        # # Apply the mask to the predictions
-        # masked_predictions = predictions.permute(0, 2, 1)[mask]
-        
-        loss_fn = torch.nn.CrossEntropyLoss()
         total_loss = loss_fn(predictions, targets)
-
         return total_loss
 
     def freeze_all_but_classifier(self, model):
@@ -243,16 +245,15 @@ class LinearProbeTrainer():
         self.moving_avg_window = moving_avg_window  # Window size for moving average
         self.scaler = GradScaler()  # Initialize GradScaler for mixed precision
 
-    def frame_error_rate(self, y_pred, y_true, mask):
-        y_pred = y_pred.permute(0, 2, 1)
-        y_pred = y_pred.argmax(-1)
+    def frame_error_rate(self, y_pred, y_true):
+        if y_pred.shape[1] == 1:  # Binary classification
+            y_pred = (torch.sigmoid(y_pred.squeeze(1)) > 0.5).float()
+        else:  # Multi-class classification
+            y_pred = y_pred.permute(0, 2, 1)
+            y_pred = y_pred.argmax(-1)
 
-        # Apply the mask to the predictions and targets
-        masked_y_pred = y_pred[mask]
-        masked_y_true = y_true[mask]
-
-        mismatches = (masked_y_pred != masked_y_true).float()
-        error = mismatches.sum() / masked_y_true.numel()
+        mismatches = (y_pred != y_true).float()
+        error = mismatches.sum() / y_true.numel()
         return error * 100
 
     def validate_model(self, test_iter):
@@ -268,19 +269,16 @@ class LinearProbeTrainer():
                 spectrogram, label, vocalization, _ = next(test_iter)
 
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
-            
-            # Subset spectrogram and label where vocalization is equal to 1
-            mask = vocalization == 1
 
             output = self.model.forward(spectrogram)
 
             label = label.argmax(dim=-1)
             output = output.permute(0, 2, 1)
 
-            loss = self.model.cross_entropy_loss(predictions=output, targets=label, mask=mask)
+            loss = self.model.cross_entropy_loss(predictions=output, targets=label)
 
             total_val_loss = loss.item()
-            total_frame_error = self.frame_error_rate(output, label, mask).item()
+            total_frame_error = self.frame_error_rate(output, label).item()
 
         return total_val_loss, total_frame_error
 
@@ -308,15 +306,12 @@ class LinearProbeTrainer():
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             self.optimizer.zero_grad()
          
-            # Subset spectrogram and label where vocalization is equal to 1
-            mask = vocalization == 1
-
             output = self.model.forward(spectrogram)
 
             label = label.argmax(dim=-1)
             output = output.permute(0, 2, 1)
 
-            loss = self.model.cross_entropy_loss(predictions=output, targets=label, mask=mask)
+            loss = self.model.cross_entropy_loss(predictions=output, targets=label)
 
             loss.backward()
             self.optimizer.step()

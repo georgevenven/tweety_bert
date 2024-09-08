@@ -52,4 +52,4 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
 # Example usage with moving files
 # split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_test', move_files=False)
 # split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb11_george_specs', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_test', move_files=False)
-split_dataset('/media/george-vengrovski/disk2/training_song_detector/pretrain_dataset_specs', 0.8, '/media/george-vengrovski/disk2/training_song_detector/pretrain_dataset_train', '/media/george-vengrovski/disk2/training_song_detector/pretrain_dataset_test', move_files=True)
+split_dataset('/media/george-vengrovski/disk2/training_song_detector/Ellen_Specs/specs', 0.8, '/media/george-vengrovski/disk2/training_song_detector/Ellen_Specs/train', '/media/george-vengrovski/disk2/training_song_detector/Ellen_Specs/test', move_files=True)

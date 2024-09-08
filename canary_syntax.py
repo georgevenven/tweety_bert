@@ -790,17 +790,11 @@ class StateSwitchingAnalysis:
         print(f"Total song entropy visualization saved to {os.path.join(self.results_dir, 'total_song_entropy_per_group.png')}")
 
 # Usage  
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5326_AreaX_Rose.npz")
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/flash-drive/labels_USA5325_AreaX_Rose.npz")
 analysis.database_to_csv(analysis.database)
 
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5336_AreaX_Rose.npz")
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/flash-drive/labels_USA5337_AreaX_Rose.npz")
 analysis.database_to_csv(analysis.database)
 
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5347_AreaX_Rose.npz")
-analysis.database_to_csv(analysis.database)
-
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5371_AreaX_Rose.npz")
-analysis.database_to_csv(analysis.database)
-
-analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/Rose-SSD/Rose_Results/labels_USA5443_AreaX_Rose.npz")
+analysis = StateSwitchingAnalysis(dir="/media/george-vengrovski/flash-drive/labels_USA5468_RC3_AreaXRose.npz")
 analysis.database_to_csv(analysis.database)

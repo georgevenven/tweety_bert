@@ -20,6 +20,15 @@ from torch.nn import functional as F
 import pandas as pd
 from matplotlib.colors import ListedColormap
 import matplotlib.colors as mcolors
+from scipy.stats import mode
+
+def majority_vote(arr, window_size):
+    result = np.zeros_like(arr)
+    for i in range(len(arr)):
+        start = max(0, i - window_size // 2)
+        end = min(len(arr), i + window_size // 2)
+        result[i] = mode(arr[start:end])[0]
+    return result
 
 class TweetyBertClassifier:
     def __init__(self, config_path, weights_path, linear_decoder_dir):
@@ -151,8 +160,8 @@ class TweetyBertClassifier:
     def create_dataloaders(self, batch_size=48, segment_length=1000):
         collate_fn = CollateFunction(segment_length=segment_length)
 
-        train_dataset = SongDataSet_Image(self.train_dir, num_classes=self.num_classes, infinite_loader=False)
-        test_dataset = SongDataSet_Image(self.test_dir, num_classes=self.num_classes, infinite_loader=False)
+        train_dataset = SongDataSet_Image(self.train_dir, num_classes=self.num_classes, infinite_loader=False, segment_length=segment_length)
+        test_dataset = SongDataSet_Image(self.test_dir, num_classes=self.num_classes, infinite_loader=False, segment_length=segment_length)
 
         self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
         self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
@@ -165,13 +174,15 @@ class TweetyBertClassifier:
             num_classes=self.num_classes, 
             model_type="neural_net", 
             model=self.tweety_bert_model, 
-            freeze_layers=True, 
+            freeze_layers=False, 
             layer_num=-1, 
             layer_id="attention_output", 
-            TweetyBERT_readout_dims=196
+            TweetyBERT_readout_dims=12,
+            classifier_type="decoder"
+
         ).to(self.device)
 
-    def train_classifier(self, lr=1e-4, batches_per_eval=5, desired_total_batches=1e3, patience=4, generate_loss_plot=False):
+    def train_classifier(self, lr=1e-4, batches_per_eval=100, desired_total_batches=1e4, patience=4, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -186,7 +197,7 @@ class TweetyBertClassifier:
         trainer.train()
 
     def generate_specs(self, num_specs=100, context_length=1000):
-        spec_generator = SpecGenerator(self.classifier_model, self.test_dir, context_length)
+        spec_generator = SpecGenerator(self.classifier_model, self.test_dir, context_length, num_classes=self.num_classes)
         spec_generator.generate_specs(num_specs)
 
     def save_decoder_state(self):
@@ -235,13 +246,13 @@ class TweetyBertClassifier:
         return instance
 
 class SpecGenerator:
-    def __init__(self, model, song_dir, context_length=1000):
+    def __init__(self, model, song_dir, context_length=1000, num_classes=None):
         self.model = model
         self.song_dir = song_dir
         self.context_length = context_length
         self.spec_height = 196
         self.device = next(model.parameters()).device
-        self.num_classes = model.num_classes
+        self.num_classes = num_classes if num_classes is not None else model.num_classes
 
     def z_score_spectrogram(self, spec):
         spec_mean = np.mean(spec)
@@ -251,38 +262,64 @@ class SpecGenerator:
     def process_spec_chunk(self, spec_chunk, label_chunk, output_dir, file, i):
         spec_tensor = torch.Tensor(spec_chunk).to(self.device).unsqueeze(0).unsqueeze(0)
         logits = self.model.forward(spec_tensor)
-        predicted_classes = torch.argmax(logits, dim=2).cpu().detach().numpy().flatten()
+        
+        if self.num_classes <= 2:
+            # For binary classification or single class detection
+            predicted_probs = torch.sigmoid(logits.squeeze())
+            predicted_classes = (predicted_probs > 0.5).long().cpu().detach().numpy()
+        else:
+            # For multi-class classification
+            predicted_classes = torch.argmax(logits, dim=2).cpu().detach().numpy().flatten()
+        
         self.plot_and_save(spec_chunk, predicted_classes, label_chunk, logits, output_dir, file, i)
 
     def plot_and_save(self, spec_chunk, predicted_classes, label_chunk, logits, output_dir, file, i):
-        color_map = plt.get_cmap('viridis')
-        class_colors = color_map(predicted_classes / self.num_classes)
+        plt.figure(figsize=(40, 15))  # Increased width significantly
+        plt.subplots_adjust(hspace=0.5, left=0.05, right=0.98, top=0.95, bottom=0.05)
 
-        plt.figure(figsize=(15, 15))
-        plt.subplots_adjust(hspace=1.5, left=0, right=1, top=1, bottom=0)
-        plt.subplot2grid((15, 1), (0, 0), rowspan=8)
-        plt.imshow(spec_chunk, aspect='auto', origin='lower')
-        plt.title('Spectrogram', fontsize=24)
-        plt.xticks(fontsize=18)
-        plt.yticks(fontsize=18)
-        plt.subplot2grid((15, 1), (8, 0), rowspan=1)
-        plt.imshow([predicted_classes], aspect='auto', origin='lower', cmap='viridis')
-        plt.title('Predicted Classes', fontsize=24)
-        plt.yticks([])
-        plt.xticks([])
-        plt.subplot2grid((15, 1), (9, 0), rowspan=1)
-        plt.imshow([label_chunk], aspect='auto', origin='lower', cmap='viridis')
-        plt.title('True Labels', fontsize=24)
-        plt.yticks([])
-        plt.xticks([])
-        plt.subplot2grid((15, 1), (10, 0), rowspan=4)
-        plt.imshow(logits[0].T.cpu().detach().numpy(), aspect='auto', origin='lower', cmap='viridis')
-        plt.title('Logits Heatmap', fontsize=24)
-        plt.xlabel('Timebins', fontsize=24)
-        plt.ylabel('Logits', fontsize=24)
-        plt.xticks(fontsize=18)
-        plt.yticks(fontsize=18)
-        plt.savefig(f"{output_dir}/{file}_chunk_{i}.png", bbox_inches='tight')
+        # Plot spectrogram
+        ax1 = plt.subplot2grid((15, 1), (0, 0), rowspan=8)
+        im1 = ax1.imshow(spec_chunk, aspect='auto', origin='lower', extent=[0, spec_chunk.shape[1], 0, spec_chunk.shape[0]])
+        ax1.set_title('Spectrogram', fontsize=24)
+        ax1.tick_params(axis='both', which='major', labelsize=18)
+
+        # Plot ground truth labels
+        ax2 = plt.subplot2grid((15, 1), (8, 0), rowspan=1, sharex=ax1)
+        ax2.imshow([label_chunk], aspect='auto', origin='lower', cmap='viridis', extent=[0, len(label_chunk), 0, 1])
+        ax2.set_title('Ground Truth Labels', fontsize=24)
+        ax2.set_yticks([])
+
+        # Plot predicted classes
+        ax3 = plt.subplot2grid((15, 1), (9, 0), rowspan=1, sharex=ax1)
+        ax3.imshow([predicted_classes], aspect='auto', origin='lower', cmap='viridis', extent=[0, len(predicted_classes), 0, 1])
+        ax3.set_title('Predicted Classes', fontsize=24)
+        ax3.set_yticks([])
+
+        # Calculate and plot majority vote predictions
+        window_size = 100
+        majority_vote_predictions = majority_vote(predicted_classes, window_size)
+        ax4 = plt.subplot2grid((15, 1), (10, 0), rowspan=1, sharex=ax1)
+        ax4.imshow([majority_vote_predictions], aspect='auto', origin='lower', cmap='viridis', extent=[0, len(majority_vote_predictions), 0, 1])
+        ax4.set_title(f'Majority Vote Predictions (Window Size: {window_size})', fontsize=24)
+        ax4.set_yticks([])
+
+        # Plot class probability
+        ax5 = plt.subplot2grid((15, 1), (11, 0), rowspan=3, sharex=ax1)
+        probs = torch.sigmoid(logits[0]).cpu().detach().numpy()
+        
+        ax5.plot(probs, color='blue', label='Class Probability')
+        ax5.set_title('Class Probability', fontsize=24)
+        ax5.set_xlabel('Timebins', fontsize=24)
+        ax5.set_ylabel('Probability', fontsize=24)
+        ax5.set_ylim(0, 1)
+        ax5.tick_params(axis='both', which='major', labelsize=18)
+        ax5.legend(fontsize=18)
+
+        # Ensure all subplots are aligned
+        plt.xlim(0, spec_chunk.shape[1])
+
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/{file}_chunk_{i}.png", dpi=300, bbox_inches='tight')
         plt.close()
 
     def generate_specs(self, num_specs):
@@ -536,29 +573,31 @@ class TweetyBertInference:
 # # Usage example:
 if __name__ == "__main__":
     classifier = TweetyBertClassifier(
-        config_path="/media/george-vengrovski/flash-drive/LLB16_Whisperseg_NoNormNoThresholding/config.json",
-        weights_path="/media/george-vengrovski/flash-drive/LLB16_Whisperseg_NoNormNoThresholding/saved_weights/model_step_21000.pth",
+        config_path="experiments/Song_Detector_Pretrain/config.json",
+        weights_path="experiments/Song_Detector_Pretrain/saved_weights/model_step_0.pth",
         linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
     )
 
-    classifier.prepare_data("files/labels_LLB16NONORM.npz")
+    classifier.num_classes = 2
+
+    # classifier.prepare_data("files/labels_LLB16NONORM.npz")
     classifier.create_dataloaders()
     classifier.create_classifier()
-    classifier.train_classifier(generate_loss_plot=True)
-    classifier.save_decoder_state()
+    classifier.train_classifier(generate_loss_plot=False)
+    # classifier.save_decoder_state()
     classifier.generate_specs()
 
-    classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
-    folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
-    output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
-    spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
+    # classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
+    # folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
+    # output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
+    # spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder)
-    inference.setup_wav_to_spec(folder_path)
+    # inference = TweetyBertInference(classifier_path, spec_dst_folder)
+    # inference.setup_wav_to_spec(folder_path)
     
-    # Set the output_path as an attribute of the inference object
-    inference.output_path = output_path
+    # # Set the output_path as an attribute of the inference object
+    # inference.output_path = output_path
     
-    results = inference.process_folder(folder_path, visualize=True)
-    inference.save_results(results, output_path)
+    # results = inference.process_folder(folder_path, visualize=True)
+    # inference.save_results(results, output_path)
 

@@ -147,12 +147,9 @@ class WavtoSpec:
         return None, None
 
 def main():
-    src_dir = '/media/george-vengrovski/disk2/training_song_detector/pretrain_dataset'
-    dst_dir = '/media/george-vengrovski/disk2/training_song_detector/pretrain_dataset_specs'
+    src_dir = '/media/george-vengrovski/Rose-SSD/to_be_labeled_specs_better'
+    dst_dir = '/media/george-vengrovski/Rose-SSD/to_be_labeled_specs_better_Specs'
     csv_file_dir = None
 
     wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
     wav_to_spec.process_directory()
-    
-if __name__ == "__main__":
-    main()
