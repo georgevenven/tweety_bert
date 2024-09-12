@@ -10,6 +10,10 @@ from linear_probe import LinearProbeModel, LinearProbeTrainer
 from tqdm import tqdm
 import json
 from spectogram_generator import WavtoSpec  # Add this import
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+import os
 import sys
 from torch import nn
 from torch.nn import functional as F
@@ -17,8 +21,6 @@ import pandas as pd
 from matplotlib.colors import ListedColormap
 import matplotlib.colors as mcolors
 from scipy.stats import mode
-import subprocess  # To call bash commands
-
 
 def majority_vote(arr, window_size):
     result = np.zeros_like(arr)
@@ -27,7 +29,6 @@ def majority_vote(arr, window_size):
         end = min(len(arr), i + window_size // 2)
         result[i] = mode(arr[start:end])[0]
     return result
-
 
 class TweetyBertClassifier:
     def __init__(self, config_path, weights_path, linear_decoder_dir, context_length=1000):
@@ -245,7 +246,6 @@ class TweetyBertClassifier:
         print(f"Decoder state loaded from {save_dir}")
         return instance
 
-
 class SpecGenerator:
     def __init__(self, model, song_dir, context_length, num_classes=None):
         self.model = model
@@ -371,7 +371,6 @@ class SpecGenerator:
 
         print(f"Generated {processed_specs} spectrograms.")
 
-
 class TweetyBertInference:
     def __init__(self, classifier_path, spec_dst_folder):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
@@ -392,38 +391,6 @@ class TweetyBertInference:
 
     def setup_wav_to_spec(self, folder, csv_file_dir=None):
         self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, csv_file_dir)
-
-    def detect_song_segments(self, file_path):
-        """
-        Call the external Bash command to perform song detection and return the JSON output.
-
-        Args:
-        - file_path: str, path to the input WAV file.
-
-        Returns:
-        - dict: Parsed JSON containing onset and offset timebins.
-        """
-        command = [
-            "python",
-            "/home/george-vengrovski/Documents/projects/tweety_net_song_detector/src/inference.py",
-            "--mode",
-            "local_file",
-            "--input",
-            file_path,
-            "--return_json"
-        ]
-
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
-            json_output = result.stdout.strip()
-            data = json.loads(json_output)
-            return data
-        except subprocess.CalledProcessError as e:
-            print(f"Error running song detection command: {e}")
-            return None
-        except json.JSONDecodeError as e:
-            print(f"Error decoding JSON output: {e}")
-            return None
 
     def inference_data_class(self, data):
         recording_length = data[1].shape[1]
@@ -547,48 +514,11 @@ class TweetyBertInference:
         plt.close()
 
     def process_file(self, file_path, visualize=False):
-        # Step 1: Detect song segments using the external Bash command
-        detection_result = self.detect_song_segments(file_path)
-        if detection_result is None:
-            print(f"Skipping file {file_path} due to detection error.")
-            return None
+        spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
 
-        filename = detection_result.get("filename", "")
-        segments = detection_result.get("segments", [])
-
-        if not segments:
-            print(f"No vocalization segments detected in {file_path}.")
-            return {
-                "file_name": os.path.basename(file_path),
-                "song_present": False,
-                "syllable_onsets/offsets": {}
-            }
-
-        # Assuming one segment per file for simplicity; adjust as needed
-        segment = segments[0]
-        onset_timebin = segment["onset_timebin"]
-        offset_timebin = segment["offset_timebin"]
-
-        # Load the spectrogram and labels from the spec_dst_folder
-        spec_file = os.path.join(self.spec_dst_folder, f"{filename}.npz")
-        if not os.path.exists(spec_file):
-            print(f"Spec file {spec_file} does not exist.")
-            return None
-
-        data = np.load(spec_file)
-        spec = data['s']
-        labels = data['labels']
-
-        # Extract the segment based on onset and offset timebins
-        spec_segment = spec[:, onset_timebin:offset_timebin]
-        labels_segment = labels[onset_timebin:offset_timebin]
-        vocalization_segment = labels_segment  # Adjust as necessary
-
-        # Prepare data for inference
-        spectogram, _, _ = self.inference_data_class((labels_segment, spec_segment, vocalization_segment))
+        spectogram, _, _ = self.inference_data_class((labels, spec, vocalization))
         spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
 
-        # Perform inference
         logits = self.classifier.classifier_model(spec_tensor.permute(0,1,3,2))
         logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
 
@@ -617,14 +547,13 @@ class TweetyBertInference:
                     file_path = os.path.join(root, file)
                     try:
                         result = self.process_file(file_path, visualize)
-                        if result is not None:
-                            results.append(result)
-                            file_count += 1
+                        results.append(result)
+                        file_count += 1
 
-                            # Save intermediate results every `save_interval` files
-                            if file_count % save_interval == 0:
-                                self.save_results(results, self.output_path)
-                                print(f"Intermediate results saved after processing {file_count} files.")
+                        # Save intermediate results every `save_interval` files
+                        if file_count % save_interval == 0:
+                            self.save_results(results, self.output_path)
+                            print(f"Intermediate results saved after processing {file_count} files.")
 
                     except Exception as e:
                         print(f"Error processing {file_path}: {e}")
@@ -641,7 +570,7 @@ class TweetyBertInference:
         print(f"Results saved to {output_path}")
 
 
-# Usage example:
+# # Usage example:
 if __name__ == "__main__":
     classifier = TweetyBertClassifier(
         config_path="/media/george-vengrovski/flash-drive/USA5288_Specs_Experiment/config.json",
@@ -657,16 +586,17 @@ if __name__ == "__main__":
     classifier.save_decoder_state()
     classifier.generate_specs()
 
-    classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
-    folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
-    output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
-    spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
+    # classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
+    # folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
+    # output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
+    # spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder)
-    inference.setup_wav_to_spec(folder_path)
+    # inference = TweetyBertInference(classifier_path, spec_dst_folder)
+    # inference.setup_wav_to_spec(folder_path)
     
-    # Set the output_path as an attribute of the inference object
-    inference.output_path = output_path
+    # # Set the output_path as an attribute of the inference object
+    # inference.output_path = output_path
     
-    results = inference.process_folder(folder_path, visualize=True)
-    inference.save_results(results, output_path)
+    # results = inference.process_folder(folder_path, visualize=True)
+    # inference.save_results(results, output_path)
+
