@@ -106,6 +106,8 @@ class LinearProbeModel(nn.Module):
         if self.num_classes == 2:
             self.num_classes = 1
             self.logits_dim = 1 
+        else:
+            self.logits_dim = num_classes
 
         if classifier_type == "decoder":
             # Define a 3-layer decoder with ReLU activations
@@ -179,7 +181,7 @@ class LinearProbeModel(nn.Module):
             loss_fn = torch.nn.BCEWithLogitsLoss()
         else:
             loss_fn = torch.nn.CrossEntropyLoss()
-        
+        unique_labels = torch.unique(targets)
         total_loss = loss_fn(predictions, targets)
         return total_loss
 

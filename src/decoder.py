@@ -10,10 +10,6 @@ from linear_probe import LinearProbeModel, LinearProbeTrainer
 from tqdm import tqdm
 import json
 from spectogram_generator import WavtoSpec  # Add this import
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-import os
 import sys
 from torch import nn
 from torch.nn import functional as F
@@ -21,6 +17,8 @@ import pandas as pd
 from matplotlib.colors import ListedColormap
 import matplotlib.colors as mcolors
 from scipy.stats import mode
+import subprocess  # To call bash commands
+
 
 def majority_vote(arr, window_size):
     result = np.zeros_like(arr)
@@ -30,8 +28,9 @@ def majority_vote(arr, window_size):
         result[i] = mode(arr[start:end])[0]
     return result
 
+
 class TweetyBertClassifier:
-    def __init__(self, config_path, weights_path, linear_decoder_dir):
+    def __init__(self, config_path, weights_path, linear_decoder_dir, context_length=1000):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tweety_bert_model = self.load_tweety_bert(config_path, weights_path)
         self.linear_decoder_dir = linear_decoder_dir
@@ -41,6 +40,7 @@ class TweetyBertClassifier:
         self.config_path = config_path
         self.weights_path = weights_path
         self.data_file = None
+        self.context_length = context_length
 
     def load_tweety_bert(self, config_path, weights_path):
         return load_model(config_path, weights_path)
@@ -102,7 +102,7 @@ class TweetyBertClassifier:
 
         return np.array(smoothed_labels)
 
-    def prepare_data(self, data_file, test_train_split=0.8, length=1000):
+    def prepare_data(self, data_file, test_train_split=0.8):
         self.data_file = data_file
         data = np.load(data_file)
         vocalization = data['vocalization']
@@ -136,8 +136,8 @@ class TweetyBertClassifier:
         print(f"Number of classes: {self.num_classes}")
 
         list_of_data = [
-            (labels[i:i+length], specs[i:i+length], vocalization[i:i+length])
-            for i in range(0, len(labels), length)
+            (labels[i:i+self.context_length], specs[i:i+self.context_length], vocalization[i:i+self.context_length])
+            for i in range(0, len(labels), self.context_length)
         ]
         np.random.shuffle(list_of_data)
 
@@ -157,11 +157,11 @@ class TweetyBertClassifier:
             np.savez(os.path.join(directory, f"{i}.npz"), 
                      labels=labels, s=specs.T, vocalization=vocalization)
 
-    def create_dataloaders(self, batch_size=48, segment_length=1000):
-        collate_fn = CollateFunction(segment_length=segment_length)
+    def create_dataloaders(self, batch_size=42):
+        collate_fn = CollateFunction(segment_length=self.context_length)
 
-        train_dataset = SongDataSet_Image(self.train_dir, num_classes=self.num_classes, infinite_loader=False, segment_length=segment_length)
-        test_dataset = SongDataSet_Image(self.test_dir, num_classes=self.num_classes, infinite_loader=False, segment_length=segment_length)
+        train_dataset = SongDataSet_Image(self.train_dir, num_classes=self.num_classes, infinite_loader=False, segment_length=self.context_length)
+        test_dataset = SongDataSet_Image(self.test_dir, num_classes=self.num_classes, infinite_loader=False, segment_length=self.context_length)
 
         self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
         self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
@@ -174,15 +174,15 @@ class TweetyBertClassifier:
             num_classes=self.num_classes, 
             model_type="neural_net", 
             model=self.tweety_bert_model, 
-            freeze_layers=False, 
+            freeze_layers=True, 
             layer_num=-1, 
             layer_id="attention_output", 
-            TweetyBERT_readout_dims=12,
+            TweetyBERT_readout_dims=196,
             classifier_type="decoder"
 
         ).to(self.device)
 
-    def train_classifier(self, lr=1e-4, batches_per_eval=100, desired_total_batches=1e4, patience=4, generate_loss_plot=False):
+    def train_classifier(self, lr=1e-4, batches_per_eval=100, desired_total_batches=1000, patience=4, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -196,8 +196,8 @@ class TweetyBertClassifier:
         )
         trainer.train()
 
-    def generate_specs(self, num_specs=100, context_length=1000):
-        spec_generator = SpecGenerator(self.classifier_model, self.test_dir, context_length, num_classes=self.num_classes)
+    def generate_specs(self, num_specs=100):
+        spec_generator = SpecGenerator(self.classifier_model, self.test_dir, self.context_length, num_classes=self.num_classes)
         spec_generator.generate_specs(num_specs)
 
     def save_decoder_state(self):
@@ -245,8 +245,9 @@ class TweetyBertClassifier:
         print(f"Decoder state loaded from {save_dir}")
         return instance
 
+
 class SpecGenerator:
-    def __init__(self, model, song_dir, context_length=1000, num_classes=None):
+    def __init__(self, model, song_dir, context_length, num_classes=None):
         self.model = model
         self.song_dir = song_dir
         self.context_length = context_length
@@ -313,7 +314,6 @@ class SpecGenerator:
         ax5.set_ylabel('Probability', fontsize=24)
         ax5.set_ylim(0, 1)
         ax5.tick_params(axis='both', which='major', labelsize=18)
-        ax5.legend(fontsize=18)
 
         # Ensure all subplots are aligned
         plt.xlim(0, spec_chunk.shape[1])
@@ -371,6 +371,7 @@ class SpecGenerator:
 
         print(f"Generated {processed_specs} spectrograms.")
 
+
 class TweetyBertInference:
     def __init__(self, classifier_path, spec_dst_folder):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
@@ -392,7 +393,39 @@ class TweetyBertInference:
     def setup_wav_to_spec(self, folder, csv_file_dir=None):
         self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, csv_file_dir)
 
-    def inference_data_class(self, data, context_length=1000):
+    def detect_song_segments(self, file_path):
+        """
+        Call the external Bash command to perform song detection and return the JSON output.
+
+        Args:
+        - file_path: str, path to the input WAV file.
+
+        Returns:
+        - dict: Parsed JSON containing onset and offset timebins.
+        """
+        command = [
+            "python",
+            "/home/george-vengrovski/Documents/projects/tweety_net_song_detector/src/inference.py",
+            "--mode",
+            "local_file",
+            "--input",
+            file_path,
+            "--return_json"
+        ]
+
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            json_output = result.stdout.strip()
+            data = json.loads(json_output)
+            return data
+        except subprocess.CalledProcessError as e:
+            print(f"Error running song detection command: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON output: {e}")
+            return None
+
+    def inference_data_class(self, data):
         recording_length = data[1].shape[1]
 
         spectogram = data[1][20:216]
@@ -408,19 +441,19 @@ class TweetyBertInference:
         ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.classifier.num_classes).float()
         vocalization = torch.from_numpy(vocalization).long()
 
-        pad_amount = context_length - (recording_length % context_length)
-        if recording_length < context_length:
-            pad_amount = context_length - recording_length
+        pad_amount = self.classifier.context_length - (recording_length % self.classifier.context_length)
+        if recording_length < self.classifier.context_length:
+            pad_amount = self.classifier.context_length - recording_length
          
-        if recording_length > context_length and pad_amount != 0:
-            pad_amount = context_length - (spectogram.shape[0] % context_length)
+        if recording_length > self.classifier.context_length and pad_amount != 0:
+            pad_amount = self.classifier.context_length - (spectogram.shape[0] % self.classifier.context_length)
             spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
             ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)
             vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
 
-        spectogram = spectogram.reshape(spectogram.shape[0] // context_length, context_length, spectogram.shape[1])
-        ground_truth_labels = ground_truth_labels.reshape(ground_truth_labels.shape[0] // context_length, context_length, ground_truth_labels.shape[1])
-        vocalization = vocalization.reshape(vocalization.shape[0] // context_length, context_length)
+        spectogram = spectogram.reshape(spectogram.shape[0] // self.classifier.context_length, self.classifier.context_length, spectogram.shape[1])
+        ground_truth_labels = ground_truth_labels.reshape(ground_truth_labels.shape[0] // self.classifier.context_length, self.classifier.context_length, ground_truth_labels.shape[1])
+        vocalization = vocalization.reshape(vocalization.shape[0] // self.classifier.context_length, self.classifier.context_length)
 
         return spectogram, ground_truth_labels, vocalization
 
@@ -514,11 +547,48 @@ class TweetyBertInference:
         plt.close()
 
     def process_file(self, file_path, visualize=False):
-        spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
+        # Step 1: Detect song segments using the external Bash command
+        detection_result = self.detect_song_segments(file_path)
+        if detection_result is None:
+            print(f"Skipping file {file_path} due to detection error.")
+            return None
 
-        spectogram, _, _ = self.inference_data_class((labels, spec, vocalization), context_length=1000)
+        filename = detection_result.get("filename", "")
+        segments = detection_result.get("segments", [])
+
+        if not segments:
+            print(f"No vocalization segments detected in {file_path}.")
+            return {
+                "file_name": os.path.basename(file_path),
+                "song_present": False,
+                "syllable_onsets/offsets": {}
+            }
+
+        # Assuming one segment per file for simplicity; adjust as needed
+        segment = segments[0]
+        onset_timebin = segment["onset_timebin"]
+        offset_timebin = segment["offset_timebin"]
+
+        # Load the spectrogram and labels from the spec_dst_folder
+        spec_file = os.path.join(self.spec_dst_folder, f"{filename}.npz")
+        if not os.path.exists(spec_file):
+            print(f"Spec file {spec_file} does not exist.")
+            return None
+
+        data = np.load(spec_file)
+        spec = data['s']
+        labels = data['labels']
+
+        # Extract the segment based on onset and offset timebins
+        spec_segment = spec[:, onset_timebin:offset_timebin]
+        labels_segment = labels[onset_timebin:offset_timebin]
+        vocalization_segment = labels_segment  # Adjust as necessary
+
+        # Prepare data for inference
+        spectogram, _, _ = self.inference_data_class((labels_segment, spec_segment, vocalization_segment))
         spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
 
+        # Perform inference
         logits = self.classifier.classifier_model(spec_tensor.permute(0,1,3,2))
         logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
 
@@ -547,13 +617,14 @@ class TweetyBertInference:
                     file_path = os.path.join(root, file)
                     try:
                         result = self.process_file(file_path, visualize)
-                        results.append(result)
-                        file_count += 1
+                        if result is not None:
+                            results.append(result)
+                            file_count += 1
 
-                        # Save intermediate results every `save_interval` files
-                        if file_count % save_interval == 0:
-                            self.save_results(results, self.output_path)
-                            print(f"Intermediate results saved after processing {file_count} files.")
+                            # Save intermediate results every `save_interval` files
+                            if file_count % save_interval == 0:
+                                self.save_results(results, self.output_path)
+                                print(f"Intermediate results saved after processing {file_count} files.")
 
                     except Exception as e:
                         print(f"Error processing {file_path}: {e}")
@@ -570,34 +641,32 @@ class TweetyBertInference:
         print(f"Results saved to {output_path}")
 
 
-# # Usage example:
+# Usage example:
 if __name__ == "__main__":
     classifier = TweetyBertClassifier(
-        config_path="experiments/Song_Detector_Pretrain/config.json",
-        weights_path="experiments/Song_Detector_Pretrain/saved_weights/model_step_0.pth",
-        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder"
+        config_path="/media/george-vengrovski/flash-drive/USA5288_Specs_Experiment/config.json",
+        weights_path="/media/george-vengrovski/flash-drive/USA5288_Specs_Experiment/saved_weights/model_step_30000.pth",
+        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder",
+        context_length=1000  # Set the context_length here
     )
 
-    classifier.num_classes = 2
-
-    # classifier.prepare_data("files/labels_LLB16NONORM.npz")
+    classifier.prepare_data("/media/george-vengrovski/flash-drive/labels_USA5288-Rose-AreaX.npz")
     classifier.create_dataloaders()
     classifier.create_classifier()
     classifier.train_classifier(generate_loss_plot=False)
-    # classifier.save_decoder_state()
+    classifier.save_decoder_state()
     classifier.generate_specs()
 
-    # classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
-    # folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
-    # output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
-    # spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
+    classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
+    folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
+    output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
+    spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
 
-    # inference = TweetyBertInference(classifier_path, spec_dst_folder)
-    # inference.setup_wav_to_spec(folder_path)
+    inference = TweetyBertInference(classifier_path, spec_dst_folder)
+    inference.setup_wav_to_spec(folder_path)
     
-    # # Set the output_path as an attribute of the inference object
-    # inference.output_path = output_path
+    # Set the output_path as an attribute of the inference object
+    inference.output_path = output_path
     
-    # results = inference.process_folder(folder_path, visualize=True)
-    # inference.save_results(results, output_path)
-
+    results = inference.process_folder(folder_path, visualize=True)
+    inference.save_results(results, output_path)

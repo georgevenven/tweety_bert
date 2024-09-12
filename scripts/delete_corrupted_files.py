@@ -24,5 +24,5 @@ def delete_corrupted_npz_files(root_dir):
                     print(f"Error: {str(e)}")
 
 if __name__ == "__main__":
-    root_directory = "/media/george-vengrovski/disk2/training_song_detector/pretrain_dataset_train"
+    root_directory = "/media/george-vengrovski/Rose-SSD/to_be_labeled_specs_better_Specs"
     delete_corrupted_npz_files(root_directory)

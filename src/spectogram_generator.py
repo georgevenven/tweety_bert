@@ -12,11 +12,13 @@ from tqdm import tqdm
 import json
 
 class WavtoSpec:
-    def __init__(self, src_dir, dst_dir, csv_file_dir=None):
+    def __init__(self, src_dir, dst_dir, csv_file_dir=None, step_size=1536, nfft=2048):
         self.src_dir = src_dir
         self.dst_dir = dst_dir
         self.csv_file_dir = csv_file_dir
         self.use_csv = csv_file_dir is not None
+        self.step_size = step_size
+        self.nfft = nfft
 
     def process_directory(self):
         audio_files = [os.path.join(root, file)
@@ -37,7 +39,7 @@ class WavtoSpec:
     def process_file(instance, file_path):
         return instance.convert_to_spectrogram(file_path, csv_file_dir=None, save_npz=False)
 
-    def convert_to_spectrogram(self, file_path, csv_file_dir, min_length_ms=1025, min_timebins=250, save_npz=True):
+    def convert_to_spectrogram(self, file_path, csv_file_dir, min_length_ms=500, min_timebins=200, save_npz=True):
         try:
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate
@@ -66,12 +68,10 @@ class WavtoSpec:
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
             data = filtfilt(b, a, data)
             
-            NFFT = 1024
-            step_size = 119
-            overlap_samples = NFFT - step_size
-            window = windows.gaussian(NFFT, std=NFFT/8)
+            overlap_samples = self.nfft - self.step_size
+            window = windows.gaussian(self.nfft, std=self.nfft/8)
             
-            f, t, Sxx = spectrogram(data, fs=samplerate, window=window, nperseg=NFFT, noverlap=overlap_samples)
+            f, t, Sxx = spectrogram(data, fs=samplerate, window=window, nperseg=self.nfft, noverlap=overlap_samples)
             Sxx_log = 10 * np.log10(Sxx + 1e-6)
             
             # Convert phrase labels to timebins
@@ -147,9 +147,14 @@ class WavtoSpec:
         return None, None
 
 def main():
-    src_dir = '/media/george-vengrovski/Rose-SSD/to_be_labeled_specs_better'
-    dst_dir = '/media/george-vengrovski/Rose-SSD/to_be_labeled_specs_better_Specs'
+    src_dir = '/media/george-vengrovski/disk2/wolf_stuff/files_with_audio_subsampled'
+    dst_dir = '/media/george-vengrovski/disk2/wolf_stuff/files_with_audio_specs'
     csv_file_dir = None
+    step_size = 511
+    nfft = 512
 
-    wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir)
+    wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir, step_size, nfft)
     wav_to_spec.process_directory()
+
+if __name__ == "__main__":
+    main()
