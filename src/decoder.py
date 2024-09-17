@@ -27,6 +27,8 @@ from data_class import SongDataSet_Image, CollateFunction
 import time
 from statistics import mean
 import csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 def parse_date_time(self, file_path, format="standard"):
         parts = file_path.split('_')
@@ -621,26 +623,27 @@ class TweetyBertInference:
             "syllable_onsets_offsets_timebins": onsets_offsets_timebins
         }
         
-    def process_folder(self, folder_path, save_interval=1000):
+    def process_folder(self, folder_path, save_interval=100, max_workers=8):
         results = []
         file_count = 0
         wav_files = [os.path.join(root, file) for root, _, files in os.walk(folder_path) for file in files if file.lower().endswith('.wav')]
-        
-        for file_path in tqdm(wav_files, desc="Processing files"):
-            try:
-                result = self.process_file(file_path)
-                results.append(result)
-                file_count += 1
 
-                if file_count % save_interval == 0:
-                    self.save_results(results, self.output_path)
-                    print(f"Intermediate results saved after processing {file_count} files.")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_file = {executor.submit(self.process_file, file_path): file_path for file_path in wav_files}
+            for future in tqdm(as_completed(future_to_file), total=len(wav_files), desc="Processing files"):
+                file_path = future_to_file[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    file_count += 1
 
-            except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+                    if file_count % save_interval == 0:
+                        self.save_results(results, self.output_path)
+                        print(f"Intermediate results saved after processing {file_count} files.")
+                except Exception as e:
+                    print(f"Error processing {file_path}: {e}")
 
         self.save_results(results, self.output_path)
-        
         return results
 
     def save_results(self, results, output_path):
