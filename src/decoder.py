@@ -612,7 +612,7 @@ class TweetyBertInference:
 
         # Visualization (if enabled)
         if self.visualize:
-            self.visualize_spectrogram(spectogram.flatten(0,1).T, post_processed_labels, os.path.basename(file_path))
+            self.visualize_spectrogram(spectogram.flatten(0,1)[:-pad_amount].T, post_processed_labels, os.path.basename(file_path))
 
         return {
             "file_name": os.path.basename(file_path),
@@ -682,7 +682,7 @@ if __name__ == "__main__":
     #point to folder to save annotated spectrograms 
     spec_dst_folder = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/imgs/decoder_specs_inference_test"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = "/home/george-vengrovski/Downloads/onset_offset_results.json", visualize=True)
+    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = None, visualize=True)
     inference.setup_wav_to_spec(folder_path)
     
     results = inference.process_folder(folder_path)
