@@ -12,7 +12,7 @@ from tqdm import tqdm
 import json
 
 class WavtoSpec:
-    def __init__(self, src_dir, dst_dir, csv_file_dir=None, step_size=1536, nfft=2048):
+    def __init__(self, src_dir, dst_dir, csv_file_dir=None, step_size=119, nfft=1024):
         self.src_dir = src_dir
         self.dst_dir = dst_dir
         self.csv_file_dir = csv_file_dir
@@ -146,15 +146,15 @@ class WavtoSpec:
         print(f"No matching row found for {file_name} in {csv_file_path}.")
         return None, None
 
-def main():
-    src_dir = '/media/george-vengrovski/disk2/wolf_stuff/files_with_audio_subsampled'
-    dst_dir = '/media/george-vengrovski/disk2/wolf_stuff/files_with_audio_specs'
-    csv_file_dir = None
-    step_size = 511
-    nfft = 512
+# def main():
+#     # src_dir = '/media/george-vengrovski/disk2/wolf_stuff/files_with_audio_subsampled'
+#     # dst_dir = '/media/george-vengrovski/disk2/wolf_stuff/files_with_audio_specs'
+#     # csv_file_dir = None
+#     # step_size = 1024
+#     # nfft = 119
 
-    wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir, step_size, nfft)
-    wav_to_spec.process_directory()
+#     # wav_to_spec = WavtoSpec(src_dir, dst_dir, csv_file_dir, step_size, nfft)
+#     # wav_to_spec.process_directory()
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

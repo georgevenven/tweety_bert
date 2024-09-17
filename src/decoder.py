@@ -21,6 +21,62 @@ import pandas as pd
 from matplotlib.colors import ListedColormap
 import matplotlib.colors as mcolors
 from scipy.stats import mode
+import subprocess
+import json
+from data_class import SongDataSet_Image, CollateFunction
+import time
+from statistics import mean
+import csv
+
+def parse_date_time(self, file_path, format="standard"):
+        parts = file_path.split('_')
+        # remove .npz at the end of the last part
+        parts[-1] = parts[-1].replace('.npz', '')
+        try:
+            if format == "yarden":
+                file_name, year, month, day, hour, minute, second = parts[1], int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6]), int(parts[7])
+                file_date = datetime(year, month, day, hour, minute, second)
+            elif format == "standard":
+                file_name, month, day, hour, minute, second = parts[1], int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6])
+                file_date = datetime(2024, month, day, hour, minute, second)
+        except ValueError:
+            print("parts:", *[f" {part}" for part in parts])
+
+            print(f"Invalid date format in file path: {file_path}")
+            return None
+               
+        return file_date, file_name
+
+def tweety_net_detector_inference(input_file, return_json=True, mode="local_file"):
+    # Set the environment variable to avoid MKL and OpenMP conflict
+    os.environ["MKL_THREADING_LAYER"] = "GNU"
+    # Prepare the command as a list of arguments
+    command = [
+        'python', '/home/george-vengrovski/Documents/projects/tweety_net_song_detector/src/inference.py', 
+        '--mode', mode, 
+        '--input', input_file
+    ]
+    
+    # Add the return_json flag if needed
+    if return_json:
+        command.append('--return_json')
+
+    # Run the command using subprocess
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    # Check if the command was successful
+    if result.returncode == 0:
+        try:
+            # Parse the output to JSON if --return_json was passed
+            output_json = json.loads(result.stdout)
+            return output_json
+        except json.JSONDecodeError:
+            print("Error parsing JSON output.")
+            return None
+    else:
+        # Print error details
+        print(f"Error executing command: {result.stderr}")
+        return None
 
 def majority_vote(arr, window_size):
     result = np.zeros_like(arr)
@@ -46,62 +102,44 @@ class TweetyBertClassifier:
     def load_tweety_bert(self, config_path, weights_path):
         return load_model(config_path, weights_path)
 
-    def smooth_labels(self, labels, min_state_length=50):
+    def smooth_labels(self, labels, window_size=50):
         """
-        Smooth labels by first removing all '-1' labels, then removing contiguous 
-        segments shorter than the specified minimum length. Replace removed states with 0.
+        Smooth labels by replacing -1 labels with the closest non-negative label,
+        then applying a majority vote with the specified window size.
 
         Args:
         - labels: np.array, the label data to be smoothed.
-        - min_state_length: int, minimum length for a segment to be kept.
+        - window_size: int, size of the window for majority vote.
 
         Returns:
         - np.array: The smoothed labels.
         """
-        # Increment all states by 1
-        labels = np.array(labels) + 1
+        labels = np.array(labels)
 
-        # Remove all '-1' labels first
-        indices = np.where(labels != 0)
-        labels = labels[indices]
+        # Replace -1 labels with the closest non-negative label
+        for i in range(len(labels)):
+            if labels[i] == -1:
+                left = right = i
+                while left >= 0 or right < len(labels):
+                    if left >= 0 and labels[left] != -1:
+                        labels[i] = labels[left]
+                        break
+                    if right < len(labels) and labels[right] != -1:
+                        labels[i] = labels[right]
+                        break
+                    left -= 1
+                    right += 1
 
-        smoothed_labels = []  # List to store smoothed labels
+        # Apply majority vote
+        smoothed_labels = np.zeros_like(labels)
+        for i in range(len(labels)):
+            start = max(0, i - window_size // 2)
+            end = min(len(labels), i + window_size // 2 + 1)
+            window = labels[start:end]
+            unique, counts = np.unique(window, return_counts=True)
+            smoothed_labels[i] = unique[np.argmax(counts)]
 
-        # Initialize counters
-        contg_counter = 0
-        current_label_start_index = 0
-
-        try:
-            for i in range(len(labels) - 1):  # Iterate up to the second-last element
-                current_label = labels[i]
-
-                if labels[i + 1] == current_label:
-                    contg_counter += 1
-                else:
-                    # If the next label is different, check the length of the current sequence
-                    contg_counter += 1  # Include the current label in the count
-
-                    if contg_counter >= min_state_length:
-                        # Keep this segment because it's long enough
-                        smoothed_labels.extend(labels[current_label_start_index:i+1])
-                    else:
-                        # Replace short segments with 0
-                        smoothed_labels.extend([0] * contg_counter)
-                    
-                    # Reset counters for the new segment
-                    contg_counter = 0
-                    current_label_start_index = i + 1
-        except:
-            print(len(labels))
-
-        # Check the last segment
-        contg_counter += 1  # Include the last label in the count
-        if contg_counter >= min_state_length:
-            smoothed_labels.extend(labels[current_label_start_index:])
-        else:
-            smoothed_labels.extend([0] * contg_counter)
-
-        return np.array(smoothed_labels)
+        return smoothed_labels
 
     def prepare_data(self, data_file, test_train_split=0.8):
         self.data_file = data_file
@@ -183,7 +221,7 @@ class TweetyBertClassifier:
 
         ).to(self.device)
 
-    def train_classifier(self, lr=1e-4, batches_per_eval=100, desired_total_batches=1000, patience=4, generate_loss_plot=False):
+    def train_classifier(self, lr=1e-4, batches_per_eval=10, desired_total_batches=200, patience=4, generate_loss_plot=False):
         trainer = LinearProbeTrainer(
             model=self.classifier_model, 
             train_loader=self.train_loader, 
@@ -372,11 +410,12 @@ class SpecGenerator:
         print(f"Generated {processed_specs} spectrograms.")
 
 class TweetyBertInference:
-    def __init__(self, classifier_path, spec_dst_folder):
+    def __init__(self, classifier_path, spec_dst_folder, output_path):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.wav_to_spec = None
         self.spec_dst_folder = spec_dst_folder
+        self.output_path = output_path
         
         # Create the spectrogram destination folder if it doesn't exist
         os.makedirs(self.spec_dst_folder, exist_ok=True)
@@ -393,70 +432,54 @@ class TweetyBertInference:
         self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, csv_file_dir)
 
     def inference_data_class(self, data):
-        recording_length = data[1].shape[1]
+        recording_length = data.shape[1]
 
-        spectogram = data[1][20:216]
+        spectogram = data[20:216]
         spec_mean = np.mean(spectogram)
         spec_std = np.std(spectogram)
         spectogram = (spectogram - spec_mean) / spec_std
-
-        ground_truth_labels = np.array(data[0], dtype=int)
-        vocalization = np.array(data[2], dtype=int)
         
-        ground_truth_labels = torch.from_numpy(ground_truth_labels).long().squeeze(0)
         spectogram = torch.from_numpy(spectogram).float().permute(1, 0)
-        ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.classifier.num_classes).float()
-        vocalization = torch.from_numpy(vocalization).long()
-
+    
         pad_amount = self.classifier.context_length - (recording_length % self.classifier.context_length)
         if recording_length < self.classifier.context_length:
             pad_amount = self.classifier.context_length - recording_length
          
         if recording_length > self.classifier.context_length and pad_amount != 0:
             pad_amount = self.classifier.context_length - (spectogram.shape[0] % self.classifier.context_length)
-            spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
-            ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)
-            vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
 
+        spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
         spectogram = spectogram.reshape(spectogram.shape[0] // self.classifier.context_length, self.classifier.context_length, spectogram.shape[1])
-        ground_truth_labels = ground_truth_labels.reshape(ground_truth_labels.shape[0] // self.classifier.context_length, self.classifier.context_length, ground_truth_labels.shape[1])
-        vocalization = vocalization.reshape(vocalization.shape[0] // self.classifier.context_length, self.classifier.context_length)
+     
+        return spectogram, pad_amount 
 
-        return spectogram, ground_truth_labels, vocalization
+    def smooth_labels(self, labels, window_size=50):
+        labels = np.array(labels)
 
-    def max_vote(self, predicted_labels):
-        processed_labels = predicted_labels.copy()
-        
-        zero_indices = np.where(predicted_labels == 0)[0]
-        non_zero_indices = np.where(predicted_labels != 0)[0]
-        
-        regions = []
-        current_region = []
-        
-        for i in range(len(non_zero_indices)):
-            if i == 0 or non_zero_indices[i] - non_zero_indices[i-1] == 1:
-                current_region.append(non_zero_indices[i])
-            else:
-                if current_region:
-                    regions.append(current_region)
-                current_region = [non_zero_indices[i]]
-        
-        if current_region:
-            regions.append(current_region)
-        
-        for region in regions:
-            start = region[0]
-            end = region[-1]
-            
-            if (start == 0 or predicted_labels[start-1] == 0) and \
-               (end == len(predicted_labels)-1 or predicted_labels[end+1] == 0):
-                
-                region_labels = predicted_labels[start:end+1]
-                max_vote_label = np.bincount(region_labels).argmax()
-                
-                processed_labels[start:end+1] = max_vote_label
-        
-        return processed_labels
+        # Replace -1 labels with the closest non-negative label
+        for i in range(len(labels)):
+            if labels[i] == -1:
+                left = right = i
+                while left >= 0 or right < len(labels):
+                    if left >= 0 and labels[left] != -1:
+                        labels[i] = labels[left]
+                        break
+                    if right < len(labels) and labels[right] != -1:
+                        labels[i] = labels[right]
+                        break
+                    left -= 1
+                    right += 1
+
+        # Apply majority vote
+        smoothed_labels = np.zeros_like(labels)
+        for i in range(len(labels)):
+            start = max(0, i - window_size // 2)
+            end = min(len(labels), i + window_size // 2 + 1)
+            window = labels[start:end]
+            unique, counts = np.unique(window, return_counts=True)
+            smoothed_labels[i] = unique[np.argmax(counts)]
+
+        return smoothed_labels
 
     def convert_to_onset_offset(self, labels):
         sampling_rate = 44100 
@@ -465,30 +488,40 @@ class TweetyBertInference:
         ms_per_timebin = (hop_length / sampling_rate) * 1000
 
         syllable_dict = {}
-        current_label = 0
-        start_time = 0
+        syllable_dict_no_ms = {}
+        current_label = -1  # Initialize to an invalid label
+        start_time = None  # Initialize to None
 
         for i, label in enumerate(labels):
             if label != current_label:
-                if current_label != 0:
+                if current_label != -1 and start_time is not None:
                     end_time = i * ms_per_timebin
+                    end_time_no_ms = i
                     if current_label not in syllable_dict:
                         syllable_dict[current_label] = []
+                    if current_label not in syllable_dict_no_ms:
+                        syllable_dict_no_ms[current_label] = []
                     syllable_dict[current_label].append([start_time, end_time])
-                if label != 0:
+                    syllable_dict_no_ms[current_label].append([start_time / ms_per_timebin, end_time_no_ms])
+                if label != -1:
                     start_time = i * ms_per_timebin
                 current_label = label
 
-        if current_label != 0:
+        if current_label != -1 and start_time is not None:
             end_time = len(labels) * ms_per_timebin
+            end_time_no_ms = len(labels)
             if current_label not in syllable_dict:
                 syllable_dict[current_label] = []
+            if current_label not in syllable_dict_no_ms:
+                syllable_dict_no_ms[current_label] = []
             syllable_dict[current_label].append([start_time, end_time])
+            syllable_dict_no_ms[current_label].append([start_time / ms_per_timebin, end_time_no_ms])
 
         # Convert dictionary keys to strings to avoid issues during JSON serialization
         syllable_dict = {int(key): value for key, value in syllable_dict.items()}
+        syllable_dict_no_ms = {int(key): value for key, value in syllable_dict_no_ms.items()}
 
-        return syllable_dict
+        return syllable_dict, syllable_dict_no_ms
 
     def visualize_spectrogram(self, spec, predicted_labels, file_name):
         plt.figure(figsize=(15, 10))
@@ -514,33 +547,62 @@ class TweetyBertInference:
         plt.close()
 
     def process_file(self, file_path, visualize=False):
+        start_time = time.time()
+
+        # Wav to Spec conversion
         spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
 
-        spectogram, _, _ = self.inference_data_class((labels, spec, vocalization))
-        spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
+        if spec is None:
+            return {
+                "file_name": os.path.basename(file_path),
+                "song_present": False,
+                "syllable_onsets_offsets_ms": {},
+                "syllable_onsets_offsets_timebins": {}
+            }
 
+        # TweetyNet inference
+        vocalization_data = tweety_net_detector_inference(input_file=file_path)
+
+        if vocalization_data['segments'] == []:
+            return {
+                "file_name": os.path.basename(file_path),
+                "song_present": False, 
+                "syllable_onsets_offsets_ms": {},
+                "syllable_onsets_offsets_timebins": {}
+            }
+
+        vocalization_data = vocalization_data['segments'][0]
+        song_spec = spec[:, vocalization_data['onset_timebin']:vocalization_data['offset_timebin']]
+
+        # TweetyBERT inference
+        spectogram, pad_amount = self.inference_data_class(song_spec)
+        spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
         logits = self.classifier.classifier_model(spec_tensor.permute(0,1,3,2))
         logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
-
         predicted_labels = torch.argmax(logits, dim=1).detach().cpu().numpy()
-        post_processed_labels = self.max_vote(predicted_labels)
 
-        onsets_offsets = self.convert_to_onset_offset(post_processed_labels)
-        
-        song_present = len(onsets_offsets) > 0
+        # Post-processing
+        post_processed_labels = self.smooth_labels(predicted_labels, window_size=50)
+        post_processed_labels[-pad_amount:] = -1 
+        post_processed_labels = post_processed_labels[:-pad_amount]
+        onsets_offsets_ms, onsets_offsets_timebins = self.convert_to_onset_offset(post_processed_labels)
+        song_present = len(onsets_offsets_ms) > 0
 
+        # Visualization (if enabled)
         if visualize:
             self.visualize_spectrogram(spectogram.flatten(0,1).T, post_processed_labels, os.path.basename(file_path))
 
         return {
             "file_name": os.path.basename(file_path),
             "song_present": song_present,
-            "syllable_onsets/offsets": onsets_offsets
+            "syllable_onsets_offsets_ms": onsets_offsets_ms,
+            "syllable_onsets_offsets_timebins": onsets_offsets_timebins
         }
         
     def process_folder(self, folder_path, visualize=False, save_interval=1000):
         results = []
         file_count = 0
+        
         for root, _, files in os.walk(folder_path):
             for file in files:
                 if file.lower().endswith('.wav'):
@@ -550,7 +612,6 @@ class TweetyBertInference:
                         results.append(result)
                         file_count += 1
 
-                        # Save intermediate results every `save_interval` files
                         if file_count % save_interval == 0:
                             self.save_results(results, self.output_path)
                             print(f"Intermediate results saved after processing {file_count} files.")
@@ -558,45 +619,49 @@ class TweetyBertInference:
                     except Exception as e:
                         print(f"Error processing {file_path}: {e}")
 
-        # Save final results
         self.save_results(results, self.output_path)
         
         return results
 
     def save_results(self, results, output_path):
         df = pd.DataFrame(results)
-        df['syllable_onsets/offsets'] = df['syllable_onsets/offsets'].apply(json.dumps)
-        df.to_csv(output_path, index=False)
+        df['syllable_onsets_offsets_ms'] = df['syllable_onsets_offsets_ms'].apply(lambda x: json.dumps(x).replace('"', "'"))
+        df['syllable_onsets_offsets_timebins'] = df['syllable_onsets_offsets_timebins'].apply(lambda x: json.dumps(x).replace('"', "'"))
+        df.to_csv(output_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
         print(f"Results saved to {output_path}")
-
 
 # # Usage example:
 if __name__ == "__main__":
-    classifier = TweetyBertClassifier(
-        config_path="/media/george-vengrovski/flash-drive/USA5288_Specs_Experiment/config.json",
-        weights_path="/media/george-vengrovski/flash-drive/USA5288_Specs_Experiment/saved_weights/model_step_30000.pth",
-        linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder",
-        context_length=1000  # Set the context_length here
-    )
+    # PHASE 1: TRAINING THE DECODER #
+    # classifier = TweetyBertClassifier(
+    #     config_path="/media/george-vengrovski/flash-drive/USA5337_Specs_Experiment/config.json",
+    #     weights_path="/media/george-vengrovski/flash-drive/USA5337_Specs_Experiment/saved_weights/model_step_29000.pth",
+    #     linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder",
+    #     context_length=1000  # Set the context_length here
+    # )
 
-    classifier.prepare_data("/media/george-vengrovski/flash-drive/labels_USA5288-Rose-AreaX.npz")
-    classifier.create_dataloaders()
-    classifier.create_classifier()
-    classifier.train_classifier(generate_loss_plot=False)
-    classifier.save_decoder_state()
-    classifier.generate_specs()
+    # classifier.prepare_data("/media/george-vengrovski/flash-drive/labels_USA5337_AreaX_Rose.npz")
+    # classifier.create_dataloaders()
+    # classifier.create_classifier()
+    # classifier.train_classifier(generate_loss_plot=False)
+    # classifier.save_decoder_state()
+    # classifier.generate_specs()
 
-    # classifier_path = "/media/george-vengrovski/Extreme SSD/usa_5288/linear_decoder"
-    # folder_path = "/media/george-vengrovski/Extreme SSD1/20240726_All_Area_X_Lesions/USA5288"
-    # output_path = "/media/george-vengrovski/Extreme SSD/usa_5288/database.csv"
-    # spec_dst_folder = "/media/george-vengrovski/Extreme SSD/usa_5288/annotated_specs"
-
-    # inference = TweetyBertInference(classifier_path, spec_dst_folder)
-    # inference.setup_wav_to_spec(folder_path)
+    # PHASE 2: INFERENCE #
+    # to load the linear decoder 
+    classifier_path = "/media/george-vengrovski/disk1/linear_decoder"
     
-    # # Set the output_path as an attribute of the inference object
-    # inference.output_path = output_path
-    
-    # results = inference.process_folder(folder_path, visualize=True)
-    # inference.save_results(results, output_path)
+    #point to folder with wav files 
+    folder_path = "/media/george-vengrovski/flash-drive/temp"
 
+    #point to csv output path 
+    output_path = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/decoder_test_database.csv"
+
+    #point to folder to save annotated spectrograms 
+    spec_dst_folder = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/imgs/decoder_specs_inference_test"
+
+    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path)
+    inference.setup_wav_to_spec(folder_path)
+    
+    results = inference.process_folder(folder_path, visualize=True)
+    inference.save_results(results, output_path)
