@@ -624,22 +624,20 @@ class TweetyBertInference:
     def process_folder(self, folder_path, save_interval=1000):
         results = []
         file_count = 0
+        wav_files = [os.path.join(root, file) for root, _, files in os.walk(folder_path) for file in files if file.lower().endswith('.wav')]
         
-        for root, _, files in os.walk(folder_path):
-            for file in files:
-                if file.lower().endswith('.wav'):
-                    file_path = os.path.join(root, file)
-                    try:
-                        result = self.process_file(file_path)
-                        results.append(result)
-                        file_count += 1
+        for file_path in tqdm(wav_files, desc="Processing files"):
+            try:
+                result = self.process_file(file_path)
+                results.append(result)
+                file_count += 1
 
-                        if file_count % save_interval == 0:
-                            self.save_results(results, self.output_path)
-                            print(f"Intermediate results saved after processing {file_count} files.")
+                if file_count % save_interval == 0:
+                    self.save_results(results, self.output_path)
+                    print(f"Intermediate results saved after processing {file_count} files.")
 
-                    except Exception as e:
-                        print(f"Error processing {file_path}: {e}")
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
 
         self.save_results(results, self.output_path)
         
