@@ -410,12 +410,17 @@ class SpecGenerator:
         print(f"Generated {processed_specs} spectrograms.")
 
 class TweetyBertInference:
-    def __init__(self, classifier_path, spec_dst_folder, output_path):
+    def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.wav_to_spec = None
         self.spec_dst_folder = spec_dst_folder
         self.output_path = output_path
+
+        if song_detection_json is not None:
+            self.song_detection_json = song_detection_json
+        else:
+            self.song_detection_json = None
         
         # Create the spectrogram destination folder if it doesn't exist
         os.makedirs(self.spec_dst_folder, exist_ok=True)
@@ -560,8 +565,24 @@ class TweetyBertInference:
                 "syllable_onsets_offsets_timebins": {}
             }
 
-        # TweetyNet inference
-        vocalization_data = tweety_net_detector_inference(input_file=file_path)
+        if self.song_detection_json == None:
+            # TweetyNet inference
+            vocalization_data = tweety_net_detector_inference(input_file=file_path)
+        else:
+            # find find path in song_detection_json
+            with open(self.song_detection_json, 'r') as f:
+                song_detection_data = json.load(f)
+
+            file_name = os.path.basename(file_path)
+            vocalization_data = next((item for item in song_detection_data if item["filename"] == file_name), None)
+            
+            if vocalization_data is None or not vocalization_data["song_present"]:
+                return {
+                    "file_name": file_name,
+                    "song_present": False,
+                    "syllable_onsets_offsets_ms": {},
+                    "syllable_onsets_offsets_timebins": {}
+                }
 
         if vocalization_data['segments'] == []:
             return {
@@ -660,7 +681,7 @@ if __name__ == "__main__":
     #point to folder to save annotated spectrograms 
     spec_dst_folder = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/imgs/decoder_specs_inference_test"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path)
+    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = "/home/george-vengrovski/Downloads/onset_offset_results.json")
     inference.setup_wav_to_spec(folder_path)
     
     results = inference.process_folder(folder_path, visualize=True)
