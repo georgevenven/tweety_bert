@@ -410,12 +410,13 @@ class SpecGenerator:
         print(f"Generated {processed_specs} spectrograms.")
 
 class TweetyBertInference:
-    def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None):
+    def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.wav_to_spec = None
         self.spec_dst_folder = spec_dst_folder
         self.output_path = output_path
+        self.visualize = visualize
 
         if song_detection_json is not None:
             self.song_detection_json = song_detection_json
@@ -551,7 +552,7 @@ class TweetyBertInference:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-    def process_file(self, file_path, visualize=False):
+    def process_file(self, file_path):
         start_time = time.time()
 
         # Wav to Spec conversion
@@ -610,7 +611,7 @@ class TweetyBertInference:
         song_present = len(onsets_offsets_ms) > 0
 
         # Visualization (if enabled)
-        if visualize:
+        if self.visualize:
             self.visualize_spectrogram(spectogram.flatten(0,1).T, post_processed_labels, os.path.basename(file_path))
 
         return {
@@ -620,7 +621,7 @@ class TweetyBertInference:
             "syllable_onsets_offsets_timebins": onsets_offsets_timebins
         }
         
-    def process_folder(self, folder_path, visualize=False, save_interval=1000):
+    def process_folder(self, folder_path, save_interval=1000):
         results = []
         file_count = 0
         
@@ -629,7 +630,7 @@ class TweetyBertInference:
                 if file.lower().endswith('.wav'):
                     file_path = os.path.join(root, file)
                     try:
-                        result = self.process_file(file_path, visualize)
+                        result = self.process_file(file_path)
                         results.append(result)
                         file_count += 1
 
@@ -681,8 +682,8 @@ if __name__ == "__main__":
     #point to folder to save annotated spectrograms 
     spec_dst_folder = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/imgs/decoder_specs_inference_test"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = "/home/george-vengrovski/Downloads/onset_offset_results.json")
+    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = "/home/george-vengrovski/Downloads/onset_offset_results.json", visualize=True)
     inference.setup_wav_to_spec(folder_path)
     
-    results = inference.process_folder(folder_path, visualize=True)
+    results = inference.process_folder(folder_path)
     inference.save_results(results, output_path)
