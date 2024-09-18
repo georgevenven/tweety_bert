@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
+
 import torch
 import os
 import sys
+import argparse
 
 figure_generation_dir = os.path.dirname(__file__)
 project_root = os.path.dirname(figure_generation_dir)
@@ -16,22 +19,47 @@ from analysis import plot_umap_projection
 # THIS SHOULD ALWAYS BE CPU SO YOU CAN FIT SUPER LONG SONGS IN MODEL UNLESS YOU HAVE A100 or BETTER!
 device = torch.device("cpu")
 
-weights_path = "experiments/LLB16_Whisperseg_NoNormNoThresholding/saved_weights/model_step_21000.pth"
-config_path = "experiments/LLB16_Whisperseg_NoNormNoThresholding/config.json"
+def main(experiment_folder, data_dir, category_colors_file, save_name, samples, layer_index, dict_key, context, raw_spectogram, save_dict_for_analysis):
+    model = load_model(experiment_folder)
+    model = model.to(device)
 
-model = load_model(config_path, weights_path)
-model = model.to(device)
+    plot_umap_projection(
+        model=model, 
+        device=device, 
+        data_dir=data_dir,
+        samples=samples, 
+        category_colors_file=category_colors_file, 
+        layer_index=layer_index, 
+        dict_key=dict_key, 
+        context=context, 
+        raw_spectogram=raw_spectogram,
+        save_dict_for_analysis=save_dict_for_analysis,
+        save_name=save_name
+    )
 
-plot_umap_projection(
-    model=model, 
-    device=device, 
-    data_dir="/media/george-vengrovski/Extreme SSD1/yarden_data/llb16_no_threshold_no_norm",
-    samples=1e6, 
-    category_colors_file="/home/george-vengrovski/Downloads/category_colors_llb3.pkl", 
-    layer_index=-2, 
-    dict_key="attention_output", 
-    context=1000, 
-    raw_spectogram=False,
-    save_dict_for_analysis=True,
-    save_name="LLB16NONORM"
-)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate dimension-reduced birdsong plots.")
+    parser.add_argument('--experiment_folder', type=str, default="experiments/default_experiment", help='Path to the experiment folder.')
+    parser.add_argument('--data_dir', type=str, default="train_dir", help='Directory containing the data.')
+    parser.add_argument('--category_colors_file', type=str, default="files/category_colors_llb3.pkl", help='Path to the category colors file.')
+    parser.add_argument('--save_name', type=str, default="default_experiment_hdbscan", help='Name to save the output.')
+    parser.add_argument('--samples', type=float, default=1e6, help='Number of samples to use.')
+    parser.add_argument('--layer_index', type=int, default=-2, help='Layer index to use for UMAP projection.')
+    parser.add_argument('--dict_key', type=str, default="attention_output", help='Dictionary key to use for UMAP projection.')
+    parser.add_argument('--context', type=int, default=1000, help='Context size for the model.')
+    parser.add_argument('--raw_spectogram', type=bool, default=False, help='Whether to use raw spectogram.')
+    parser.add_argument('--save_dict_for_analysis', type=bool, default=True, help='Whether to save dictionary for analysis.')
+
+    args = parser.parse_args()
+    main(
+        args.experiment_folder, 
+        args.data_dir, 
+        args.category_colors_file, 
+        args.save_name,
+        args.samples,
+        args.layer_index,
+        args.dict_key,
+        args.context,
+        args.raw_spectogram,
+        args.save_dict_for_analysis
+    )

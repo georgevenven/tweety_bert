@@ -1,6 +1,7 @@
 import os
 import shutil
 import random
+import argparse
 from tqdm import tqdm
 
 def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest, move_files=False):
@@ -48,6 +49,17 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
             shutil.move(src_file_path, dest_file_path)
         else:
             shutil.copy2(src_file_path, dest_file_path)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Split dataset into train and test sets.")
+    parser.add_argument("folder_path", type=str, help="The path to the folder containing the dataset.")
+    parser.add_argument("train_ratio", type=float, help="The ratio of npz files to be included in the train set.")
+    parser.add_argument("train_folder_dest", type=str, help="The path to the destination train folder.")
+    parser.add_argument("test_folder_dest", type=str, help="The path to the destination test folder.")
+    parser.add_argument("--move_files", action="store_true", help="If set, files will be moved instead of copied.")
+
+    args = parser.parse_args()
+    split_dataset(args.folder_path, args.train_ratio, args.train_folder_dest, args.test_folder_dest, args.move_files)
 
 # Example usage with moving files
 # split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_test', move_files=False)

@@ -1,6 +1,7 @@
 import torch 
 import json
 from model import TweetyBERT
+import os
 
 def load_weights(dir, model):
     """
@@ -53,19 +54,23 @@ def load_config(config_path):
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
-def load_model(config_path, weight_path=None):
+def load_model(experiment_folder):
     """
-    Initialize and load the model with the given configuration and weights.
+    Initialize and load the model with the given configuration and weights from the experiment folder.
 
     Args:
-    config_path (str): The path to the model configuration file.
-    weight_path (str, optional): The path to the model weights. If not provided, initializes with random weights.
+    experiment_folder (str): The path to the experiment folder containing the config and weights.
 
     Returns:
     torch.nn.Module: The initialized model.
     """
+    config_path = os.path.join(experiment_folder, 'config.json')
+    weight_folder = os.path.join(experiment_folder, 'saved_weights')
+
+    # Load configuration
     config = load_config(config_path)
 
+    # Initialize model
     model = TweetyBERT(
         d_transformer=config['d_transformer'], 
         nhead_transformer=config['nhead_transformer'],
@@ -81,7 +86,11 @@ def load_model(config_path, weight_path=None):
         length=config['context']
     )
 
-    if weight_path:
+    # Find the weight file with the highest step number
+    weight_files = [f for f in os.listdir(weight_folder) if f.startswith('model_step_') and f.endswith('.pth')]
+    if weight_files:
+        latest_weight_file = max(weight_files, key=lambda f: int(f.split('_')[-1].split('.')[0]))
+        weight_path = os.path.join(weight_folder, latest_weight_file)
         load_weights(dir=weight_path, model=model)
     else:
         print("Model loaded with randomly initiated weights.")

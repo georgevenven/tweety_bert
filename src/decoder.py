@@ -27,7 +27,6 @@ from data_class import SongDataSet_Image, CollateFunction
 import time
 from statistics import mean
 import csv
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def parse_date_time(self, file_path, format="standard"):
@@ -89,20 +88,19 @@ def majority_vote(arr, window_size):
     return result
 
 class TweetyBertClassifier:
-    def __init__(self, config_path, weights_path, linear_decoder_dir, context_length=1000):
+    def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.tweety_bert_model = self.load_tweety_bert(config_path, weights_path)
+        self.tweety_bert_model = self.load_tweety_bert(model_dir)
         self.linear_decoder_dir = linear_decoder_dir
         self.train_dir = os.path.join(linear_decoder_dir, "train")
         self.test_dir = os.path.join(linear_decoder_dir, "test")
         self.num_classes = None
-        self.config_path = config_path
-        self.weights_path = weights_path
+        self.model_dir = model_dir
         self.data_file = None
         self.context_length = context_length
 
-    def load_tweety_bert(self, config_path, weights_path):
-        return load_model(config_path, weights_path)
+    def load_tweety_bert(self, model_dir):
+        return load_model(model_dir)
 
     def smooth_labels(self, labels, window_size=50):
         """
@@ -252,8 +250,7 @@ class TweetyBertClassifier:
         # Save configuration
         config = {
             "num_classes": self.num_classes,
-            "tweety_bert_config": self.config_path,
-            "tweety_bert_weights": self.weights_path,
+            "model_dir": self.model_dir,
             "data_file": self.data_file,
         }
         with open(os.path.join(save_dir, "decoder_config.json"), "w") as f:
@@ -273,7 +270,7 @@ class TweetyBertClassifier:
             config = json.load(f)
 
         # Create instance
-        instance = cls(config["tweety_bert_config"], config["tweety_bert_weights"], linear_decoder_dir)
+        instance = cls(config["model_dir"], linear_decoder_dir)
         
         # Set attributes
         instance.num_classes = config["num_classes"]
@@ -623,25 +620,34 @@ class TweetyBertInference:
             "syllable_onsets_offsets_timebins": onsets_offsets_timebins
         }
         
-    def process_folder(self, folder_path, save_interval=100, max_workers=8):
+    def process_folder(self, folder_path, save_interval=100):
         results = []
         file_count = 0
+        processed_files = set()
+
+        # Load existing results if the output file exists
+        if os.path.exists(self.output_path):
+            existing_results = pd.read_csv(self.output_path)
+            processed_files = set(existing_results['file_name'].tolist())
+            results = existing_results.to_dict('records')
+            file_count = len(results)
+
         wav_files = [os.path.join(root, file) for root, _, files in os.walk(folder_path) for file in files if file.lower().endswith('.wav')]
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_file = {executor.submit(self.process_file, file_path): file_path for file_path in wav_files}
-            for future in tqdm(as_completed(future_to_file), total=len(wav_files), desc="Processing files"):
-                file_path = future_to_file[future]
-                try:
-                    result = future.result()
-                    results.append(result)
-                    file_count += 1
+        for file_path in tqdm(wav_files, desc="Processing files"):
+            if os.path.basename(file_path) in processed_files:
+                continue
 
-                    if file_count % save_interval == 0:
-                        self.save_results(results, self.output_path)
-                        print(f"Intermediate results saved after processing {file_count} files.")
-                except Exception as e:
-                    print(f"Error processing {file_path}: {e}")
+            try:
+                result = self.process_file(file_path)
+                results.append(result)
+                file_count += 1
+
+                if file_count % save_interval == 0:
+                    self.save_results(results, self.output_path)
+                    print(f"Intermediate results saved after processing {file_count} files.")
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
 
         self.save_results(results, self.output_path)
         return results
@@ -655,10 +661,9 @@ class TweetyBertInference:
 
 # # Usage example:
 if __name__ == "__main__":
-    # PHASE 1: TRAINING THE DECODER #
+    #PHASE 1: TRAINING THE DECODER #
     # classifier = TweetyBertClassifier(
-    #     config_path="/media/george-vengrovski/flash-drive/USA5337_Specs_Experiment/config.json",
-    #     weights_path="/media/george-vengrovski/flash-drive/USA5337_Specs_Experiment/saved_weights/model_step_29000.pth",
+    #     model_dir="/media/george-vengrovski/flash-drive/USA5337_Specs_Experiment",
     #     linear_decoder_dir="/media/george-vengrovski/disk1/linear_decoder",
     #     context_length=1000  # Set the context_length here
     # )
@@ -670,7 +675,7 @@ if __name__ == "__main__":
     # classifier.save_decoder_state()
     # classifier.generate_specs()
 
-    # PHASE 2: INFERENCE #
+    # # PHASE 2: INFERENCE #
     # to load the linear decoder 
     classifier_path = "/media/george-vengrovski/disk1/linear_decoder"
     
