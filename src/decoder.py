@@ -409,13 +409,14 @@ class SpecGenerator:
         print(f"Generated {processed_specs} spectrograms.")
 
 class TweetyBertInference:
-    def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False):
+    def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False, dump_interval=1000):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.wav_to_spec = None
         self.spec_dst_folder = spec_dst_folder
         self.output_path = output_path
         self.visualize = visualize
+        self.dump_interval = dump_interval  # Add dump_interval parameter
 
         if song_detection_json is not None:
             self.song_detection_json = song_detection_json
@@ -643,7 +644,8 @@ class TweetyBertInference:
                 results.append(result)
                 file_count += 1
 
-                if file_count % save_interval == 0:
+                # Save results at specified intervals
+                if file_count % self.dump_interval == 0:
                     self.save_results(results, self.output_path)
                     print(f"Intermediate results saved after processing {file_count} files.")
             except Exception as e:
