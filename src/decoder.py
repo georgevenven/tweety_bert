@@ -419,9 +419,10 @@ class TweetyBertInference:
         self.dump_interval = dump_interval  # Add dump_interval parameter
 
         if song_detection_json is not None:
-            self.song_detection_json = song_detection_json
+            with open(song_detection_json, 'r') as f:
+                self.song_detection_data = json.load(f)
         else:
-            self.song_detection_json = None
+            self.song_detection_data = None
         
         # Create the spectrogram destination folder if it doesn't exist
         os.makedirs(self.spec_dst_folder, exist_ok=True)
@@ -433,7 +434,7 @@ class TweetyBertInference:
         colors = colors[np.random.permutation(len(colors))]
         colors = np.vstack(([1, 1, 1, 1], colors))  # Add white at the beginning for silence
         self.cmap = mcolors.ListedColormap(colors[:self.classifier.num_classes])
-
+        
     def setup_wav_to_spec(self, folder, csv_file_dir=None):
         self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, csv_file_dir)
 
@@ -553,8 +554,6 @@ class TweetyBertInference:
         plt.close()
 
     def process_file(self, file_path):
-        start_time = time.time()
-
         # Wav to Spec conversion
         spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
 
@@ -566,16 +565,12 @@ class TweetyBertInference:
                 "syllable_onsets_offsets_timebins": {}
             }
 
-        if self.song_detection_json == None:
-            # TweetyNet inference
+        # Song detection
+        if self.song_detection_data is None:
             vocalization_data = tweety_net_detector_inference(input_file=file_path)
         else:
-            # find find path in song_detection_json
-            with open(self.song_detection_json, 'r') as f:
-                song_detection_data = json.load(f)
-
             file_name = os.path.basename(file_path)
-            vocalization_data = next((item for item in song_detection_data if item["filename"] == file_name), None)
+            vocalization_data = next((item for item in self.song_detection_data if item["filename"] == file_name), None)
             
             if vocalization_data is None or not vocalization_data["song_present"]:
                 return {
@@ -593,6 +588,7 @@ class TweetyBertInference:
                 "syllable_onsets_offsets_timebins": {}
             }
 
+        # Extract song segment
         vocalization_data = vocalization_data['segments'][0]
         song_spec = spec[:, vocalization_data['onset_timebin']:vocalization_data['offset_timebin']]
 
@@ -647,7 +643,6 @@ class TweetyBertInference:
                 # Save results at specified intervals
                 if file_count % self.dump_interval == 0:
                     self.save_results(results, self.output_path)
-                    print(f"Intermediate results saved after processing {file_count} files.")
             except Exception as e:
                 print(f"Error processing {file_path}: {e}")
 
@@ -659,7 +654,6 @@ class TweetyBertInference:
         df['syllable_onsets_offsets_ms'] = df['syllable_onsets_offsets_ms'].apply(lambda x: json.dumps(x).replace('"', "'"))
         df['syllable_onsets_offsets_timebins'] = df['syllable_onsets_offsets_timebins'].apply(lambda x: json.dumps(x).replace('"', "'"))
         df.to_csv(output_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
-        print(f"Results saved to {output_path}")
 
 # # Usage example:
 if __name__ == "__main__":
@@ -682,7 +676,7 @@ if __name__ == "__main__":
     classifier_path = "/media/george-vengrovski/disk1/linear_decoder"
     
     #point to folder with wav files 
-    folder_path = "/media/george-vengrovski/flash-drive/temp"
+    folder_path = "/media/george-vengrovski/disk2/temp/temp1"
 
     #point to csv output path 
     output_path = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/decoder_test_database.csv"
@@ -690,7 +684,7 @@ if __name__ == "__main__":
     #point to folder to save annotated spectrograms 
     spec_dst_folder = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/imgs/decoder_specs_inference_test"
 
-    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = None, visualize=True)
+    inference = TweetyBertInference(classifier_path, spec_dst_folder, output_path, song_detection_json = "/home/george-vengrovski/Documents/projects/tweety_net_song_detector/output/onset_offset_results.json", visualize=False)
     inference.setup_wav_to_spec(folder_path)
     
     results = inference.process_folder(folder_path)

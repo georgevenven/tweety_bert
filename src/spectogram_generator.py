@@ -111,10 +111,6 @@ class WavtoSpec:
             print(f"Error processing {file_path}: {e}")
             return None
 
-        finally:
-            plt.close('all')
-            gc.collect()
-
     def check_vocalization(self, file_name, data, samplerate, song_detection_json_path):
         if not self.use_json:
             return [(0, len(data)/samplerate)], {}  # Assume entire file is vocalization if not using JSON
