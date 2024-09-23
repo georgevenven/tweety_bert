@@ -408,6 +408,37 @@ class SpecGenerator:
 
         print(f"Generated {processed_specs} spectrograms.")
 
+    def plot_song_statistics(self, entropy, num_songs, phrase_duration, output_dir, file):
+        plt.figure(figsize=(20, 15))  # Adjusted figure size for better visibility
+
+        # Plot total song entropy
+        ax1 = plt.subplot(3, 1, 1)
+        ax1.plot(entropy, 'o-', label='Total Song Entropy')
+        ax1.plot(np.convolve(entropy, np.ones(10)/10, mode='valid'), 'r-', label='Smoothed Entropy')
+        ax1.set_title('Total Song Entropy', fontsize=16)
+        ax1.set_ylabel('Entropy', fontsize=14)
+        ax1.legend()
+
+        # Plot total number of songs sung
+        ax2 = plt.subplot(3, 1, 2)
+        ax2.plot(num_songs, 'o-', label='Total Number of Songs Sung')
+        ax2.plot(np.convolve(num_songs, np.ones(10)/10, mode='valid'), 'r-', label='Smoothed Number of Songs')
+        ax2.set_title('Total Number of Songs Sung', fontsize=16)
+        ax2.set_ylabel('Number of Songs', fontsize=14)
+        ax2.legend()
+
+        # Plot average phrase duration
+        ax3 = plt.subplot(3, 1, 3)
+        ax3.plot(phrase_duration, 'o-', label='Average Phrase Duration')
+        ax3.plot(np.convolve(phrase_duration, np.ones(10)/10, mode='valid'), 'r-', label='Smoothed Phrase Duration')
+        ax3.set_title('Average Phrase Duration', fontsize=16)
+        ax3.set_ylabel('Phrase Duration', fontsize=14)
+        ax3.legend()
+
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/{file}_song_statistics.png", dpi=300, bbox_inches='tight')
+        plt.close()
+
 class TweetyBertInference:
     def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False, dump_interval=1000):
         self.classifier = TweetyBertClassifier.load_decoder_state(classifier_path)
