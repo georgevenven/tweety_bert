@@ -44,7 +44,7 @@ class WavtoSpec:
     def process_file(instance, file_path):
         return instance.convert_to_spectrogram(file_path, song_detection_json_path=None, save_npz=False)
 
-    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=200, save_npz=True):
+    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=1000, save_npz=True):
         try:
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate

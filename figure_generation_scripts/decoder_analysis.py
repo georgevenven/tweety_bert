@@ -925,9 +925,17 @@ class StateSwitchingAnalysis:
 
 if __name__ == "__main__":
     csv_files_with_dates = [
-        ('5288_decoded.csv', '2024-04-08 00:00:00'),
-        ('5509_decoded.csv', '2024-05-01 00:00:00')
-        # Add more (csv_file_path, trial_date_str) tuples as needed
+        ('USA5468_RC3.csv', '2024-06-28 00:00:00'),
+        ('USA5347.csv', '2024-01-20 00:00:00'),
+        ('USA5337.csv', '2024-04-10 00:00:00'),
+        ('USA5336.csv', '2024-01-23 00:00:00'),
+        ('USA5505.csv', '2024-07-02 00:00:00'),
+        ('USA5326.csv', '2024-02-20 00:00:00'),
+        ('USA5325.csv', '2024-02-13 00:00:00'),
+        ('USA5443.csv', '2024-04-30 00:00:00'),
+        ('5371_decoded.csv', '2024-04-16 00:00:00'),
+        ('5509_decoded.csv', '2024-05-01 00:00:00'),
+        ('5288_decoded.csv', '2024-04-09 00:00:00')
     ]
     
     for csv_file_path, trial_date_str in csv_files_with_dates:
