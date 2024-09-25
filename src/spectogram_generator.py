@@ -14,6 +14,7 @@ import json
 import argparse
 from scipy.signal import ellip, filtfilt
 import time
+from multiprocessing import Pool
 
 
 class WavtoSpec:
@@ -32,13 +33,16 @@ class WavtoSpec:
 
         skipped_files_count = 0
 
-        for file_path in tqdm(audio_files, desc="Processing files"):
-            result = self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True)
-            if result is None:
-                skipped_files_count += 1
+        with Pool(processes=multiprocessing.cpu_count()) as pool:
+            results = list(tqdm(pool.imap(self.process_file_wrapper, audio_files), total=len(audio_files), desc="Processing files"))
+
+        skipped_files_count = sum(1 for result in results if result is None)
 
         print(f"Total files processed: {len(audio_files)}")
         print(f"Total files skipped due to no vocalization data: {skipped_files_count}")
+
+    def process_file_wrapper(self, file_path):
+        return self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True)
 
     @staticmethod
     def process_file(instance, file_path):
@@ -60,13 +64,13 @@ class WavtoSpec:
             file_name = os.path.basename(file_path)
 
             if self.use_json or song_detection_json_path is not None:
-                vocalization_data, phrase_labels = self.check_vocalization(file_name=file_name, data=data, samplerate=samplerate, song_detection_json_path=song_detection_json_path)
+                vocalization_data, syllable_labels = self.check_vocalization(file_name=file_name, data=data, samplerate=samplerate, song_detection_json_path=song_detection_json_path)
                 if not vocalization_data:
                     print("file skipped due to no vocalization")
                     return None
             else:
                 vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
-                phrase_labels = {}  # Empty dict if not using JSON
+                syllable_labels = {}  # Empty dict if not using JSON
 
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
             data = filtfilt(b, a, data)  # Apply high-pass filter
@@ -78,7 +82,8 @@ class WavtoSpec:
             Sxx_log = librosa.amplitude_to_db(np.abs(Sxx), ref=np.max)
 
             labels = np.zeros(Sxx.shape[1], dtype=int)
-            for label, intervals in phrase_labels.items():
+
+            for label, intervals in syllable_labels.items():
                 for start_sec, end_sec in intervals:
                     start_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, start_sec)
                     end_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, end_sec)
@@ -128,18 +133,13 @@ class WavtoSpec:
                         return None, None
                     
                     onsets_offsets = [(seg['onset_ms'] / 1000, seg['offset_ms'] / 1000) for seg in entry['segments']]
-                    
-                    # Process phrase labels
-                    phrase_labels = {}
-                    if 'phrase_label onset/offsets' in row and row['phrase_label onset/offsets']:
-                        try:
-                            phrase_data = json.loads(row['phrase_label onset/offsets'].replace("'", '"'))
-                            for label, intervals in phrase_data.items():
-                                phrase_labels[label] = intervals
-                        except json.JSONDecodeError:
-                            print(f"Error decoding JSON for {file_name}. Raw data: {row['phrase_label onset/offsets']}")
-                    
-                    return onsets_offsets, phrase_labels
+
+                    # Process syllable labels
+                    syllable_labels = {}
+                    if 'syllable_labels' in entry and entry['syllable_labels']:
+                        syllable_labels = entry['syllable_labels']
+
+                    return onsets_offsets, syllable_labels
 
         print(f"No matching entry found for {file_name} in {song_detection_json_path}.")
         return None, None
