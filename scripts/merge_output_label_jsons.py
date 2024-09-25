@@ -18,13 +18,13 @@ def merge_json_files(input_files, output_file):
 
 if __name__ == "__main__":
     # Specify the directory containing the JSON files
-    json_directory = 'path/to/json/files'
+    json_directory = '/media/george-vengrovski/flash-drive/jsons'
     
     # Get a list of all JSON files in the directory
     json_files = glob(os.path.join(json_directory, '*.json'))
     
     # Specify the output file
-    output_file = 'merged_output.json'
+    output_file = '/media/george-vengrovski/flash-drive/jsons/merged_output.json'
     
     # Merge the JSON files
     merge_json_files(json_files, output_file)
