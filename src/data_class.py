@@ -57,13 +57,14 @@ class SongDataSet_Image(Dataset):
             data = np.load(file_path, allow_pickle=True)
             file_name = os.path.basename(file_path)
             spectrogram = data['s']
-            
+                        
             # Skip files if the spectrogram length is less than min_length
             if spectrogram.shape[0] < self.min_length:
                 if self.infinite_loader:
                     return self.__getitem__(random.randint(0, len(self.file_paths) - 1))
                 else:
                     raise ValueError(f"Spectrogram length {spectrogram.shape[0]} is less than min_length {self.min_length}")
+
 
             spectrogram = spectrogram[20:216]
             # Calculate mean and standard deviation of the spectrogram
@@ -110,7 +111,7 @@ class SongDataSet_Image(Dataset):
                     ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), mode='constant', value=0)
                     # Pad vocalization: [timebins]
                     vocalization = F.pad(vocalization, (0, pad_amount), mode='constant', value=0)
-                    
+
             return spectrogram, ground_truth_labels, vocalization, file_name
 
         except Exception as e:
