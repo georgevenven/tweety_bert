@@ -33,16 +33,13 @@ class WavtoSpec:
 
         skipped_files_count = 0
 
-        with Pool(processes=multiprocessing.cpu_count()) as pool:
-            results = list(tqdm(pool.imap(self.process_file_wrapper, audio_files), total=len(audio_files), desc="Processing files"))
-
-        skipped_files_count = sum(1 for result in results if result is None)
+        for file_path in tqdm(audio_files, desc="Processing files"):
+            result = self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True)
+            if result is None:
+                skipped_files_count += 1
 
         print(f"Total files processed: {len(audio_files)}")
         print(f"Total files skipped due to no vocalization data: {skipped_files_count}")
-
-    def process_file_wrapper(self, file_path):
-        return self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True)
 
     @staticmethod
     def process_file(instance, file_path):
