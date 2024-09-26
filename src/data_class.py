@@ -76,6 +76,11 @@ class SongDataSet_Image(Dataset):
             ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.num_classes).float()
             vocalization = torch.from_numpy(vocalization).long()
 
+            # Shapes Here #
+            # spectogram: torch.Size([timebins, freqbins])
+            # ground_truth_labels: torch.Size([timebins, classes])
+            # vocalization: torch.Size([timebins])
+
             if self.segment_length is not None:
                 # Truncate if larger than context window
                 if spectogram.shape[0] > self.segment_length:
@@ -87,12 +92,26 @@ class SongDataSet_Image(Dataset):
                     ground_truth_labels = ground_truth_labels[start:end]
                     vocalization = vocalization[start:end]
 
-                # Pad with 0s if shorter
-                if spectogram.shape[0] < self.segment_length:
-                    pad_amount = self.segment_length - spectogram.shape[0]
-                    spectogram = F.pad(spectogram, (0, 0, 0, pad_amount), 'constant', 0)
-                    ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), 'constant', 0)
-                    vocalization = F.pad(vocalization, (0, pad_amount), 'constant', 0)
+                elif spectrogram.shape[0] < segment_length:
+                    pad_amount = segment_length - spectrogram.shape[0]
+
+                    # Debugging print statements
+                    print(f"Padding required: {pad_amount}")
+                    print(f"Original spectrogram shape: {spectrogram.shape}")
+                    print(f"Original ground_truth_labels shape: {ground_truth_labels.shape}")
+                    print(f"Original vocalization shape: {vocalization.shape}")
+
+                    # Pad spectrogram: [timebins, freqbins]
+                    spectrogram = F.pad(spectrogram, (0, 0, 0, pad_amount), mode='constant', value=0)
+                    print(f"Padded spectrogram shape: {spectrogram.shape}")
+
+                    # Pad ground_truth_labels: [timebins, classes]
+                    ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), mode='constant', value=0)
+                    print(f"Padded ground_truth_labels shape: {ground_truth_labels.shape}")
+
+                    # Pad vocalization: [timebins]
+                    vocalization = F.pad(vocalization, (0, pad_amount), mode='constant', value=0)
+                    print(f"Padded vocalization shape: {vocalization.shape}")
 
             return spectogram, ground_truth_labels, vocalization, file_name
 
