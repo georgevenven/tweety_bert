@@ -9,7 +9,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import random
 import logging
 
-def deterimine_number_unique_classes(dir):
+def determine_number_unique_classes(dir):
     unique_labels = set()
 
     for file in os.listdir(dir):
@@ -23,12 +23,13 @@ def deterimine_number_unique_classes(dir):
     
 
 class SongDataSet_Image(Dataset):
-    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False):
+    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False, min_length=100):
         self.file_paths = [os.path.join(file_dir, file) for file in os.listdir(file_dir)]
         self.num_classes = num_classes
         self.infinite_loader = infinite_loader
         self.segment_length = segment_length
         self.pitch_shift = pitch_shift
+        self.min_length = min_length  # Add min_length parameter
 
     def apply_pitch_shift(self, spectrogram):
         # Shift the pitch of the spectrogram according to a normal distribution
@@ -55,65 +56,62 @@ class SongDataSet_Image(Dataset):
             # Load data and preprocess
             data = np.load(file_path, allow_pickle=True)
             file_name = os.path.basename(file_path)
-            spectogram = data['s']
+            spectrogram = data['s']
             
-            spectogram = spectogram[20:216]
+            # Skip files if the spectrogram length is less than min_length
+            if spectrogram.shape[0] < self.min_length:
+                if self.infinite_loader:
+                    return self.__getitem__(random.randint(0, len(self.file_paths) - 1))
+                else:
+                    raise ValueError(f"Spectrogram length {spectrogram.shape[0]} is less than min_length {self.min_length}")
+
+            spectrogram = spectrogram[20:216]
             # Calculate mean and standard deviation of the spectrogram
-            spec_mean = np.mean(spectogram)
-            spec_std = np.std(spectogram) + 1e-8  # Add epsilon to avoid division by zero
+            spec_mean = np.mean(spectrogram)
+            spec_std = np.std(spectrogram) + 1e-8  # Add epsilon to avoid division by zero
             # Z-score the spectrogram
-            spectogram = (spectogram - spec_mean) / spec_std
+            spectrogram = (spectrogram - spec_mean) / spec_std
 
             if self.pitch_shift:
-                spectogram = self.apply_pitch_shift(spectogram)
+                spectrogram = self.apply_pitch_shift(spectrogram)
 
             # Process labels
             ground_truth_labels = np.array(data['labels'], dtype=int)
             vocalization = np.array(data['vocalization'], dtype=int)
             
             ground_truth_labels = torch.from_numpy(ground_truth_labels).long().squeeze(0)
-            spectogram = torch.from_numpy(spectogram).float().permute(1, 0)
+            spectrogram = torch.from_numpy(spectrogram).float().permute(1, 0)
             ground_truth_labels = F.one_hot(ground_truth_labels, num_classes=self.num_classes).float()
             vocalization = torch.from_numpy(vocalization).long()
 
             # Shapes Here #
-            # spectogram: torch.Size([timebins, freqbins])
+            # spectrogram: torch.Size([timebins, freqbins])
             # ground_truth_labels: torch.Size([timebins, classes])
             # vocalization: torch.Size([timebins])
 
             if self.segment_length is not None:
                 # Truncate if larger than context window
-                if spectogram.shape[0] > self.segment_length:
-                    starting_points_range = spectogram.shape[0] - self.segment_length        
+                if spectrogram.shape[0] > self.segment_length:
+                    starting_points_range = spectrogram.shape[0] - self.segment_length        
                     start = torch.randint(0, starting_points_range, (1,)).item()  
                     end = start + self.segment_length     
 
-                    spectogram = spectogram[start:end]
+                    spectrogram = spectrogram[start:end]
                     ground_truth_labels = ground_truth_labels[start:end]
                     vocalization = vocalization[start:end]
 
-                elif spectrogram.shape[0] < segment_length:
-                    pad_amount = segment_length - spectrogram.shape[0]
-
-                    # Debugging print statements
-                    print(f"Padding required: {pad_amount}")
-                    print(f"Original spectrogram shape: {spectrogram.shape}")
-                    print(f"Original ground_truth_labels shape: {ground_truth_labels.shape}")
-                    print(f"Original vocalization shape: {vocalization.shape}")
+                elif spectrogram.shape[0] < self.segment_length:
+                    pad_amount = self.segment_length - spectrogram.shape[0]
 
                     # Pad spectrogram: [timebins, freqbins]
                     spectrogram = F.pad(spectrogram, (0, 0, 0, pad_amount), mode='constant', value=0)
-                    print(f"Padded spectrogram shape: {spectrogram.shape}")
 
                     # Pad ground_truth_labels: [timebins, classes]
                     ground_truth_labels = F.pad(ground_truth_labels, (0, 0, 0, pad_amount), mode='constant', value=0)
-                    print(f"Padded ground_truth_labels shape: {ground_truth_labels.shape}")
-
                     # Pad vocalization: [timebins]
                     vocalization = F.pad(vocalization, (0, pad_amount), mode='constant', value=0)
-                    print(f"Padded vocalization shape: {vocalization.shape}")
-
-            return spectogram, ground_truth_labels, vocalization, file_name
+                    
+            return spectrogram, ground_truth_labels, vocalization, file_name
 
         except Exception as e:
             print(f"Error loading file {file_path}: {str(e)}")
