@@ -14,8 +14,7 @@ import json
 import argparse
 from scipy.signal import ellip, filtfilt
 import time
-from multiprocessing import Pool
-
+from multiprocessing import Pool, Queue, Process
 
 class WavtoSpec:
     def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024):
@@ -33,10 +32,19 @@ class WavtoSpec:
 
         skipped_files_count = 0
 
+        # Create a queue and a separate process for writing to disk
+        queue = Queue()
+        writer_process = Process(target=self.write_to_disk, args=(queue,))
+        writer_process.start()
+
         for file_path in tqdm(audio_files, desc="Processing files"):
-            result = self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True)
+            result = self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True, queue=queue)
             if result is None:
                 skipped_files_count += 1
+
+        # Signal the writer process to stop
+        queue.put(None)
+        writer_process.join()
 
         print(f"Total files processed: {len(audio_files)}")
         print(f"Total files skipped due to no vocalization data: {skipped_files_count}")
@@ -45,7 +53,7 @@ class WavtoSpec:
     def process_file(instance, file_path):
         return instance.convert_to_spectrogram(file_path, song_detection_json_path=None, save_npz=False)
 
-    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=1000, save_npz=True):
+    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=1000, save_npz=True, queue=None):
         try:
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate
@@ -98,11 +106,8 @@ class WavtoSpec:
                     if save_npz:
                         spec_filename = os.path.splitext(os.path.basename(file_path))[0]
                         segment_spec_file_path = os.path.join(self.dst_dir, f"{spec_filename}_segment_{i}.npz")
-                        np.savez(segment_spec_file_path, 
-                                            s=segment_Sxx_log, 
-                                            vocalization=segment_vocalization, 
-                                            labels=segment_labels)
-                        print(f"Segment {i} spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+                        queue.put((segment_spec_file_path, segment_Sxx_log, segment_vocalization, segment_labels))
+                        print(f"Segment {i} spectrogram, vocalization data, and labels queued for saving to {segment_spec_file_path}")
 
                 return Sxx_log, vocalization_data, labels
             else:
@@ -140,6 +145,19 @@ class WavtoSpec:
 
         print(f"No matching entry found for {file_name} in {song_detection_json_path}.")
         return None, None
+
+    @staticmethod
+    def write_to_disk(queue):
+        while True:
+            item = queue.get()
+            if item is None:
+                break
+            segment_spec_file_path, segment_Sxx_log, segment_vocalization, segment_labels = item
+            np.savez(segment_spec_file_path, 
+                     s=segment_Sxx_log, 
+                     vocalization=segment_vocalization, 
+                     labels=segment_labels)
+            print(f"Segment spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Convert WAV files to spectrograms.")
