@@ -14,7 +14,7 @@ import json
 import argparse
 from scipy.signal import ellip, filtfilt
 import time
-from multiprocessing import Pool, Queue, Process
+from multiprocessing import Pool, Manager, Queue
 
 class WavtoSpec:
     def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024):
@@ -30,28 +30,48 @@ class WavtoSpec:
                        for root, dirs, files in os.walk(self.src_dir)
                        for file in files if file.lower().endswith('.wav')]
 
-        skipped_files_count = 0
+        skipped_files_count = multiprocessing.Value('i', 0)
 
-        # Create a queue and a separate process for writing to disk
-        queue = Queue()
-        writer_process = Process(target=self.write_to_disk, args=(queue,))
-        writer_process.start()
+        with Manager() as manager:
+            queue = manager.Queue(maxsize=10)  # Bounded queue to prevent overload
+            pool = Pool(processes=multiprocessing.cpu_count())
 
-        for file_path in tqdm(audio_files, desc="Processing files"):
-            result = self.convert_to_spectrogram(file_path, song_detection_json_path=self.song_detection_json_path, save_npz=True, queue=queue)
-            if result is None:
-                skipped_files_count += 1
+            # Start the writer process
+            writer_process = pool.apply_async(self.write_to_disk, (queue,))
 
-        # Signal the writer process to stop
-        queue.put(None)
-        writer_process.join()
+            # Process files in parallel
+            results = []
+            for file_path in audio_files:
+                while not self.has_sufficient_memory():
+                    time.sleep(1)  # Wait for memory to be available
+                results.append(pool.apply_async(self.process_file, (self, file_path, queue, skipped_files_count)))
+
+            # Wait for all processes to finish
+            for result in results:
+                try:
+                    result.get()
+                except Exception as e:
+                    print(f"Error in processing file: {e}")
+
+            # Signal the writer process to stop
+            queue.put(None)
+            writer_process.get()
+
+            pool.close()
+            pool.join()
 
         print(f"Total files processed: {len(audio_files)}")
-        print(f"Total files skipped due to no vocalization data: {skipped_files_count}")
+        print(f"Total files skipped due to no vocalization data: {skipped_files_count.value}")
 
     @staticmethod
-    def process_file(instance, file_path):
-        return instance.convert_to_spectrogram(file_path, song_detection_json_path=None, save_npz=False)
+    def process_file(instance, file_path, queue, skipped_files_count):
+        try:
+            result = instance.convert_to_spectrogram(file_path, song_detection_json_path=instance.song_detection_json_path, save_npz=True, queue=queue)
+            if result is None:
+                with skipped_files_count.get_lock():
+                    skipped_files_count.value += 1
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
 
     def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=1000, save_npz=True, queue=None):
         try:
@@ -153,11 +173,19 @@ class WavtoSpec:
             if item is None:
                 break
             segment_spec_file_path, segment_Sxx_log, segment_vocalization, segment_labels = item
-            np.savez(segment_spec_file_path, 
-                     s=segment_Sxx_log, 
-                     vocalization=segment_vocalization, 
-                     labels=segment_labels)
-            print(f"Segment spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+            try:
+                np.savez(segment_spec_file_path, 
+                         s=segment_Sxx_log, 
+                         vocalization=segment_vocalization, 
+                         labels=segment_labels)
+                print(f"Segment spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+            except Exception as e:
+                print(f"Error writing to disk: {e}")
+
+    @staticmethod
+    def has_sufficient_memory(threshold=500):  # Threshold in MB
+        available_memory = psutil.virtual_memory().available / (1024 * 1024)  # Convert to MB
+        return available_memory > threshold
 
 def main():
     parser = argparse.ArgumentParser(description="Convert WAV files to spectrograms.")
