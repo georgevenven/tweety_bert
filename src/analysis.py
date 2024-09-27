@@ -338,7 +338,7 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     plt.savefig(save_name + "_ground_truth.png")
 
     np.savez(
-        f"files/labels_{save_name}", 
+        f"files/{save_name}", 
         embedding_outputs=embedding_outputs, 
         hdbscan_labels=hdbscan_labels, 
         ground_truth_labels=ground_truth_labels, 

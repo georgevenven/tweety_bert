@@ -17,32 +17,32 @@ import time
 from multiprocessing import Pool, TimeoutError
 
 class WavtoSpec:
-    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024):
+    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=0):
         self.src_dir = src_dir
         self.dst_dir = dst_dir
         self.song_detection_json_path = song_detection_json_path
         self.use_json = song_detection_json_path is not None
         self.step_size = step_size
         self.nfft = nfft
-
-    @staticmethod
-    def safe_process_file(instance, file_path):
-        try:
-            instance.multiprocess_process_file(file_path)
-        except Exception as e:
-            print(f"Error processing {file_path}: {e}")
-            return None
-        return file_path
+        self.generate_random_files_number = generate_random_files_number
 
     def process_directory(self):
         audio_files = [os.path.join(root, file)
                     for root, dirs, files in os.walk(self.src_dir)
                     for file in files if file.lower().endswith('.wav')]
 
+        # Filter out files that will be skipped due to empty song detection
+        if self.use_json:
+            audio_files = [file for file in audio_files if self.has_vocalization(file)]
+
+        if self.generate_random_files_number > 0:
+            audio_files = np.random.choice(audio_files, self.generate_random_files_number, replace=False)
+
         max_processes = multiprocessing.cpu_count()
 
         manager = multiprocessing.Manager()
         skipped_files_count = manager.Value('i', 0)
+        failed_files = manager.list()
 
         pbar = tqdm(total=len(audio_files), desc="Processing files")
 
@@ -52,6 +52,10 @@ class WavtoSpec:
         def error_callback(e):
             print(f"Error: {e}")
             skipped_files_count.value += 1
+            pbar.update()
+
+        def file_failed_callback(file_path):
+            failed_files.append(file_path)
             pbar.update()
 
         with Pool(processes=max_processes) as pool:
@@ -68,7 +72,7 @@ class WavtoSpec:
                     WavtoSpec.safe_process_file,
                     args=(self, file_path),
                     callback=update_progress_bar,
-                    error_callback=error_callback
+                    error_callback=lambda e, fp=file_path: file_failed_callback(fp)
                 )
 
             pool.close()
@@ -76,9 +80,44 @@ class WavtoSpec:
 
         pbar.close()
 
-        print(f"Total files processed: {len(audio_files)}")
+        print(f"Total files processed: {len(audio_files) - len(failed_files)}")
         print(f"Total files skipped due to errors or no vocalization data: {skipped_files_count.value}")
 
+        # Retry failed files
+        if failed_files:
+            print(f"Retrying {len(failed_files)} failed files...")
+            pbar = tqdm(total=len(failed_files), desc="Retrying failed files")
+            with Pool(processes=max_processes) as pool:
+                for file_path in failed_files: 
+                    pool.apply_async(
+                        WavtoSpec.safe_process_file,
+                        args=(self, file_path),
+                        callback=update_progress_bar,
+                        error_callback=error_callback
+                    )
+
+                pool.close()
+                pool.join()
+            pbar.close()
+
+    def has_vocalization(self, file_path):
+        file_name = os.path.basename(file_path)
+        vocalization_data, _ = self.check_vocalization(
+            file_name=file_name,
+            data=None,
+            samplerate=None,
+            song_detection_json_path=self.song_detection_json_path
+        )
+        return vocalization_data is not None
+
+    @staticmethod
+    def safe_process_file(instance, file_path):
+        try:
+            instance.multiprocess_process_file(file_path)
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
+            return None
+        return file_path
 
     def multiprocess_process_file(self, file_path):
         return self.convert_to_spectrogram(
@@ -199,10 +238,11 @@ def main():
     parser.add_argument('--song_detection_json_path', type=str, default=None, help='Path to the JSON file with song detection data.')
     parser.add_argument('--step_size', type=int, default=119, help='Step size for the spectrogram.')
     parser.add_argument('--nfft', type=int, default=1024, help='Number of FFT points for the spectrogram.')
+    parser.add_argument('--generate_random_files_number', type=int, default=0, help='Number of random files to process.')
 
     args = parser.parse_args()
 
-    wav_to_spec = WavtoSpec(args.src_dir, args.dst_dir, args.song_detection_json_path, args.step_size, args.nfft)
+    wav_to_spec = WavtoSpec(args.src_dir, args.dst_dir, args.song_detection_json_path, args.step_size, args.nfft, args.generate_random_files_number)
     wav_to_spec.process_directory()
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 INPUT_DIR="/home/george-vengrovski/Documents/data"
 SONG_DETECTION_JSON_PATH="/media/george-vengrovski/flash-drive/jsons/merged_output.json"
 TEST_PERCENTAGE=20
+EXPERIMENT_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
 
 # Call the Python script and capture the output
 output=$(python3 scripts/seperate_bird_ids_into_train_and_test_for_pretrain.py "$INPUT_DIR" "$TEST_PERCENTAGE")
@@ -45,4 +46,4 @@ for dir in $test_dirs; do
     python3 src/spectogram_generator.py --src_dir "$dir" --dst_dir "$TEST_DIR" --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
 done
 
-python3 src/TweetyBERT.py --experiment_name "TweetyBERT_Pretrain_LLB_AreaX_FallSong" --train_dir "$TRAIN_DIR" --test_dir "$TEST_DIR"
+python3 src/TweetyBERT.py --experiment_name "$EXPERIMENT_NAME" --train_dir "$TRAIN_DIR" --test_dir "$TEST_DIR"
