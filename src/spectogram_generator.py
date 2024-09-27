@@ -17,7 +17,7 @@ import time
 from multiprocessing import Pool, TimeoutError
 
 class WavtoSpec:
-    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=0):
+    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=None):
         self.src_dir = src_dir
         self.dst_dir = dst_dir
         self.song_detection_json_path = song_detection_json_path
@@ -27,18 +27,19 @@ class WavtoSpec:
         self.generate_random_files_number = generate_random_files_number
 
     def process_directory(self):
+        print("Starting process_directory")
         audio_files = [os.path.join(root, file)
                     for root, dirs, files in os.walk(self.src_dir)
                     for file in files if file.lower().endswith('.wav')]
+        print(f"Found {len(audio_files)} audio files")
 
-        # Filter out files that will be skipped due to empty song detection
-        if self.use_json:
-            audio_files = [file for file in audio_files if self.has_vocalization(file)]
-
-        if self.generate_random_files_number > 0:
+        if self.generate_random_files_number is not None:
+            print(f"Selecting {self.generate_random_files_number} random files")
             audio_files = np.random.choice(audio_files, self.generate_random_files_number, replace=False)
+            print(f"{len(audio_files)} random files selected")
 
         max_processes = multiprocessing.cpu_count()
+        print(f"Using {max_processes} processes")
 
         manager = multiprocessing.Manager()
         skipped_files_count = manager.Value('i', 0)
@@ -55,6 +56,7 @@ class WavtoSpec:
             pbar.update()
 
         def file_failed_callback(file_path):
+            print(f"File failed: {file_path}")
             failed_files.append(file_path)
             pbar.update()
 
@@ -68,6 +70,7 @@ class WavtoSpec:
                     print("Not enough memory to spawn new process, waiting...")
                     time.sleep(1)
                 
+                print(f"Processing file: {file_path}")
                 pool.apply_async(
                     WavtoSpec.safe_process_file,
                     args=(self, file_path),
@@ -89,6 +92,7 @@ class WavtoSpec:
             pbar = tqdm(total=len(failed_files), desc="Retrying failed files")
             with Pool(processes=max_processes) as pool:
                 for file_path in failed_files: 
+                    print(f"Retrying file: {file_path}")
                     pool.apply_async(
                         WavtoSpec.safe_process_file,
                         args=(self, file_path),
@@ -113,7 +117,11 @@ class WavtoSpec:
     @staticmethod
     def safe_process_file(instance, file_path):
         try:
-            instance.multiprocess_process_file(file_path)
+            if instance.has_vocalization(file_path):
+                instance.multiprocess_process_file(file_path)
+            else:
+                print(f"File {file_path} skipped due to no vocalization")
+                return None
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
             return None
@@ -238,7 +246,7 @@ def main():
     parser.add_argument('--song_detection_json_path', type=str, default=None, help='Path to the JSON file with song detection data.')
     parser.add_argument('--step_size', type=int, default=119, help='Step size for the spectrogram.')
     parser.add_argument('--nfft', type=int, default=1024, help='Number of FFT points for the spectrogram.')
-    parser.add_argument('--generate_random_files_number', type=int, default=0, help='Number of random files to process.')
+    parser.add_argument('--generate_random_files_number', type=int, default=None, help='Number of random files to process.')
 
     args = parser.parse_args()
 

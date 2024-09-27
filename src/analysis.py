@@ -310,6 +310,10 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
 
     # So that silences is black for HDBSCAN Plot
     # Save HDBSCAN labels plot
+    img_dir = "imgs/umap_plots"
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+
     fig_hdbscan, ax_hdbscan = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
     scatter_hdbscan = ax_hdbscan.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=70, alpha=.1, cmap=cmap_hdbscan)
     ax_hdbscan.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
@@ -321,7 +325,7 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         spine.set_linewidth(2)
     ax_hdbscan.set_title("HDBSCAN Discovered Labels", fontsize=48)
     plt.tight_layout()
-    plt.savefig(save_name + "_hdbscan.png")
+    plt.savefig(os.path.join(img_dir, save_name + "_hdbscan.png"))
 
     # Save ground truth labels plot
     fig_ground_truth, ax_ground_truth = plt.subplots(figsize=(16, 16), edgecolor='black', linewidth=2)
@@ -335,7 +339,7 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         spine.set_linewidth(2)
     ax_ground_truth.set_title("Ground Truth Labels", fontsize=48)
     plt.tight_layout()
-    plt.savefig(save_name + "_ground_truth.png")
+    plt.savefig(os.path.join(img_dir, save_name + "_ground_truth.png"))
 
     np.savez(
         f"files/{save_name}", 
