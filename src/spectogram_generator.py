@@ -205,11 +205,11 @@ class WavtoSpec:
                 return Sxx_log, vocalization_data, labels
             else:
                 print(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
-                return None
+                return None, None, None
 
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
-            return None
+            return None, None, None
 
     def check_vocalization(self, file_name, data, samplerate, song_detection_json_path):
         if not self.use_json:
