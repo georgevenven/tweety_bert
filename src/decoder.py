@@ -32,6 +32,11 @@ class TweetyBertClassifier:
         self.data_file = None
         self.context_length = context_length
 
+        # Delete existing decoder directory if it exists
+        if os.path.exists(linear_decoder_dir):
+            shutil.rmtree(linear_decoder_dir)
+        os.makedirs(linear_decoder_dir)
+
     @classmethod
     def load_decoder_state(cls, linear_decoder_dir):
         save_dir = os.path.join(linear_decoder_dir, "decoder_state")

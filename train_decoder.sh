@@ -30,8 +30,8 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --save_name "$BIRD_NAME" \
     --samples 1000000
 
-# delete UMAP files
-rm -rf "$UMAP_FILES"
-
 # Train and save Decoder 
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"
+
+# delete UMAP files
+rm -rf "$UMAP_FILES"
