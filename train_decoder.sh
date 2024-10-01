@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # variable for model name 
-BIRD_NAME="test"
-MODEL_NAME="LLB16_Whisperseg_NoNormNoThresholding"
-WAV_FOLDER="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_songs"
-SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_net_song_detector/output/onset_offset_results.json"
+BIRD_NAME="llb3"
+MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
+WAV_FOLDER="/home/george-vengrovski/Documents/data/llb3_songs/songs"
+SONG_DETECTION_JSON_PATH="/media/george-vengrovski/flash-drive/jsons/merged_output.json"
 
 # generate spectrograms for UMAP
 TEMP_DIR="./temp"
@@ -28,10 +28,10 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "$UMAP_FILES" \
     --save_name "$BIRD_NAME" \
-    --samples 5000
+    --samples 1000000
 
 # delete UMAP files
-rm -rf "$TEMP_DIR/$UMAP_FILES"
+rm -rf "$UMAP_FILES"
 
 # Train and save Decoder 
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"

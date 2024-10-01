@@ -12,12 +12,16 @@ import pandas as pd
 
 
 class StateSwitchingAnalysis:
-    def __init__(self, csv_file, visualize=False, trial_date_str="2024-04-09 00:00:00"):
+    def __init__(self, json_file, visualize=False, trial_date_str="2024-04-09 00:00:00"):
         self.trial_date_str = trial_date_str
-        # Read the CSV file
-        print(f"Reading CSV file: {csv_file}")
-        data = pd.read_csv(csv_file)
-        print(f"Total rows in CSV: {len(data)}")
+        # Read the JSON file
+        print(f"Reading JSON file: {json_file}")
+        with open(json_file, 'r') as f:
+            data = json.load(f)['results']
+        print(f"Total songs in JSON: {len(data)}")
+        
+        # Convert to DataFrame
+        data = pd.DataFrame(data)
         
         # Apply the parsing function to the relevant columns
         print("Parsing 'syllable_onsets_offsets_ms' and 'syllable_onsets_offsets_timebins' columns...")
@@ -61,8 +65,8 @@ class StateSwitchingAnalysis:
         
         # Set up results directory before any methods that use it
         base_results_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'results')
-        csv_base_name = os.path.splitext(os.path.basename(csv_file))[0]
-        self.results_dir = os.path.join(base_results_dir, f'decoder_analysis_{csv_base_name}')
+        json_base_name = os.path.splitext(os.path.basename(json_file))[0]
+        self.results_dir = os.path.join(base_results_dir, f'decoder_analysis_{json_base_name}')
         os.makedirs(self.results_dir, exist_ok=True)
         print(f"Results directory set at: {self.results_dir}")
         
@@ -71,8 +75,8 @@ class StateSwitchingAnalysis:
         os.makedirs(self.img_dir, exist_ok=True)  # Create the directory if it doesn't exist
         print(f"Image directory set at: {self.img_dir}")
         
-        # Extract the base name from the CSV file path
-        self.base_name = csv_base_name
+        # Extract the base name from the JSON file path
+        self.base_name = json_base_name
         print(f"Base name extracted: {self.base_name}")
         
         # Create the song database
@@ -103,6 +107,9 @@ class StateSwitchingAnalysis:
         Safely parse a string representation of a JSON object.
         Handles extra quotes and converts single quotes to double quotes.
         """
+        if isinstance(s, dict):
+            return s  # If it's already a dictionary, return it as is
+        
         if pd.isna(s):
             return {}
         
@@ -924,22 +931,13 @@ class StateSwitchingAnalysis:
 # such as a Python script, not in interactive environments like Jupyter notebooks.
 
 if __name__ == "__main__":
-    csv_files_with_dates = [
-        ('USA5468_RC3.csv', '2024-06-28 00:00:00'),
-        ('USA5347.csv', '2024-01-20 00:00:00'),
-        ('USA5337.csv', '2024-04-10 00:00:00'),
-        ('USA5336.csv', '2024-01-23 00:00:00'),
-        ('USA5505.csv', '2024-07-02 00:00:00'),
-        ('USA5326.csv', '2024-02-20 00:00:00'),
-        ('USA5325.csv', '2024-02-13 00:00:00'),
-        ('USA5443.csv', '2024-04-30 00:00:00'),
-        ('5371_decoded.csv', '2024-04-16 00:00:00'),
-        ('5509_decoded.csv', '2024-05-01 00:00:00'),
-        ('5288_decoded.csv', '2024-04-09 00:00:00')
+    json_files_with_dates = [
+        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5271_decoded.json', '2024-03-07 00:00:00'),
+        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5283_decoded.json', '2024-03-05 00:00:00')
     ]
     
-    for csv_file_path, trial_date_str in csv_files_with_dates:
-        analysis = StateSwitchingAnalysis(csv_file_path, visualize=True, trial_date_str=trial_date_str)
+    for json_file_path, trial_date_str in json_files_with_dates:
+        analysis = StateSwitchingAnalysis(json_file_path, visualize=True, trial_date_str=trial_date_str)
         
         # Calculate transition matrices for both groups
         for group in ['before_trial', 'after_trial']:
