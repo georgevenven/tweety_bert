@@ -138,6 +138,10 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         try:
             # Retrieve the next batch
             data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
+            
+            # Skip if all ground truth labels are equal to zero
+            if torch.all(ground_truth_label == 0):
+                continue
 
             num_classes = ground_truth_label.shape[-1]
             original_data_length = data.shape[1]

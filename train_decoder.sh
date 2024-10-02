@@ -28,7 +28,7 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "$UMAP_FILES" \
     --save_name "$BIRD_NAME" \
-    --samples 10000
+    --samples 1000
 
 # Train and save Decoder 
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"

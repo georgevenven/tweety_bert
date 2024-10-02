@@ -33,6 +33,11 @@ class WavtoSpec:
                     for file in files if file.lower().endswith('.wav')]
         print(f"Found {len(audio_files)} audio files")
 
+        # If more random files are requested than available, process all files
+        if self.generate_random_files_number is not None and self.generate_random_files_number > len(audio_files):
+            print(f"Requested {self.generate_random_files_number} random files, but only {len(audio_files)} available. Processing all files.")
+            self.generate_random_files_number = None
+
         if self.generate_random_files_number is not None:
             print(f"Selecting {self.generate_random_files_number} random files")
             audio_files = np.random.choice(audio_files, self.generate_random_files_number, replace=False)
