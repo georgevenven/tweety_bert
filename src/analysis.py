@@ -173,7 +173,6 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
             else:
                 continue
 
-
         except StopIteration:
             # if test set is exhausted, print the number of samples collected and stop the collection process
             print(f"samples collected {len(ground_truth_labels_arr) * context}")
@@ -216,7 +215,6 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         ground_truth_label = ground_truth_label[:original_label_length]  # Remove padding from labels
         vocalization = vocalization[:original_data_length]
 
-
         ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
 
         file_indices = np.array(ground_truth_label)
@@ -247,13 +245,17 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     else:
         predictions = spec_arr
 
+    # Check if there are enough samples
+    if len(predictions) < samples:
+        print("Error: Not enough data to meet the specified sample size.")
+        return
+
     # Filter for vocalization before any processing or visualization
     if remove_non_vocalization:
         print(f"vocalization arr shape {vocalization_arr.shape}")
         print(f"predictions arr shape {predictions.shape}")
         print(f"ground truth labels arr shape {ground_truth_labels.shape}")
         print(f"spec arr shape {spec_arr.shape}")
-
 
         vocalization_indices = np.where(vocalization_arr == 1)[0]
         predictions = predictions[vocalization_indices]
@@ -276,7 +278,6 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     # Fit the UMAP reducer       
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
     reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
-
 
     embedding_outputs = reducer.fit_transform(predictions)
     embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)

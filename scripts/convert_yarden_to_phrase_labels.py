@@ -1,21 +1,23 @@
 import csv
 import json
 
-def process_files(source_file, json_file):
-    # Read the source file
+def process_files(source_files, json_file):
     source_data = {}
-    with open(source_file, 'r') as f:
-        reader = csv.DictReader(f, delimiter=',')
-        for row in reader:
-            audio_file = row['audio_file']
-            label = row['label']
-            onset = float(row['onset_s'])
-            offset = float(row['offset_s'])
-            if audio_file not in source_data:
-                source_data[audio_file] = {}
-            if label not in source_data[audio_file]:
-                source_data[audio_file][label] = []
-            source_data[audio_file][label].append((onset, offset))
+
+    # Read each source file
+    for source_file in source_files:
+        with open(source_file, 'r') as f:
+            reader = csv.DictReader(f, delimiter=',')
+            for row in reader:
+                audio_file = row['audio_file']
+                label = row['label']
+                onset = float(row['onset_s'])
+                offset = float(row['offset_s'])
+                if audio_file not in source_data:
+                    source_data[audio_file] = {}
+                if label not in source_data[audio_file]:
+                    source_data[audio_file][label] = []
+                source_data[audio_file][label].append((onset, offset))
 
     # Process the data to make it contiguous
     for audio_file in source_data:
@@ -45,7 +47,11 @@ def process_files(source_file, json_file):
         json.dump(json_data, f, indent=4)
 
 # Usage
-source_file = '/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_annot.csv'
-json_file = '/home/george-vengrovski/Documents/projects/tweety_net_song_detector/output/onset_offset_results.json'
+source_files = [
+    '/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_annot.csv',
+    '/media/george-vengrovski/disk2/canary/yarden_data/llb11_data/llb11_annot.csv',
+    '/media/george-vengrovski/disk2/canary/yarden_data/llb16_data/llb16_annot.csv',
+]
+json_file = '/home/george-vengrovski/Documents/projects/tweety_bert_paper/merged_output.json'
 
-process_files(source_file=source_file, json_file=json_file)
+process_files(source_files=source_files, json_file=json_file)
