@@ -387,16 +387,13 @@ def plot_umap_projection_two_datasets(
     data_dirs = [data_dir1, data_dir2]
     dataset_labels = [0, 1]  # 0 for data_dir1 (red), 1 for data_dir2 (blue)
 
-    # Divide samples equally between datasets
-    samples_per_dataset = samples // 2
-
     for data_dir, dataset_label in zip(data_dirs, dataset_labels):
         data_loader = load_data(data_dir=data_dir, context=context)
         data_loader_iter = iter(data_loader)
 
         samples_collected = 0  # Samples collected from this dataset
 
-        while True:
+        while samples_collected < samples:
             try:
                 # Retrieve the next batch
                 data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
@@ -491,9 +488,6 @@ def plot_umap_projection_two_datasets(
                 samples_collected += spec.shape[0]
                 total_samples += spec.shape[0]
 
-                if samples_collected >= samples_per_dataset:
-                    break
-
             except StopIteration:
                 # If dataset is exhausted, print the number of samples collected and stop the collection process
                 print(f"Samples collected from dataset {data_dir}: {samples_collected}")
@@ -526,15 +520,15 @@ def plot_umap_projection_two_datasets(
 
     # Limit total samples if necessary
     total_samples_collected = len(predictions)
-    if samples > total_samples_collected:
-        samples = total_samples_collected
+    if samples * 2 > total_samples_collected:
+        samples = total_samples_collected // 2
     else:
-        predictions = predictions[:samples]
-        ground_truth_labels = ground_truth_labels[:samples]
-        spec_arr = spec_arr[:samples]
-        file_indices = file_indices[:samples]
-        vocalization_arr = vocalization_arr[:samples]
-        dataset_source_arr = dataset_source_arr[:samples]
+        predictions = predictions[:samples * 2]
+        ground_truth_labels = ground_truth_labels[:samples * 2]
+        spec_arr = spec_arr[:samples * 2]
+        file_indices = file_indices[:samples * 2]
+        vocalization_arr = vocalization_arr[:samples * 2]
+        dataset_source_arr = dataset_source_arr[:samples * 2]
 
     print(f"shape of array for UMAP {predictions.shape}")
 
