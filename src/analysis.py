@@ -388,7 +388,7 @@ def plot_umap_projection_two_datasets(
     dataset_labels = [0, 1]  # 0 for data_dir1 (red), 1 for data_dir2 (blue)
 
     # Divide samples equally between datasets
-    samples_per_dataset = samples 
+    samples_per_dataset = samples // 2
 
     for data_dir, dataset_label in zip(data_dirs, dataset_labels):
         data_loader = load_data(data_dir=data_dir, context=context)
@@ -561,6 +561,17 @@ def plot_umap_projection_two_datasets(
     plt.tight_layout()
     plt.savefig(os.path.join(img_dir, save_name + "_two_datasets.png"))
 
+    # Plot UMAP embeddings for each dataset individually
+    for dataset_label, color in zip([0, 1], ['red', 'blue']):
+        dataset_indices = np.where(dataset_source_arr == dataset_label)[0]
+        plt.figure(figsize=(16, 16))
+        plt.scatter(embedding_outputs[dataset_indices, 0], embedding_outputs[dataset_indices, 1], c=color, s=70, alpha=0.1)
+        plt.xlabel('UMAP 1', fontsize=48)
+        plt.ylabel('UMAP 2', fontsize=48)
+        plt.title(f'UMAP Projection of Dataset {dataset_label + 1}', fontsize=48)
+        plt.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+        plt.tight_layout()
+        plt.savefig(os.path.join(img_dir, f"{save_name}_dataset_{dataset_label + 1}.png"))
 
 def apply_windowing(arr, window_size, stride, flatten_predictions=False):
     """
