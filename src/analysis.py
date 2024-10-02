@@ -360,6 +360,206 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         file_map=file_map
     )
 
+def plot_umap_projection_two_datasets(
+    model, device, data_dir1, data_dir2, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
+    layer_index=None, dict_key=None, time_bins_per_umap_point=100,
+    context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=False, remove_non_vocalization=True):
+
+    predictions_arr = []
+    ground_truth_labels_arr = []
+    spec_arr = []
+    vocalization_arr = []
+    file_indices_arr = []  # Store file indices instead of full filenames
+    file_map = {}  # Map file indices to filenames
+    current_file_index = 0
+
+    # New list to keep track of dataset source
+    dataset_source_arr = []
+
+    # Reset Figure
+    plt.figure(figsize=(8, 6))
+
+    # Convert samples to integer
+    samples = int(samples)
+    total_samples = 0
+
+    # List of data directories and their labels
+    data_dirs = [data_dir1, data_dir2]
+    dataset_labels = [0, 1]  # 0 for data_dir1 (red), 1 for data_dir2 (blue)
+
+    # Divide samples equally between datasets
+    samples_per_dataset = samples 
+
+    for data_dir, dataset_label in zip(data_dirs, dataset_labels):
+        data_loader = load_data(data_dir=data_dir, context=context)
+        data_loader_iter = iter(data_loader)
+
+        samples_collected = 0  # Samples collected from this dataset
+
+        while True:
+            try:
+                # Retrieve the next batch
+                data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
+
+                # Skip if all ground truth labels are equal to zero
+                if torch.all(ground_truth_label == 0):
+                    continue
+
+                num_classes = ground_truth_label.shape[-1]
+                original_data_length = data.shape[1]
+                original_label_length = ground_truth_label.shape[1]
+
+                # Pad data to the nearest context size in the time dimension
+                total_time = data.shape[1]  # Adjusted for batch first
+                pad_size_time = (context - (total_time % context)) % context  # Adjusted padding calculation for time dimension
+                data = F.pad(data, (0, 0, 0, pad_size_time), 'constant', 0)  # Adjusted padding for batch first in time dimension
+
+                # Calculate the number of context windows in the song
+                num_times = data.shape[1] // context  # Adjustment needed here as we're padding time
+
+                batch, time_bins, freq = data.shape  # Adjusted for batch first
+
+                # Reshape data to fit into multiple context-sized batches
+                data = data.reshape(batch * num_times, context, freq)  # Adjusted reshape to exclude padded frequency since we're padding time
+
+                # Pad ground truth labels to match data padding in time dimension
+                total_length_labels = ground_truth_label.shape[1]  # Adjusted for batch first
+                pad_size_labels_time = (context - (total_length_labels % context)) % context  # Adjusted padding calculation for time dimension
+                ground_truth_label = F.pad(ground_truth_label, (0, 0, 0, pad_size_labels_time), 'constant', 0)  # Adjusted padding for batch first in time dimension
+                vocalization = F.pad(vocalization, (0, pad_size_labels_time), 'constant', 0)
+
+                ground_truth_label = ground_truth_label.reshape(batch * num_times, context, num_classes)  # Adjusted for batch first
+                vocalization = vocalization.reshape(batch * num_times, context)
+
+                # Store file information
+                if file_path not in file_map.values():
+                    file_map[current_file_index] = file_path
+                    current_file_index += 1
+
+                # Process data through the model if not using raw spectrogram
+                if not raw_spectogram:
+                    data_input = data.unsqueeze(1)
+                    data_input = data_input.permute(0, 1, 3, 2)
+
+                    _, layers = model.inference_forward(data_input.to(device))
+
+                    layer_output_dict = layers[layer_index]
+                    output = layer_output_dict.get(dict_key, None)
+
+                    if output is None:
+                        print(f"Invalid key: {dict_key}. Skipping this batch.")
+                        continue
+
+                    batches, time_bins, features = output.shape
+                    predictions = output.reshape(batches, time_bins, features)
+                    predictions = predictions.flatten(0, 1)
+                    predictions = predictions[:original_data_length]  # Remove padding from predictions
+
+                    predictions_arr.append(predictions.detach().cpu().numpy())
+
+                else:
+                    data_input = data.unsqueeze(1)
+                    data_input = data_input.permute(0, 1, 3, 2)
+                    predictions_arr.append(data_input.cpu().numpy())
+
+                # Prepare spectrogram data
+                data = data.squeeze(1)
+                spec = data.permute(0, 2, 1)
+                spec = spec.flatten(0, 1)
+                spec = spec[:original_data_length]  # Remove padding from spec
+
+                # Prepare labels and vocalizations
+                ground_truth_label = ground_truth_label.flatten(0, 1)
+                vocalization = vocalization.flatten(0, 1)
+
+                ground_truth_label = ground_truth_label[:original_label_length]  # Remove padding from labels
+                vocalization = vocalization[:original_data_length]
+
+                ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
+
+                file_indices = np.full(len(ground_truth_label), current_file_index - 1)
+
+                spec_arr.append(spec.cpu().numpy())
+                ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
+                vocalization_arr.append(vocalization.cpu().numpy())
+
+                file_indices_arr.append(file_indices)
+
+                # Keep track of dataset source
+                dataset_source_arr.append(np.full(len(ground_truth_label), dataset_label))
+
+                samples_collected += spec.shape[0]
+                total_samples += spec.shape[0]
+
+                if samples_collected >= samples_per_dataset:
+                    break
+
+            except StopIteration:
+                # If dataset is exhausted, print the number of samples collected and stop the collection process
+                print(f"Samples collected from dataset {data_dir}: {samples_collected}")
+                break
+
+    # Now, concatenate data from both datasets
+    ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
+    spec_arr = np.concatenate(spec_arr, axis=0)
+    file_indices = np.concatenate(file_indices_arr, axis=0)
+    dataset_source_arr = np.concatenate(dataset_source_arr, axis=0)
+
+    original_spec_arr = spec_arr
+
+    vocalization_arr = np.concatenate(vocalization_arr, axis=0)
+    predictions = np.concatenate(predictions_arr, axis=0)
+
+    # Filter for vocalization before any processing or visualization
+    if remove_non_vocalization:
+        print(f"vocalization arr shape {vocalization_arr.shape}")
+        print(f"predictions arr shape {predictions.shape}")
+        print(f"ground truth labels arr shape {ground_truth_labels.shape}")
+        print(f"spec arr shape {spec_arr.shape}")
+
+        vocalization_indices = np.where(vocalization_arr == 1)[0]
+        predictions = predictions[vocalization_indices]
+        ground_truth_labels = ground_truth_labels[vocalization_indices]
+        spec_arr = spec_arr[vocalization_indices]
+        file_indices = file_indices[vocalization_indices]
+        dataset_source_arr = dataset_source_arr[vocalization_indices]
+
+    # Limit total samples if necessary
+    total_samples_collected = len(predictions)
+    if samples > total_samples_collected:
+        samples = total_samples_collected
+    else:
+        predictions = predictions[:samples]
+        ground_truth_labels = ground_truth_labels[:samples]
+        spec_arr = spec_arr[:samples]
+        file_indices = file_indices[:samples]
+        vocalization_arr = vocalization_arr[:samples]
+        dataset_source_arr = dataset_source_arr[:samples]
+
+    print(f"shape of array for UMAP {predictions.shape}")
+
+    # Fit the UMAP reducer
+    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
+    embedding_outputs = reducer.fit_transform(predictions)
+
+    # Plotting
+    img_dir = "imgs/umap_plots"
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+
+    # Create color map for dataset source
+    colors = np.array(['red', 'blue'])
+    sample_colors = colors[dataset_source_arr.astype(int)]
+
+    # Plot UMAP embeddings colored by dataset source
+    plt.figure(figsize=(16, 16))
+    plt.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=sample_colors, s=70, alpha=0.1)
+    plt.xlabel('UMAP 1', fontsize=48)
+    plt.ylabel('UMAP 2', fontsize=48)
+    plt.title('UMAP Projection of Two Datasets', fontsize=48)
+    plt.tick_params(axis='both', which='both', bottom=False, left=False, labelbottom=False, labelleft=False)
+    plt.tight_layout()
+    plt.savefig(os.path.join(img_dir, save_name + "_two_datasets.png"))
 
 
 def apply_windowing(arr, window_size, stride, flatten_predictions=False):
