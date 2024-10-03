@@ -488,7 +488,6 @@ def process_dataset_for_umap(
         vocalization_indices = np.where(vocalization_arr == 1)[0]
         predictions = predictions[vocalization_indices]
         ground_truth_labels = ground_truth_labels[vocalization_indices]
-        spec_arr = spec_arr[vocalization_indices]
 
     # Trim to the requested number of samples
     if samples > len(predictions):
@@ -501,7 +500,7 @@ def process_dataset_for_umap(
 
     print(f"Number of samples collected for UMAP: {predictions.shape[0]}")
 
-    return predictions, ground_truth_labels, spec_arr
+    return predictions, ground_truth_labels
 
 def plot_umap_projection_two_datasets(
     model, device, data_dir1, data_dir2, samples=1e6,
@@ -510,14 +509,14 @@ def plot_umap_projection_two_datasets(
 ):
     # Process the first dataset
     print(f"Processing first dataset: {data_dir1}")
-    predictions1, labels1, spec_arr1 = process_dataset_for_umap(
+    predictions1, labels1 = process_dataset_for_umap(
         model, device, data_dir1, samples // 2, layer_index, dict_key,
         context, remove_non_vocalization, raw_spectogram
     )
 
     # Process the second dataset
     print(f"Processing second dataset: {data_dir2}")
-    predictions2, labels2, spec_arr2 = process_dataset_for_umap(
+    predictions2, labels2 = process_dataset_for_umap(
         model, device, data_dir2, samples // 2, layer_index, dict_key,
         context, remove_non_vocalization, raw_spectogram
     )

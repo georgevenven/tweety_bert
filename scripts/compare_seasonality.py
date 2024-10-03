@@ -22,20 +22,18 @@ from analysis import plot_umap_projection_two_datasets  # Use the modified funct
 
 
 # Define variables
-BIRD_NAME1 = "USA5510_Fall"
-BIRD_NAME2 = "USA5510_Spring"
+BIRD_NAME1 = "llb3"
+BIRD_NAME2 = "llb16"
 MODEL_NAME = "TweetyBERT_Pretrain_LLB_AreaX_FallSong"
-WAV_FOLDER1 = "/media/rose/Extreme SSD/Compare_seasons_recordings/RC1_USA5510_Comp2"
-WAV_FOLDER2 = "/media/rose/Extreme SSD/Compare_seasons_recordings/USA5510"
-SONG_DETECTION_JSON_PATH = "/home/rose/Documents/tweety_net_song_detector/output/onset_offset_results.json"
+WAV_FOLDER1 = "/media/george-vengrovski/disk2/canary/yarden_data/llb3_data"
+WAV_FOLDER2 = "/media/george-vengrovski/disk2/canary/yarden_data/llb3_data"
+SONG_DETECTION_JSON_PATH = "/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/onset_offset_results.json"
 
 
 # Generate spectrograms for UMAP
 TEMP_DIR = "./temp"
 UMAP_FILES1 = os.path.join(TEMP_DIR, "umap_files1")
 UMAP_FILES2 = os.path.join(TEMP_DIR, "umap_files2")
-
-
 
 
 if not os.path.exists(TEMP_DIR):
@@ -61,7 +59,7 @@ subprocess.run([
    '--src_dir', WAV_FOLDER1,
    '--dst_dir', UMAP_FILES1,
    '--song_detection_json_path', SONG_DETECTION_JSON_PATH,
-   '--generate_random_files_number', '2500'
+   '--generate_random_files_number', '50'
 ])
 
 
@@ -71,10 +69,8 @@ subprocess.run([
    '--src_dir', WAV_FOLDER2,
    '--dst_dir', UMAP_FILES2,
    '--song_detection_json_path', SONG_DETECTION_JSON_PATH,
-   '--generate_random_files_number', '2500'
+   '--generate_random_files_number', '50'
 ])
-
-
 
 
 # Define your model and device
@@ -95,15 +91,12 @@ plot_umap_projection_two_datasets(
    device=device,
    data_dir1=data_dir1,
    data_dir2=data_dir2,
-   category_colors_file="test_llb16",
    samples=50000,
-   file_path='files/category_colors_llb3.pkl',
    layer_index=-2,
    dict_key="attention_output",
    context=1000,
    save_name="USA5510_fall_spring",
    raw_spectogram=False,
-   save_dict_for_analysis=False,
    remove_non_vocalization=True
 )
 # Delete UMAP files
