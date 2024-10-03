@@ -65,7 +65,7 @@ class WavtoSpec:
             failed_files.append(file_path)
             pbar.update()
 
-        with Pool(processes=max_processes) as pool:
+        with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
             for file_path in audio_files:
                 while True:
                     available_memory = psutil.virtual_memory().available
@@ -95,7 +95,7 @@ class WavtoSpec:
         if failed_files:
             print(f"Retrying {len(failed_files)} failed files...")
             pbar = tqdm(total=len(failed_files), desc="Retrying failed files")
-            with Pool(processes=max_processes) as pool:
+            with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
                 for file_path in failed_files: 
                     print(f"Retrying file: {file_path}")
                     pool.apply_async(
@@ -117,7 +117,10 @@ class WavtoSpec:
             samplerate=None,
             song_detection_json_path=self.song_detection_json_path
         )
-        return vocalization_data is not None
+
+        if vocalization_data is None:
+            return False
+        return True
 
     @staticmethod
     def safe_process_file(instance, file_path):
@@ -154,7 +157,7 @@ class WavtoSpec:
             length_in_ms = (len(data) / samplerate) * 1000
             if length_in_ms < min_length_ms:
                 print(f"File {file_path} is below the length threshold and will be skipped.")
-                return None
+                return None, None 
 
             file_name = os.path.basename(file_path)
 
@@ -167,7 +170,7 @@ class WavtoSpec:
                 )
                 if not vocalization_data:
                     print(f"File {file_path} skipped due to no vocalization")
-                    return None
+                    return None, None 
             else:
                 vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
                 syllable_labels = {}  # Empty dict if not using JSON
