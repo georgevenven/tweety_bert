@@ -13,8 +13,17 @@ def merge_json_files(input_files, output_file):
             else:
                 merged_data.append(data)
 
+    # Remove duplicates at the end
+    unique_data = []
+    seen = set()
+    for item in merged_data:
+        item_str = json.dumps(item, sort_keys=True)
+        if item_str not in seen:
+            seen.add(item_str)
+            unique_data.append(item)
+
     with open(output_file, 'w') as f:
-        json.dump(merged_data, f, indent=4)
+        json.dump(unique_data, f, indent=4)
 
 if __name__ == "__main__":
     # Specify the directory containing the JSON files
