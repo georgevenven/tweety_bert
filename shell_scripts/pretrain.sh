@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Navigate up one directory
+cd ..
+
 # Params 
 INPUT_DIR="/home/george-vengrovski/Documents/data"
 SONG_DETECTION_JSON_PATH="/media/george-vengrovski/flash-drive/jsons/merged_output.json"

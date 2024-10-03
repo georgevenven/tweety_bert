@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Navigate up one directory
+cd ..
+
 # variable for model name 
 BIRD_NAME="llb3"
 MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"

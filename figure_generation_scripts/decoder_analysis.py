@@ -37,7 +37,7 @@ class StateSwitchingAnalysis:
         # Parse date and file name, and extract labels
         print("Parsing 'date_time' and 'file_base_name' from 'file_name'...")
         data[['date_time', 'file_base_name']] = data['file_name'].apply(
-            lambda x: pd.Series(self.parse_date_time(x, format="standard"))
+            lambda x: pd.Series(self.parse_date_time(x, format="yarden"))
         )
         
         # Check for any None values in date_time
@@ -158,19 +158,14 @@ class StateSwitchingAnalysis:
         parts[-1] = parts[-1].replace('.wav', '')
         try:
             if format == "yarden":
-                # Example format: USA5288_45355.32428022_3_4_9_0_28.wav
-                # Assuming parts: ['USA5288', '45355.32428022', '3', '4', '9', '0', '28']
-                # Mapping to year, month, day, hour, minute, second
-                # Adjust as per actual format
-                # Placeholder example:
-                year = 2024  # Define how to extract the year if it's part of the filename
-                month = int(parts[2])
-                day = int(parts[3])
-                hour = int(parts[4])
-                minute = int(parts[5])
-                second = int(parts[6])
+                year = int(parts[2])
+                month = int(parts[3])
+                day = int(parts[4])
+                hour = int(parts[5])
+                minute = int(parts[6])
+                second = int(parts[7])
                 file_date = datetime(year, month, day, hour, minute, second)
-                file_name = parts[0]
+                file_name = parts[0] + parts[1]
             elif format == "standard":
                 # Example format adjustment as per user's requirement
                 # Placeholder implementation:
@@ -1033,8 +1028,7 @@ class StateSwitchingAnalysis:
 
 if __name__ == "__main__":
     json_files_with_dates = [
-        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5271_decoded.json', '2024-03-07 00:00:00'),
-        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5283_decoded.json', '2024-03-05 00:00:00')
+        ('/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/llb3_decoded_database.json', '2024-03-07 00:00:00')
     ]
     
     for json_file_path, trial_date_str in json_files_with_dates:
