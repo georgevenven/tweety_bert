@@ -12,7 +12,7 @@ UMAP_FILES="$TEMP_DIR/umap_files"
 # Function to process each bird
 process_bird() {
     local BIRD_NAME=$1
-    local WAV_FOLDER="$MAIN_WAV_FOLDER/${BIRD_NAME}_data/${BIRD_NAME}_songs"
+    local WAV_FOLDER="$MAIN_WAV_FOLDER/${BIRD_NAME}"
     
     echo "Processing bird: $BIRD_NAME"
 
