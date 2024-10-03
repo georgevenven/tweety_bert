@@ -49,7 +49,7 @@ process_bird() {
 
 # Loop through bird folders in the main directory
 for BIRD_DIR in "$MAIN_WAV_FOLDER"/*/; do
-    BIRD_NAME=$(basename "$BIRD_DIR" | cut -d'_' -f1)
+    BIRD_NAME=$(basename "$BIRD_DIR")
     process_bird "$BIRD_NAME"
 done
 
