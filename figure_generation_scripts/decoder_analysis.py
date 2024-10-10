@@ -15,16 +15,13 @@ class StateSwitchingAnalysis:
     def __init__(self, json_file, visualize=False, trial_date_str="2024-04-09 00:00:00", group_mode=None):
         self.trial_date_str = trial_date_str
         # Read the JSON file
-        print(f"Reading JSON file: {json_file}")
         with open(json_file, 'r') as f:
             data = json.load(f)['results']
-        print(f"Total songs in JSON: {len(data)}")
         
         # Convert to DataFrame
         data = pd.DataFrame(data)
         
         # Apply the parsing function to the relevant columns
-        print("Parsing 'syllable_onsets_offsets_ms' and 'syllable_onsets_offsets_timebins' columns...")
         data['syllable_onsets_offsets_ms'] = data['syllable_onsets_offsets_ms'].apply(self.parse_json_safe)
         data['syllable_onsets_offsets_timebins'] = data['syllable_onsets_offsets_timebins'].apply(self.parse_json_safe)
         
@@ -32,12 +29,10 @@ class StateSwitchingAnalysis:
         initial_count = len(data)
         data = data[data['song_present']].reset_index(drop=True)
         filtered_count = len(data)
-        print(f"Filtered out {initial_count - filtered_count} rows where 'song_present' is False.")
         
         # Parse date and file name, and extract labels
-        print("Parsing 'date_time' and 'file_base_name' from 'file_name'...")
         data[['date_time', 'file_base_name']] = data['file_name'].apply(
-            lambda x: pd.Series(self.parse_date_time(x, format="yarden"))
+            lambda x: pd.Series(self.parse_date_time(x, format="standard"))
         )
         
         # Check for any None values in date_time
@@ -47,13 +42,9 @@ class StateSwitchingAnalysis:
             data = data.dropna(subset=['date_time']).reset_index(drop=True)
             print(f"Rows after removing entries with invalid 'date_time': {len(data)}")
         
-        # Extract labels sequence from syllable_onsets_offsets_ms
-        print("Extracting labels sequence from 'syllable_onsets_offsets_ms'...")
-        data['labels'] = data['syllable_onsets_offsets_ms'].apply(self.extract_labels_from_onsets)
-        
-        print("Filtered and Parsed Data Head:")
-        print(data.head())
-        
+        # Extract labels sequence from syllable_onsets_offsets_timebins
+        data['labels'] = data['syllable_onsets_offsets_timebins'].apply(self.extract_labels_from_onsets)
+                
         self.visualize = visualize
         self.file_names = data['file_name']
         self.song_present = data['song_present']
@@ -67,20 +58,12 @@ class StateSwitchingAnalysis:
         base_results_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'results')
         json_base_name = os.path.splitext(os.path.basename(json_file))[0]
         self.results_dir = os.path.join(base_results_dir, f'decoder_analysis_{json_base_name}')
-        os.makedirs(self.results_dir, exist_ok=True)
-        print(f"Results directory set at: {self.results_dir}")
-        
-        # Set up image directory for debugging visualizations
-        self.img_dir = os.path.join(self.results_dir, "imgs/vis_smoothed")
-        os.makedirs(self.img_dir, exist_ok=True)  # Create the directory if it doesn't exist
-        print(f"Image directory set at: {self.img_dir}")
-        
+        os.makedirs(self.results_dir, exist_ok=True)        
+
         # Extract the base name from the JSON file path
         self.base_name = json_base_name
-        print(f"Base name extracted: {self.base_name}")
         
         # Create the song database
-        print("Creating song database...")
         self.database = self.create_song_database(data)
         if self.database is not None:
             if group_mode is not None:
@@ -91,7 +74,6 @@ class StateSwitchingAnalysis:
                 else:
                     print(f"Unknown group mode: {group_mode}")
                     return
-            print(f"Total songs in database: {len(self.database)}")
             self.database_to_csv(self.database, filename="temp.csv")  # Save CSV for debugging
         else:
             print("Error: Database creation failed.")
@@ -191,31 +173,64 @@ class StateSwitchingAnalysis:
 
     def extract_labels_from_onsets(self, syllable_dict):
         """
-        Extract a sorted list of labels based on syllable onset times.
+        Reconstruct a list of labels as one label per timebin in a giant array.
 
         Args:
         - syllable_dict (dict): Dictionary with syllable keys and their onset-offset times.
 
         Returns:
-        - list: Ordered list of labels based on onset times.
+        - list: Array of labels, one per timebin.
         """
         if not syllable_dict:
             return []
         
-        # Create a list of tuples (onset_time, label)
-        onset_label_list = []
+        # Initialize an empty list to hold the labels for each timebin
+        timebin_labels = []
+        
         for label, intervals in syllable_dict.items():
             for interval in intervals:
-                onset_time = interval[0]
-                onset_label_list.append((onset_time, label))
+                start_time = round(interval[0])
+                end_time = round(interval[1])
+                # Extend the list with the label repeated for each timebin in the interval
+                timebin_labels.extend([int(label)] * (end_time - start_time))
         
-        # Sort the list based on onset_time
-        onset_label_list.sort(key=lambda x: x[0])
+        # Convert to numpy array for easier manipulation
+        timebin_labels = np.array(timebin_labels)
+        window_size = 149  # Number of timebins on each side
+        total_window_size = 2 * window_size + 1
         
-        # Extract the labels in order
-        sorted_labels = [int(label) for onset, label in onset_label_list]
+        # Initialize the majority labels list
+        majority_labels = []
         
-        return sorted_labels
+        # Initialize a dictionary to count occurrences of each label in the current window
+        label_count = Counter(timebin_labels[:total_window_size])
+        
+        # Find the most common label in the initial window
+        most_common_label = label_count.most_common(1)[0][0]
+        majority_labels.append(most_common_label)
+        
+        # Slide the window across the timebin_labels
+        for i in range(1, len(timebin_labels)):
+            # Remove the label that is sliding out of the window
+            if i - window_size - 1 >= 0:
+                outgoing_label = timebin_labels[i - window_size - 1]
+                label_count[outgoing_label] -= 1
+                if label_count[outgoing_label] == 0:
+                    del label_count[outgoing_label]
+            
+            # Add the label that is sliding into the window
+            if i + window_size < len(timebin_labels):
+                incoming_label = timebin_labels[i + window_size]
+                label_count[incoming_label] += 1
+            
+            # Find the most common label in the current window
+            most_common_label = label_count.most_common(1)[0][0]
+            majority_labels.append(most_common_label)
+        
+        majority_labels = np.array(majority_labels)
+        collapsed_labels = majority_labels[np.insert(np.diff(majority_labels) != 0, 0, True)]
+
+        return collapsed_labels
 
     def create_song_database(self, data):
         """
@@ -237,9 +252,6 @@ class StateSwitchingAnalysis:
         
         # Select and rename columns as needed
         database = data[['file_name', 'date_time', 'file_base_name', 'labels', 'syllable_onsets_offsets_ms']].copy()
-        
-        # Additional processing can be done here if needed
-        print(f"Created song database with {len(database)} songs.")
         
         return database
 
@@ -267,10 +279,7 @@ class StateSwitchingAnalysis:
         
         # Debug: Count songs in each group
         group_counts = db['group_id'].value_counts()
-        print("Grouping Results:")
-        for group, count in group_counts.items():
-            print(f"  {group}: {count} songs")
-        
+
         return db
 
     def group_by_time_of_day(self, db):
@@ -285,14 +294,8 @@ class StateSwitchingAnalysis:
         """
         # Create a new column 'group_id' based on the hour of the 'date_time'
         db['group_id'] = db['date_time'].apply(
-            lambda x: 'morning' if x.hour < 12 else 'afternoon'
+            lambda x: 'morning' if 6 <= x.hour < 8 else ('afternoon' if 16 <= x.hour < 18 else 'other')
         )
-        
-        # Debug: Count songs in each group
-        group_counts = db['group_id'].value_counts()
-        print("Grouping by time of day Results:")
-        for group, count in group_counts.items():
-            print(f"  {group}: {count} songs")
         
         return db
 
@@ -311,7 +314,6 @@ class StateSwitchingAnalysis:
             filename = f"{self.base_name}_database.csv"
         filepath = os.path.join(self.results_dir, filename)
         db.to_csv(filepath, index=False)
-        print(f"Database saved to {filepath}")
 
     def calculate_transition_matrix(self, group):
         """
@@ -323,7 +325,6 @@ class StateSwitchingAnalysis:
         Returns:
         - None
         """
-        print(f"Calculating transition matrix for group: {group}")
         group_songs = self.database[self.database['group_id'] == group]['labels']
         
         if group_songs.empty:
@@ -340,7 +341,6 @@ class StateSwitchingAnalysis:
         
         self.group_labels[group] = group_labels
         n_labels = len(group_labels)
-        print(f"Number of unique labels in group '{group}': {n_labels}")
         
         if n_labels == 0:
             print(f"No unique labels found for group: {group}")
@@ -368,13 +368,6 @@ class StateSwitchingAnalysis:
         self.transition_matrices[group] = transition_matrix
         self.transition_matrices_norm[group] = transition_matrix_norm
         
-        # Debug: Print transition matrix shape and a snippet
-        print(f"Transition matrix for group '{group}':\nShape: {transition_matrix.shape}")
-        print(f"Transition matrix snippet:\n{transition_matrix[:5, :5]}")
-        print(f"Normalized transition matrix snippet:\n{transition_matrix_norm[:5, :5]}")
-        
-        print(f"Transition matrices calculated for group: {group}")
-
     def create_fixed_positions(self):
         """
         Create fixed positions for nodes in the network graph.
@@ -394,7 +387,6 @@ class StateSwitchingAnalysis:
         G = nx.Graph()
         G.add_nodes_from(all_labels)
         fixed_pos = nx.spring_layout(G, k=0.5, iterations=50)
-        print("Fixed positions for network graph created.")
         return fixed_pos
 
     def create_transition_graph(self, group):
@@ -407,7 +399,6 @@ class StateSwitchingAnalysis:
         Returns:
         - networkx.DiGraph: The transition graph.
         """
-        print(f"Creating transition graph for group: {group}")
         if group not in self.group_labels:
             print(f"Group '{group}' not found in group_labels.")
             return None
@@ -422,7 +413,6 @@ class StateSwitchingAnalysis:
                     if weight > 0:
                         G.add_edge(from_label, to_label, weight=weight)
         
-        print(f"Transition graph for group '{group}' created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
         return G
 
     def plot_transition_graph_and_matrix(self, group):
@@ -494,7 +484,6 @@ class StateSwitchingAnalysis:
         plot_filename = os.path.join(self.results_dir, f'transition_graph_matrix_group_{group}.png')
         plt.savefig(plot_filename, dpi=300)
         plt.close()
-        print(f"Transition graph and matrix plotted and saved to {plot_filename}")
 
     def calculate_switching_times(self, group):
         """
@@ -509,7 +498,6 @@ class StateSwitchingAnalysis:
         Returns:
         - None
         """
-        print(f"Calculating switching times for group: {group}")
         switching_times_dict = {}
         group_songs = self.database[self.database['group_id'] == group]['syllable_onsets_offsets_ms']
         
@@ -531,23 +519,20 @@ class StateSwitchingAnalysis:
         
         self.switching_times[group] = switching_times_dict
         
-        # Debug: Print number of durations per syllable
-        print(f"Switching times calculated for group: {group}")
-        for label, durations in switching_times_dict.items():
-            print(f"  Syllable {label}: {len(durations)} durations recorded.")
     
-    def plot_switching_times_histogram(self, group, all_durations_all_groups):
+    def plot_switching_times_histogram(self, group, all_durations_all_groups, xlim=None, ylim=None):
         """
         Plot a combined histogram of switching times for all syllables in the group.
 
         Args:
         - group (str): The group identifier.
         - all_durations_all_groups (list): List of all durations from all groups for consistent x-axis.
+        - xlim (tuple, optional): The x-axis limits for the plot.
+        - ylim (tuple, optional): The y-axis limits for the plot.
 
         Returns:
         - None
         """
-        print(f"Plotting switching times histogram for group: {group}")
         if group not in self.switching_times:
             print(f"No switching times found for group: {group}")
             return
@@ -566,6 +551,10 @@ class StateSwitchingAnalysis:
         plt.xlabel("Duration (ms)")
         plt.ylabel("Frequency")
         plt.grid(True)
+        if xlim:
+            plt.xlim(xlim)
+        if ylim:
+            plt.ylim(ylim)
         plt.tight_layout()
         plot_filename = os.path.join(self.results_dir, f'switching_times_histogram_group_{group}.png')
         plt.savefig(plot_filename, dpi=300)
@@ -592,7 +581,6 @@ class StateSwitchingAnalysis:
         Returns:
         - None
         """
-        print(f"Plotting switching times violin plot for group: {group}")
         if group not in self.switching_times:
             print(f"No switching times found for group: {group}")
             return
@@ -639,47 +627,6 @@ class StateSwitchingAnalysis:
         plot_filename = os.path.join(self.results_dir, f'switching_times_violin_group_{group}.png')
         plt.savefig(plot_filename, dpi=300)
         plt.close()
-        print(f"Switching times violin plot plotted and saved to {plot_filename}")
-
-    def calculate_transition_entropy(self, group):
-        """
-        Calculate the entropy of transitions for each syllable in the specified group.
-
-        Args:
-        - group (str): The group identifier.
-
-        Returns:
-        - None
-        """
-        print(f"Calculating transition entropy for group: {group}")
-        if group not in self.transition_matrices_norm:
-            print(f"No transition matrix found for group: {group}")
-            self.transition_entropies[group] = {}
-            self.total_entropy[group] = 0
-            return
-
-        # Initialize total entropy for the group
-        self.transition_entropies[group] = {}
-        self.total_entropy[group] = 0
-
-        group_labels = self.group_labels[group]
-        transition_matrix_norm = self.transition_matrices_norm[group]
-
-        for i, state in enumerate(group_labels):
-            probabilities = transition_matrix_norm[i]
-            probabilities = probabilities[probabilities > 0]  # Remove zero probabilities
-            if probabilities.size > 0:
-                entropy = -np.sum(probabilities * np.log2(probabilities))
-            else:
-                entropy = 0
-            self.transition_entropies[group][state] = entropy
-
-            # Calculate state frequency for weighting
-            state_count = np.sum(self.transition_matrices[group][i])
-            self.total_entropy[group] += entropy * state_count
-
-        print(f"Transition entropies calculated for group: {group}")
-        print(f"Total entropy for group '{group}': {self.total_entropy[group]:.4f}")
 
     def collect_statistics(self, group):
         """
@@ -724,7 +671,6 @@ class StateSwitchingAnalysis:
         Returns:
         - None
         """
-        print("Visualizing group data distribution...")
         group_data = []
         for group in self.database['group_id'].unique():
             stats = self.collect_statistics(group)
@@ -766,7 +712,6 @@ class StateSwitchingAnalysis:
         plt.savefig(plot_filename, dpi=300)
         plt.close()
 
-        print(f"Group data distribution visualization saved to {plot_filename}")
 
     def calculate_average_durations(self, group):
         """
@@ -778,7 +723,6 @@ class StateSwitchingAnalysis:
         Returns:
         - dict: A dictionary with syllable labels as keys and their average durations as values.
         """
-        print(f"Calculating average durations for group: {group}")
         if group not in self.switching_times:
             print(f"No switching times found for group: {group}")
             return {}
@@ -790,52 +734,18 @@ class StateSwitchingAnalysis:
             else:
                 average_durations[label] = 0.0
         
-        print(f"Average durations calculated for group: {group}")
         for label, avg in average_durations.items():
             print(f"  Syllable {label}: {avg:.2f} ms")
         return average_durations
 
-    def calculate_entropy_per_song(self, group):
+    def calculate_average_duration_per_song(self):
         """
-        Calculate the entropy of transitions for each song in the specified group.
-
-        Args:
-        - group (str): The group identifier.
+        Calculate the average phrase duration for each song in the database.
 
         Returns:
         - None
         """
-
-        group_songs = self.database[self.database['group_id'] == group]
-        
-        for song_idx, song in enumerate(group_songs.itertuples(), start=1):
-            labels = song.labels
-            transitions = [(labels[i], labels[i+1]) for i in range(len(labels)-1) if labels[i] != labels[i+1]]
-            
-            if not transitions:
-                entropy = 0
-            else:
-                transition_counts = Counter(transitions)
-                total_transitions = sum(transition_counts.values())
-                transition_probs = {k: v / total_transitions for k, v in transition_counts.items()}
-                entropy = -sum(p * np.log2(p) for p in transition_probs.values() if p > 0)
-            
-            self.song_entropy[song.file_name] = entropy
-        
-    def calculate_average_duration_per_song(self, group):
-        """
-        Calculate the average phrase duration for each song in the specified group.
-
-        Args:
-        - group (str): The group identifier.
-
-        Returns:
-        - None
-        """
-        print(f"Calculating average phrase durations per song for group: {group}")
-        group_songs = self.database[self.database['group_id'] == group]
-        
-        for song_idx, song in enumerate(group_songs.itertuples(), start=1):
+        for song_idx, song in enumerate(self.database.itertuples(), start=1):
             syllable_dict = song.syllable_onsets_offsets_ms
             durations = []
             
@@ -854,90 +764,114 @@ class StateSwitchingAnalysis:
             # Debug: Print average duration for each song
             # print(f"  Song {song_idx}: {song.file_name} - Average Duration: {avg_duration:.2f} ms")
         
-        print(f"Average phrase durations calculated for each song in group: {group}")
+        print("Average phrase durations calculated for each song.")
 
-
-    def plot_summary_over_days(self, trial_date_str="2024-04-08 00:00:00"):
+    def calculate_transition_entropy(self, group_by):
         """
-        Plot total song entropy, average phrase duration, and songs sung across days on one canvas.
-        Draws a red vertical bar where the experiment occurred.
+        Calculate the total transition entropy based on a specified time grouping.
 
         Args:
-        - trial_date_str (str): The date of the experiment in "YYYY-MM-DD HH:MM:SS" format.
+        - group_by (str): The column name to group by ('date' or 'hour').
+
+        Returns:
+        - pd.DataFrame: A DataFrame with the group_by column and 'total_transition_entropy' column.
+        """
+        self.database[group_by] = self.database['date_time'].dt.__getattribute__(group_by)
+        entropy_per_group = []
+
+        for group_value, group in self.database.groupby(group_by):
+            # Initialize counters for transitions and state occurrences
+            transition_counts = Counter()
+            state_counts = Counter()
+
+            # Tally up transitions within each song
+            for labels in group['labels']:
+                for i in range(len(labels) - 1):
+                    from_state = labels[i]
+                    to_state = labels[i + 1]
+                    if from_state != to_state:  # Exclude self-transitions
+                        transition = (from_state, to_state)
+                        transition_counts[transition] += 1
+                        state_counts[from_state] += 1
+
+            # Calculate branch entropy (H_a) for each state
+            branch_entropies = {}
+            for from_state in state_counts:
+                entropy = 0.0
+                for to_state in set(label for _, label in transition_counts if _ == from_state):
+                    transition_probability = transition_counts[(from_state, to_state)] / state_counts[from_state]
+                    entropy -= transition_probability * np.log2(transition_probability)
+                branch_entropies[from_state] = entropy
+
+            # Calculate total transition entropy (TE)
+            total_transitions = sum(state_counts.values())
+            total_entropy = 0.0
+            for state, count in state_counts.items():
+                state_probability = count / total_transitions
+                total_entropy += branch_entropies[state] * state_probability
+
+            entropy_per_group.append({group_by: group_value, 'total_transition_entropy': total_entropy})
+
+        return pd.DataFrame(entropy_per_group)
+
+    def plot_summary_over_days(self, trial_date_str=None):
+        """
+        Plot total song entropy, total transition entropy, and songs sung across days on one canvas.
+        Optionally draws a red vertical bar where the experiment occurred if a trial date is provided.
+
+        Args:
+        - trial_date_str (str, optional): The date of the experiment in "YYYY-MM-DD HH:MM:SS" format.
 
         Returns:
         - None
         """
-        print(f"Plotting summary over days with trial date: {trial_date_str}")
-        # Convert trial_date_str to datetime
-        try:
-            trial_date = datetime.strptime(trial_date_str, "%Y-%m-%d %H:%M:%S").date()
-        except ValueError as e:
-            print(f"Invalid trial_date format: {trial_date_str}\nError: {e}")
-            return
+        trial_date = None
+        if trial_date_str:
+            try:
+                trial_date = datetime.strptime(trial_date_str, "%Y-%m-%d %H:%M:%S").date()
+            except ValueError as e:
+                print(f"Invalid trial_date format: {trial_date_str}\nError: {e}")
+                return
 
         # Extract date from 'date_time' and add as a new column
         self.database['date'] = self.database['date_time'].dt.date
 
-        # Aggregate total entropy per day
-        entropy_per_day = self.database.groupby('date')['file_name'].apply(
-            lambda names: np.mean([self.song_entropy.get(name, 0) for name in names])
-        ).reset_index(name='average_entropy')
-        print("Average entropy per day:")
-        print(entropy_per_day.head())
-
-        # Aggregate average phrase duration per day
-        avg_duration_per_day = self.database.groupby('date')['file_name'].apply(
-            lambda names: np.mean([self.song_average_duration.get(name, 0) for name in names]) if len(names) > 0 else 0
-        ).reset_index(name='average_phrase_duration')
-        print("Average phrase duration per day:")
-        print(avg_duration_per_day.head())
+        # Calculate total transition entropy per day
+        entropy_per_day = self.calculate_transition_entropy('date')
 
         # Count songs sung per day
         songs_per_day = self.database.groupby('date').size().reset_index(name='songs_sung')
-        print("Songs sung per day:")
-        print(songs_per_day.head())
 
         # Merge all metrics into a single DataFrame
-        summary_df = entropy_per_day.merge(avg_duration_per_day, on='date').merge(songs_per_day, on='date')
+        summary_df = entropy_per_day.merge(songs_per_day, on='date')
 
         # Sort by date
         summary_df = summary_df.sort_values('date')
 
-        # Debug: Print the merged summary DataFrame
-        print("Merged summary DataFrame:")
-        print(summary_df.head())
-
         # Create the plot
-        fig, axes = plt.subplots(3, 1, figsize=(20, 15), sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(20, 20), sharex=True)
 
         # Plot Average Entropy
-        axes[0].plot(summary_df['date'], summary_df['average_entropy'], 'o-', color='blue', label='Average Entropy')
-        axes[0].set_ylabel('Average Entropy', color='blue', fontsize=14)
-        axes[0].tick_params(axis='y', labelcolor='blue')
-        axes[0].set_title('Average Entropy per Day', fontsize=16)
-        axes[0].axvline(x=trial_date, color='red', linestyle='--', linewidth=2, label='Experiment Occurred')
-        axes[0].legend()
-
-        # Plot Average Phrase Duration
-        axes[1].plot(summary_df['date'], summary_df['average_phrase_duration'], 'o-', color='green', label='Average Phrase Duration (ms)')
-        axes[1].set_ylabel('Average Phrase Duration (ms)', color='green', fontsize=14)
-        axes[1].tick_params(axis='y', labelcolor='green')
-        axes[1].set_title('Average Phrase Duration per Day', fontsize=16)
-        axes[1].axvline(x=trial_date, color='red', linestyle='--', linewidth=2, label='Experiment Occurred')
-        axes[1].legend()
+        axes[0].plot(summary_df['date'], summary_df['total_transition_entropy'], 'o-', color='blue', label='Total Transition Entropy')
+        axes[0].set_ylabel('Total Transition Entropy', color='blue', fontsize=18)
+        axes[0].tick_params(axis='y', labelcolor='blue', labelsize=16)
+        axes[0].set_title('Total Transition Entropy per Day', fontsize=20)
+        if trial_date:
+            axes[0].axvline(x=trial_date, color='red', linestyle='--', linewidth=2, label='Experiment Occurred')
+        axes[0].legend(fontsize=16)
 
         # Plot Songs Sung
-        axes[2].plot(summary_df['date'], summary_df['songs_sung'], 'o-', color='red', label='Songs Sung')
-        axes[2].set_ylabel('Songs Sung', color='red', fontsize=14)
-        axes[2].tick_params(axis='y', labelcolor='red')
-        axes[2].set_title('Songs Sung per Day', fontsize=16)
-        axes[2].set_xlabel('Date', fontsize=14)
-        axes[2].axvline(x=trial_date, color='red', linestyle='--', linewidth=2, label='Experiment Occurred')
-        axes[2].legend()
+        axes[1].plot(summary_df['date'], summary_df['songs_sung'], 'o-', color='red', label='Songs Sung')
+        axes[1].set_ylabel('Songs Sung', color='red', fontsize=18)
+        axes[1].tick_params(axis='y', labelcolor='red', labelsize=16)
+        axes[1].set_title('Songs Sung per Day', fontsize=20)
+        axes[1].set_xlabel('Date', fontsize=18)
+        if trial_date:
+            axes[1].axvline(x=trial_date, color='red', linestyle='--', linewidth=2, label='Experiment Occurred')
+        axes[1].legend(fontsize=16)
 
         # Improve x-axis formatting
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=45, fontsize=16)
         plt.tight_layout()
 
         # Save the plot
@@ -948,79 +882,168 @@ class StateSwitchingAnalysis:
 
     def plot_summary_over_time_of_day(self):
         """
-        Plot total song entropy, average phrase duration, and songs sung across hours of the day on one canvas.
+        Plot total transition entropy and songs sung across hours of the day on one canvas.
 
         Returns:
         - None
         """
-        print("Plotting summary over time of day")
-        
-        # Extract hour from 'date_time' and add as a new column
-        self.database['hour'] = self.database['date_time'].dt.hour
 
-        # Aggregate total entropy per hour
-        entropy_per_hour = self.database.groupby('hour')['file_name'].apply(
-            lambda names: np.mean([self.song_entropy.get(name, 0) for name in names])
-        ).reset_index(name='average_entropy')
-        print("Average entropy per hour:")
-        print(entropy_per_hour.head())
-
-        # Aggregate average phrase duration per hour
-        avg_duration_per_hour = self.database.groupby('hour')['file_name'].apply(
-            lambda names: np.mean([self.song_average_duration.get(name, 0) for name in names]) if len(names) > 0 else 0
-        ).reset_index(name='average_phrase_duration')
-        print("Average phrase duration per hour:")
-        print(avg_duration_per_hour.head())
-
+        # Calculate total transition entropy per hour
+        total_transition_entropy_per_hour = self.calculate_transition_entropy('hour')
         # Count songs sung per hour
         songs_per_hour = self.database.groupby('hour').size().reset_index(name='songs_sung')
-        print("Songs sung per hour:")
-        print(songs_per_hour.head())
 
         # Merge all metrics into a single DataFrame
-        summary_df = entropy_per_hour.merge(avg_duration_per_hour, on='hour').merge(songs_per_hour, on='hour')
+        summary_df = total_transition_entropy_per_hour.merge(songs_per_hour, on='hour')
 
         # Sort by hour
         summary_df = summary_df.sort_values('hour')
 
-        # Debug: Print the merged summary DataFrame
-        print("Merged summary DataFrame:")
-        print(summary_df.head())
-
         # Create the plot
-        fig, axes = plt.subplots(3, 1, figsize=(20, 15), sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(20, 10), sharex=True)
 
-        # Plot Average Entropy
-        axes[0].plot(summary_df['hour'], summary_df['average_entropy'], 'o-', color='blue', label='Average Entropy')
-        axes[0].set_ylabel('Average Entropy', color='blue', fontsize=14)
-        axes[0].tick_params(axis='y', labelcolor='blue')
-        axes[0].set_title('Average Entropy per Hour', fontsize=16)
-        axes[0].legend()
-
-        # Plot Average Phrase Duration
-        axes[1].plot(summary_df['hour'], summary_df['average_phrase_duration'], 'o-', color='green', label='Average Phrase Duration (ms)')
-        axes[1].set_ylabel('Average Phrase Duration (ms)', color='green', fontsize=14)
-        axes[1].tick_params(axis='y', labelcolor='green')
-        axes[1].set_title('Average Phrase Duration per Hour', fontsize=16)
-        axes[1].legend()
+        # Plot Total Transition Entropy
+        axes[0].plot(summary_df['hour'], summary_df['total_transition_entropy'], 'o-', color='green', label='Total Transition Entropy')
+        axes[0].set_ylabel('Total Transition Entropy', color='green', fontsize=18)
+        axes[0].tick_params(axis='y', labelcolor='green', labelsize=16)
+        axes[0].set_title('Total Transition Entropy per Hour', fontsize=20)
+        axes[0].legend(fontsize=16)
 
         # Plot Songs Sung
-        axes[2].plot(summary_df['hour'], summary_df['songs_sung'], 'o-', color='red', label='Songs Sung')
-        axes[2].set_ylabel('Songs Sung', color='red', fontsize=14)
-        axes[2].tick_params(axis='y', labelcolor='red')
-        axes[2].set_title('Songs Sung per Hour', fontsize=16)
-        axes[2].set_xlabel('Hour of Day', fontsize=14)
-        axes[2].legend()
+        axes[1].plot(summary_df['hour'], summary_df['songs_sung'], 'o-', color='red', label='Songs Sung')
+        axes[1].set_ylabel('Songs Sung', color='red', fontsize=18)
+        axes[1].tick_params(axis='y', labelcolor='red', labelsize=16)
+        axes[1].set_title('Songs Sung per Hour', fontsize=20)
+        axes[1].set_xlabel('Hour of Day', fontsize=18)
+        axes[1].legend(fontsize=16)
 
         # Improve x-axis formatting
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=45, fontsize=16)
         plt.tight_layout()
 
         # Save the plot
         plot_filename = os.path.join(self.results_dir, 'summary_over_time_of_day.png')
         plt.savefig(plot_filename, dpi=300)
         plt.close()
-        print(f"Summary over time of day plotted and saved to {plot_filename}")
+
+    def calculate_and_plot_histograms(self, groups):
+        """
+        Calculate global x and y limits and plot histograms for each group.
+ 
+        Args:
+        - groups (list): List of group identifiers.
+ 
+        Returns:
+        - None
+        """
+        all_durations_all_groups = []
+        max_frequency = 0
+ 
+        # Collect all durations and determine max frequency
+        for group in groups:
+            if group in self.switching_times:
+                all_durations = [duration for durations in self.switching_times[group].values() for duration in durations]
+                all_durations_all_groups.extend(all_durations)
+                # Calculate histogram to find max frequency
+                hist, _ = np.histogram(all_durations, bins=50, range=(min(all_durations_all_groups), max(all_durations_all_groups)))
+                max_frequency = max(max_frequency, max(hist))
+ 
+        # Calculate global x and y limits
+        xlim = (min(all_durations_all_groups), max(all_durations_all_groups))
+        ylim = (0, max_frequency * 1.1)  # Add a little padding to the y-axis
+ 
+        # Plot each group with the same limits
+        for group in groups:
+            self.plot_switching_times_histogram(group, all_durations_all_groups, xlim, ylim)
+
+    def plot_combined_switching_times_histogram(self, groups):
+        """
+        Plot a combined histogram of switching times for all syllables in the groups.
+
+        Args:
+        - groups (list): List of group identifiers.
+
+        Returns:
+        - None
+        """
+        
+        plt.figure(figsize=(14, 8))
+
+        colors = ['red', 'blue']
+        all_durations_all_groups = []
+
+        # Collect all durations and determine x limits
+        for group in groups:
+            if group in self.switching_times:
+                all_durations = [duration for durations in self.switching_times[group].values() for duration in durations]
+                all_durations_all_groups.extend(all_durations)
+
+        # Calculate global x limits
+        xlim = (min(all_durations_all_groups), max(all_durations_all_groups))
+
+        for idx, group in enumerate(groups):
+            if group not in self.switching_times:
+                print(f"No switching times found for group: {group}")
+                continue
+
+            # Combine all durations from all syllables
+            all_durations = [duration for durations in self.switching_times[group].values() for duration in durations]
+
+            if not all_durations:
+                print(f"No durations to plot for group: {group}")
+                continue
+
+            plt.hist(all_durations, bins=50, color=colors[idx], alpha=0.5, range=xlim, density=True, label=f'Group {group}')
+
+        plt.title("Combined Histogram of Switching Times for Groups")
+        plt.xlabel("Duration (ms)")
+        plt.ylabel("Probability Density")
+        plt.grid(True)
+        plt.xlim(xlim)
+        plt.tight_layout()
+        plt.legend()
+        plot_filename = os.path.join(self.results_dir, 'combined_switching_times_histogram.png')
+        plt.savefig(plot_filename, dpi=300)
+        plt.close()
+
+        print(f"Combined switching times histogram plotted and saved to {plot_filename}")
+
+    def plot_combined_switching_times_kde(self, groups):
+        """
+        Plot a combined KDE of switching times for all syllables in the groups.
+
+        Args:
+        - groups (list): List of group identifiers.
+
+        Returns:
+        - None
+        """        
+        plt.figure(figsize=(14, 8))
+
+        colors = ['red', 'blue']
+        all_durations_all_groups = []
+
+        for idx, group in enumerate(groups):
+            if group not in self.switching_times:
+                print(f"No switching times found for group: {group}")
+                continue
+
+            # Combine all durations from all syllables
+            all_durations = [duration for durations in self.switching_times[group].values() for duration in durations]
+
+            if not all_durations:
+                print(f"No durations to plot for group: {group}")
+                continue
+
+            # Plot KDE for the group
+            sns.kdeplot(all_durations, color=colors[idx], label=f'Group {group}', fill=True, alpha=0.5)
+
+        plt.grid(True)
+        plt.tight_layout()
+        plt.legend()
+        plot_filename = os.path.join(self.results_dir, 'combined_switching_times_kde.png')
+        plt.savefig(plot_filename, dpi=300)
+        plt.close()
 
 # Example usage:
 # Ensure that this script is run in an environment where '__file__' is defined,
@@ -1028,79 +1051,102 @@ class StateSwitchingAnalysis:
 
 if __name__ == "__main__":
     json_files_with_dates = [
-        ('/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/llb3_decoded_database.json', '2024-03-07 00:00:00')
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/llb3_songs_decoded_database.json', '2024-03-07 00:00:00'),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/llb11_songs_decoded_database.json', '2024-03-07 00:00:00'),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5177_variable_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5203_static_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5336_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5337_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5371_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5443_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5271_decoded.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5283_decoded.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5505_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5347_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5468_RC3_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5509_decoded_database.json', None)
     ]
     
     for json_file_path, trial_date_str in json_files_with_dates:
         analysis = StateSwitchingAnalysis(json_file_path, visualize=True, trial_date_str=trial_date_str, group_mode="time_of_day")
+        analysis.calculate_average_duration_per_song()
+        analysis.plot_summary_over_days(trial_date_str=trial_date_str)
+        analysis.plot_summary_over_time_of_day()
+
+
+#### OLD ####
+
         
-        # # Calculate transition matrices for both groups
-        # for group in ['before_trial', 'after_trial']:
-        #     
+        # # # Calculate transition matrices for both groups
+        # # for group in ['before_trial', 'after_trial']:
+            
         
-        # Now create fixed positions after all transition matrices are calculated
-        # analysis.fixed_positions = analysis.create_fixed_positions()
+        # #     # Now create fixed positions after all transition matrices are calculated
+        # #     analysis.fixed_positions = analysis.create_fixed_positions()
+            
+        # #     # Proceed to plot only if fixed_positions were successfully created
+        # #     if analysis.fixed_positions:
+        # #         all_durations_all_groups = []
+        # #         max_duration = 0
+        # #         for group in ['before_trial', 'after_trial']:
+        # #             analysis.calculate_switching_times(group)
+        # #             analysis.calculate_entropy_per_song(group)
+        # #             analysis.calculate_average_duration_per_song(group)
+        # #             all_durations = [duration for durations in analysis.switching_times[group].values() for duration in durations]
+        # #             all_durations_all_groups.extend(all_durations)
+        # #             if all_durations:  # Ensure there are durations
+        # #                 max_duration = max(max_duration, max(all_durations))
+                
+        # #         for group in ['before_trial', 'after_trial']:
+        # #             analysis.plot_transition_graph_and_matrix(group)
+        # #             analysis.plot_switching_times_histogram(group, all_durations_all_groups)
+        # #             analysis.plot_switching_times_violin(group, max_duration)  # Updated Method
+        # #             analysis.calculate_transition_entropy(group)
+        # #             average_durations = analysis.calculate_average_durations(group)
+        # #             print(f"Average Durations for Group '{group}': {average_durations}")
+                
+        # #         analysis.plot_summary_over_days(trial_date_str=trial_date_str)
+        # #         analysis.visualize_group_data()
+        # #     else:
+        # #         print("Fixed positions were not created. Skipping plotting.")
         
-        # # Proceed to plot only if fixed_positions were successfully created
-        # if analysis.fixed_positions:
-        #     all_durations_all_groups = []
+        # # Integrate with time of day
+        # for time_group in ['morning', 'afternoon']:
+
+        #     all_durations = []
         #     max_duration = 0
-        #     for group in ['before_trial', 'after_trial']:
-        #         analysis.calculate_switching_times(group)
-        #         analysis.calculate_entropy_per_song(group)
-        #         analysis.calculate_average_duration_per_song(group)
-        #         all_durations = [duration for durations in analysis.switching_times[group].values() for duration in durations]
-        #         all_durations_all_groups.extend(all_durations)
-        #         if all_durations:  # Ensure there are durations
-        #             max_duration = max(max_duration, max(all_durations))
+        #     analysis.calculate_transition_matrix(time_group)
+        #     analysis.fixed_positions = analysis.create_fixed_positions()
+
+        #     time_grouped_db = analysis.group_by_time_of_day(analysis.database)
+        #     analysis.database = time_grouped_db  # Update the database with time groupings
             
-        #     for group in ['before_trial', 'after_trial']:
-        #         analysis.plot_transition_graph_and_matrix(group)
-        #         analysis.plot_switching_times_histogram(group, all_durations_all_groups)
-        #         analysis.plot_switching_times_violin(group, max_duration)  # Updated Method
-        #         analysis.calculate_transition_entropy(group)
-        #         average_durations = analysis.calculate_average_durations(group)
-        #         print(f"Average Durations for Group '{group}': {average_durations}")
+        #     time_group_id = f"{time_group}"
+
+        #     analysis.calculate_switching_times(time_group_id)
+        #     analysis.calculate_entropy_per_song(time_group_id)
+        #     analysis.calculate_average_duration_per_song(time_group_id)
+        #     all_durations = [duration for durations in analysis.switching_times[time_group_id].values() for duration in durations]
+        #     all_durations.extend(all_durations)
+
+        #     if all_durations:  # Ensure there are durations
+        #         max_duration = max(max_duration, max(all_durations))
+
+        #     analysis.calculate_transition_matrix(time_group_id)
+        #     analysis.calculate_entropy_per_song(time_group_id)
+        #     analysis.calculate_average_duration_per_song(time_group_id)
             
-        #     analysis.plot_summary_over_days(trial_date_str=trial_date_str)
+        #     analysis.plot_transition_graph_and_matrix(time_group_id)
+        #     analysis.plot_switching_times_histogram(time_group_id, all_durations)
+        #     analysis.plot_switching_times_violin(time_group_id, max_duration)
+        #     # analysis.calculate_transition_entropy(time_group_id)
+        #     average_durations = analysis.calculate_average_durations(time_group_id)
+
+        #     print(f"Average Durations for Group '{time_group_id}': {average_durations}")
+            
+        #     analysis.plot_summary_over_time_of_day()
         #     analysis.visualize_group_data()
-        # else:
-        #     print("Fixed positions were not created. Skipping plotting.")
-        
-        # Integrate with time of day
-        for time_group in ['morning', 'afternoon']:
 
-            all_durations = []
-            max_duration = 0
-            analysis.calculate_transition_matrix(time_group)
-            analysis.fixed_positions = analysis.create_fixed_positions()
+        # analysis.plot_summary_over_days(trial_date_str=None)
 
-            time_grouped_db = analysis.group_by_time_of_day(analysis.database)
-            analysis.database = time_grouped_db  # Update the database with time groupings
-            
-            time_group_id = f"{time_group}"
-
-            analysis.calculate_switching_times(time_group_id)
-            analysis.calculate_entropy_per_song(time_group_id)
-            analysis.calculate_average_duration_per_song(time_group_id)
-            all_durations = [duration for durations in analysis.switching_times[time_group_id].values() for duration in durations]
-            all_durations.extend(all_durations)
-
-            if all_durations:  # Ensure there are durations
-                max_duration = max(max_duration, max(all_durations))
-        
-
-            analysis.calculate_transition_matrix(time_group_id)
-            analysis.calculate_switching_times(time_group_id)
-            analysis.calculate_entropy_per_song(time_group_id)
-            analysis.calculate_average_duration_per_song(time_group_id)
-            
-            analysis.plot_transition_graph_and_matrix(time_group_id)
-            analysis.plot_switching_times_histogram(time_group_id, all_durations)
-            analysis.plot_switching_times_violin(time_group_id, max_duration)
-            analysis.calculate_transition_entropy(time_group_id)
-            average_durations = analysis.calculate_average_durations(time_group_id)
-            print(f"Average Durations for Group '{time_group_id}': {average_durations}")
-            
-            analysis.plot_summary_over_time_of_day()
-            analysis.visualize_group_data()
+        # analysis.plot_combined_switching_times_histogram(['morning', 'afternoon'])

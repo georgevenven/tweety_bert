@@ -31,7 +31,6 @@ class WavtoSpec:
         audio_files = [os.path.join(root, file)
                     for root, dirs, files in os.walk(self.src_dir)
                     for file in files if file.lower().endswith('.wav')]
-        print(f"Found {len(audio_files)} audio files")
 
         # If more random files are requested than available, process all files
         if self.generate_random_files_number is not None and self.generate_random_files_number > len(audio_files):
@@ -125,7 +124,10 @@ class WavtoSpec:
     @staticmethod
     def safe_process_file(instance, file_path):
         try:
-            if instance.has_vocalization(file_path):
+            if instance.song_detection_json_path is not None:
+                if instance.has_vocalization(file_path):
+                    instance.multiprocess_process_file(file_path)
+            elif instance.song_detection_json_path is None:
                 instance.multiprocess_process_file(file_path)
             else:
                 print(f"File {file_path} skipped due to no vocalization")

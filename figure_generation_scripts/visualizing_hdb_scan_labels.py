@@ -52,6 +52,6 @@ def plot_spectrogram_with_labels(file_path, segment_length):
     plt.show()
 
 # Load the NPZ file and call the function to plot
-file_path = "/media/george-vengrovski/disk1/USA_5377_test/USA5337_45355.33786109_3_4_9_23_6_0.npz"
+file_path = "/media/george-vengrovski/disk1/test_specs/9.11-12-12-59--12.7076_segment_0.npz"
 segment_length = 1500
 plot_spectrogram_with_labels(file_path, segment_length)
