@@ -3,6 +3,7 @@ import os
 import wave
 import numpy as np
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 """
 Tape Data Storage Structure:
@@ -58,41 +59,48 @@ def read_32bit_integers_from_file(filename):
     return integers
 
 
+def process_file(raw_file_path, input_directory, output_directory):
+    print(f"Processing file: {raw_file_path}")
+    
+    # Read integers from the .raw file
+    integers = read_32bit_integers_from_file(raw_file_path)
+    
+    # Convert integers to numpy array with dtype int32
+    audio_data = np.array(integers, dtype=np.int32)
+    
+    # Create the mirrored directory structure in the output directory
+    relative_path = os.path.relpath(os.path.dirname(raw_file_path), input_directory)
+    output_path = os.path.join(output_directory, relative_path)
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Determine the name for the .wav file based on the parent directory
+    parent_folder_name = os.path.basename(os.path.dirname(raw_file_path))
+    wav_file_name = f"{parent_folder_name}.wav"
+    wav_file_path = os.path.join(output_path, wav_file_name)
+    
+    # Save the data as a .wav file
+    with wave.open(wav_file_path, 'w') as wav_file:
+        # Set parameters: 1 channel, 4 bytes per sample, 48000 samples per second
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(4)  # 4 bytes for 32-bit
+        wav_file.setframerate(48000)
+        wav_file.writeframes(audio_data.tobytes())
+    
+    print(f"Converted {raw_file_path} to {wav_file_path}")
+
+
 def convert_raw_to_wav(input_directory, output_directory):
     # Traverse the directory structure
     raw_files = []
     for root, dirs, files in os.walk(input_directory):
         raw_files.extend([os.path.join(root, file) for file in files if file.endswith('.raw')])
     
-    for raw_file_path in tqdm(raw_files, desc="Converting files"):
-        print(f"Processing file: {raw_file_path}")
-        
-        # Read integers from the .raw file
-        integers = read_32bit_integers_from_file(raw_file_path)
-        
-        # Convert integers to numpy array with dtype int32
-        audio_data = np.array(integers, dtype=np.int32)
-        
-        # Create the mirrored directory structure in the output directory
-        relative_path = os.path.relpath(os.path.dirname(raw_file_path), input_directory)
-        output_path = os.path.join(output_directory, relative_path)
-        os.makedirs(output_path, exist_ok=True)
-        
-        # Determine the name for the .wav file
-        wav_file_name = f"{os.path.splitext(os.path.basename(raw_file_path))[0]}.wav"
-        wav_file_path = os.path.join(output_path, wav_file_name)
-        
-        # Save the data as a .wav file
-        with wave.open(wav_file_path, 'w') as wav_file:
-            # Set parameters: 1 channel, 4 bytes per sample, 48000 samples per second
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(4)  # 4 bytes for 32-bit
-            wav_file.setframerate(48000)
-            wav_file.writeframes(audio_data.tobytes())
-        
-        print(f"Converted {raw_file_path} to {wav_file_path}")
+    # Use ThreadPoolExecutor to process files in parallel
+    with ThreadPoolExecutor() as executor:
+        # Wrap the executor.map with tqdm for progress bar
+        list(tqdm(executor.map(lambda file: process_file(file, input_directory, output_directory), raw_files), total=len(raw_files), desc="Converting files"))
 
 # Example usage
 input_directory = '/media/george-vengrovski/disk1/tape_data_set'
-output_directory = '/media/george-vengrovski/disk1/tape_data_set_wav'
+output_directory = '/media/george-vengrovski/Extreme SSD/tape_data_set_wav'
 convert_raw_to_wav(input_directory, output_directory)
