@@ -138,7 +138,10 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         try:
             # Retrieve the next batch
             data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
-            
+
+            # temporary fix for corrupted data
+            if data.shape[1] < 100:
+                continue
 
             num_classes = ground_truth_label.shape[-1]
             original_data_length = data.shape[1]
@@ -245,11 +248,6 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         predictions = np.concatenate(predictions_arr, axis=0)
     else:
         predictions = spec_arr
-
-    # Check if there are enough samples
-    if len(predictions) < samples:
-        print("Error: Not enough data to meet the specified sample size.")
-        return
 
     # Filter for vocalization before any processing or visualization
     if remove_non_vocalization:
@@ -380,6 +378,10 @@ def process_dataset_for_umap(
         try:
             # Retrieve the next batch
             data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
+
+            # temporary fix for corrupted data
+            if data.shape[1] < 100:
+                continue
 
             num_classes = ground_truth_label.shape[-1]
             original_data_length = data.shape[1]

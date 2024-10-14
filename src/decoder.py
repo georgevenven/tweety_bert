@@ -37,28 +37,6 @@ class TweetyBertClassifier:
             shutil.rmtree(linear_decoder_dir)
         os.makedirs(linear_decoder_dir)
 
-    @classmethod
-    def load_decoder_state(cls, linear_decoder_dir):
-        save_dir = os.path.join(linear_decoder_dir, "decoder_state")
-        
-        # Load configuration
-        with open(os.path.join(save_dir, "decoder_config.json"), "r") as f:
-            config = json.load(f)
-
-        # Create instance
-        instance = cls(config["model_dir"], linear_decoder_dir)
-        
-        # Set attributes
-        instance.num_classes = config["num_classes"]
-        instance.data_file = config["data_file"]
-
-        # Create and load classifier
-        instance.create_classifier()
-        instance.classifier_model.load_state_dict(torch.load(os.path.join(save_dir, "decoder_weights.pth")))
-
-        print(f"Decoder state loaded from {save_dir}")
-        return instance
-
     def load_tweety_bert(self, model_dir):
         return load_model(model_dir)
     
