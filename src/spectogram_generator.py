@@ -136,11 +136,11 @@ class WavtoSpec:
             if instance.song_detection_json_path is not None:
                 if instance.has_vocalization(file_path):
                     instance.multiprocess_process_file(file_path)
-            elif instance.song_detection_json_path is None:
-                instance.multiprocess_process_file(file_path)
+                else:
+                    print(f"File {file_path} skipped due to no vocalization")
+                    return None
             else:
-                print(f"File {file_path} skipped due to no vocalization")
-                return None
+                instance.multiprocess_process_file(file_path)
         except Exception as e:
             logging.error(f"Error processing {file_path}: {e}")
             return None
