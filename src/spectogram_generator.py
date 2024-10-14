@@ -15,6 +15,7 @@ import argparse
 from scipy.signal import ellip, filtfilt
 import time
 from multiprocessing import Pool, TimeoutError
+import logging
 
 class WavtoSpec:
     def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=None):
@@ -25,6 +26,14 @@ class WavtoSpec:
         self.step_size = step_size
         self.nfft = nfft
         self.generate_random_files_number = generate_random_files_number
+        self.setup_logging()
+
+    def setup_logging(self):
+        logging.basicConfig(
+            filename='error_log.log',
+            level=logging.ERROR,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
 
     def process_directory(self):
         print("Starting process_directory")
@@ -55,12 +64,12 @@ class WavtoSpec:
             pbar.update()
 
         def error_callback(e):
-            print(f"Error: {e}")
+            logging.error(f"Error: {e}")
             skipped_files_count.value += 1
             pbar.update()
 
         def file_failed_callback(file_path):
-            print(f"File failed: {file_path}")
+            logging.error(f"File failed: {file_path}")
             failed_files.append(file_path)
             pbar.update()
 
@@ -133,7 +142,7 @@ class WavtoSpec:
                 print(f"File {file_path} skipped due to no vocalization")
                 return None
         except Exception as e:
-            print(f"Error processing {file_path}: {e}")
+            logging.error(f"Error processing {file_path}: {e}")
             return None
         return file_path
 
@@ -218,7 +227,7 @@ class WavtoSpec:
                 return None, None, None
 
         except Exception as e:
-            print(f"Error processing {file_path}: {e}")
+            logging.error(f"Error processing {file_path}: {e}")
             return None, None, None
 
     def check_vocalization(self, file_name, data, samplerate, song_detection_json_path):
@@ -227,26 +236,30 @@ class WavtoSpec:
 
         # Open JSON file
         if not os.path.exists(song_detection_json_path):
-            print(f"JSON file {song_detection_json_path} does not exist.")
+            logging.error(f"JSON file {song_detection_json_path} does not exist.")
             return None, None
 
-        with open(song_detection_json_path, 'r') as json_file:
-            json_data = json.load(json_file)
-            for entry in json_data:
-                if entry['filename'] == file_name:
-                    if not entry['song_present']:
-                        return None, None
-                    
-                    onsets_offsets = [(seg['onset_ms'] / 1000, seg['offset_ms'] / 1000) for seg in entry['segments']]
+        try:
+            with open(song_detection_json_path, 'r') as json_file:
+                json_data = json.load(json_file)
+                for entry in json_data:
+                    if entry['filename'] == file_name:
+                        if not entry['song_present']:
+                            return None, None
+                        
+                        onsets_offsets = [(seg['onset_ms'] / 1000, seg['offset_ms'] / 1000) for seg in entry['segments']]
 
-                    # Process syllable labels
-                    syllable_labels = {}
-                    if 'syllable_labels' in entry and entry['syllable_labels']:
-                        syllable_labels = entry['syllable_labels']
+                        # Process syllable labels
+                        syllable_labels = {}
+                        if 'syllable_labels' in entry and entry['syllable_labels']:
+                            syllable_labels = entry['syllable_labels']
 
-                    return onsets_offsets, syllable_labels
+                        return onsets_offsets, syllable_labels
+        except Exception as e:
+            logging.error(f"Error reading JSON file {song_detection_json_path}: {e}")
+            return None, None
 
-        print(f"No matching entry found for {file_name} in {song_detection_json_path}.")
+        logging.error(f"No matching entry found for {file_name} in {song_detection_json_path}.")
         return None, None
 
 def main():
