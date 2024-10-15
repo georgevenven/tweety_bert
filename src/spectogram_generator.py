@@ -21,8 +21,8 @@ class WavtoSpec:
     def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=None):
         self.src_dir = src_dir
         self.dst_dir = dst_dir
-        self.song_detection_json_path = song_detection_json_path
-        self.use_json = song_detection_json_path is not None
+        self.song_detection_json_path = None if song_detection_json_path == "None" else song_detection_json_path
+        self.use_json = self.song_detection_json_path is not None
         self.step_size = step_size
         self.nfft = nfft
         self.generate_random_files_number = generate_random_files_number
@@ -37,10 +37,13 @@ class WavtoSpec:
 
     def process_directory(self):
         print("Starting process_directory")
+
+        print(self.src_dir)
+
         audio_files = [os.path.join(root, file)
                     for root, dirs, files in os.walk(self.src_dir)
                     for file in files if file.lower().endswith('.wav')]
-
+                
         # If more random files are requested than available, process all files
         if self.generate_random_files_number is not None and self.generate_random_files_number > len(audio_files):
             print(f"Requested {self.generate_random_files_number} random files, but only {len(audio_files)} available. Processing all files.")
@@ -135,21 +138,21 @@ class WavtoSpec:
         try:
             if instance.song_detection_json_path is not None:
                 if instance.has_vocalization(file_path):
-                    instance.multiprocess_process_file(file_path)
+                    instance.multiprocess_process_file(file_path, instance.song_detection_json_path)
                 else:
                     print(f"File {file_path} skipped due to no vocalization")
                     return None
             else:
-                instance.multiprocess_process_file(file_path)
+                instance.multiprocess_process_file(file_path, instance.song_detection_json_path)
         except Exception as e:
             logging.error(f"Error processing {file_path}: {e}")
             return None
         return file_path
 
-    def multiprocess_process_file(self, file_path):
+    def multiprocess_process_file(self, file_path, song_detection_json_path):
         return self.convert_to_spectrogram(
             file_path,
-            song_detection_json_path=self.song_detection_json_path,
+            song_detection_json_path=song_detection_json_path,
             save_npz=True
         )
 
@@ -172,7 +175,7 @@ class WavtoSpec:
 
             file_name = os.path.basename(file_path)
 
-            if self.use_json or song_detection_json_path is not None:
+            if song_detection_json_path is not None:
                 vocalization_data, syllable_labels = self.check_vocalization(
                     file_name=file_name,
                     data=data,

@@ -4,10 +4,10 @@
 cd ..
 
 # Params 
-INPUT_DIR="/home/george-vengrovski/Documents/data"
-SONG_DETECTION_JSON_PATH="/media/george-vengrovski/flash-drive/jsons/merged_output.json"
+INPUT_DIR="/home/george-vengrovski/Documents/testost_pretrain"
+SONG_DETECTION_JSON_PATH=None
 TEST_PERCENTAGE=20
-EXPERIMENT_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
+EXPERIMENT_NAME="TESTOSTERONE_MODEL"
 
 # Call the Python script and capture the output
 output=$(python3 scripts/seperate_bird_ids_into_train_and_test_for_pretrain.py "$INPUT_DIR" "$TEST_PERCENTAGE")
