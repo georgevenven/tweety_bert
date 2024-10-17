@@ -649,7 +649,7 @@ def sliding_window_umap(model, device, data_dir="test_llb16",
             shave_index = num_times * context
             data = data[:,:,:,:shave_index]
 
-            batch, channel, freq, time_bins = data.shape 
+            ba100tch, channel, freq, time_bins = data.shape 
 
             # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches 
             data = data.permute(0,-1, 1, 2)
