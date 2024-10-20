@@ -43,7 +43,8 @@ class WavtoSpec:
         audio_files = [os.path.join(root, file)
                     for root, dirs, files in os.walk(self.src_dir)
                     for file in files if file.lower().endswith('.wav')]
-                
+
+        
         # If more random files are requested than available, process all files
         if self.generate_random_files_number is not None and self.generate_random_files_number > len(audio_files):
             print(f"Requested {self.generate_random_files_number} random files, but only {len(audio_files)} available. Processing all files.")
@@ -53,6 +54,7 @@ class WavtoSpec:
             print(f"Selecting {self.generate_random_files_number} random files")
             audio_files = np.random.choice(audio_files, self.generate_random_files_number, replace=False)
             print(f"{len(audio_files)} random files selected")
+
 
         max_processes = multiprocessing.cpu_count()
         print(f"Using {max_processes} processes")

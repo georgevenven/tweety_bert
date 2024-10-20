@@ -112,9 +112,10 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
     return labels
 
 
-def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb16",  samples=1e6, file_path='category_colors.pkl',
+def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                          layer_index=None, dict_key=None, time_bins_per_umap_point=100,
-                         context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=False, remove_non_vocalization=True):
+                         context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=False, 
+                         remove_non_vocalization=True, pca_components=32, min_cluster_size=500):
     predictions_arr = []
     ground_truth_labels_arr = []
     spec_arr = []
@@ -275,13 +276,24 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     print(f"shape of array for UMAP {predictions.shape}")
 
     # Fit the UMAP reducer       
-    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
-    reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
+    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='euclidean')
+    # reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
 
-    embedding_outputs = reducer.fit_transform(predictions)
-    embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)
+    # Z-score the activations before PCA
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    zscored_predictions = scaler.fit_transform(predictions)
 
-    hdbscan_labels = generate_hdbscan_labels(embedding_outputs_cluster, min_samples=1, min_cluster_size=int(predictions.shape[0]/200))
+    # Fit the PCA reducer
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=pca_components)
+    
+    pca_outputs = pca.fit_transform(zscored_predictions)
+
+    hdbscan_labels = generate_hdbscan_labels(pca_outputs, min_cluster_size=min_cluster_size)
+
+    embedding_outputs = reducer.fit_transform(pca_outputs)
+    # embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)
 
     # add the color black as silences
     cmap_ground_truth = glasbey.extend_palette(["#000000"], palette_size=30)

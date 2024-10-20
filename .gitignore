@@ -4,6 +4,7 @@ experiments
 *.pyc
 *.zip
 *.csv
+*.log
 *.png
 *.pdf
 *.html

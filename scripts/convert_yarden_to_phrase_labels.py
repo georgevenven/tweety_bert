@@ -48,10 +48,8 @@ def process_files(source_files, json_file):
 
 # Usage
 source_files = [
-    '/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_annot.csv',
-    '/media/george-vengrovski/disk2/canary/yarden_data/llb11_data/llb11_annot.csv',
-    '/media/george-vengrovski/disk2/canary/yarden_data/llb16_data/llb16_annot.csv'
+    '/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_annot.csv'
 ]
-json_file = '/home/george-vengrovski/Documents/projects/tweety_bert_paper/merged_output.json'
+json_file = '/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/onset_offset_results.json'
 
 process_files(source_files=source_files, json_file=json_file)

@@ -19,7 +19,7 @@ from analysis import plot_umap_projection
 # THIS SHOULD ALWAYS BE CPU SO YOU CAN FIT SUPER LONG SONGS IN MODEL UNLESS YOU HAVE A100 or BETTER!
 device = torch.device("cpu")
 
-def main(experiment_folder, data_dir, category_colors_file, save_name, samples, layer_index, dict_key, context, raw_spectogram, save_dict_for_analysis):
+def main(experiment_folder, data_dir, category_colors_file, save_name, samples, layer_index, dict_key, context, raw_spectogram, save_dict_for_analysis, pca_components, min_cluster_size):
     model = load_model(experiment_folder)
     model = model.to(device)
 
@@ -34,7 +34,9 @@ def main(experiment_folder, data_dir, category_colors_file, save_name, samples, 
         context=context, 
         raw_spectogram=raw_spectogram,
         save_dict_for_analysis=save_dict_for_analysis,
-        save_name=save_name
+        save_name=save_name,
+        pca_components=pca_components,
+        min_cluster_size=min_cluster_size
     )
 
 if __name__ == "__main__":
@@ -49,6 +51,8 @@ if __name__ == "__main__":
     parser.add_argument('--context', type=int, default=1000, help='Context size for the model.')
     parser.add_argument('--raw_spectogram', type=bool, default=False, help='Whether to use raw spectogram.')
     parser.add_argument('--save_dict_for_analysis', type=bool, default=True, help='Whether to save dictionary for analysis.')
+    parser.add_argument('--pca_components', type=int, default=32, help='Number of PCA components.')
+    parser.add_argument('--min_cluster_size', type=int, default=500, help='Minimum cluster size for HDBSCAN.')
 
     args = parser.parse_args()
     main(
@@ -61,5 +65,7 @@ if __name__ == "__main__":
         args.dict_key,
         args.context,
         args.raw_spectogram,
-        args.save_dict_for_analysis
+        args.save_dict_for_analysis,
+        args.pca_components,
+        args.min_cluster_size
     )
