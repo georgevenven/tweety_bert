@@ -111,11 +111,34 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
 
     return labels
 
+def fast_pga(X, n_components=3):
+    """
+    Fast implementation of Principal Geodesic Analysis (PGA) using SVD.
+    
+    Parameters:
+    - X: numpy array of shape (n_samples, n_features)
+    - n_components: int, number of components to keep
+    
+    Returns:
+    - pga_outputs: numpy array of shape (n_samples, n_components)
+    """
+    # Center the data
+    X_centered = X - np.mean(X, axis=0)
+    
+    # Compute SVD
+    U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+    
+    # Project data onto the first n_components principal geodesics
+    pga_outputs = np.dot(X_centered, Vt[:n_components].T)
+    
+    return pga_outputs
 
 def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                          layer_index=None, dict_key=None, time_bins_per_umap_point=100,
                          context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=False, 
                          remove_non_vocalization=True, pca_components=32, min_cluster_size=500):
+
+    pga_components = pca_components
     predictions_arr = []
     ground_truth_labels_arr = []
     spec_arr = []
@@ -273,27 +296,25 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         file_indices = file_indices[:samples]
         vocalization_arr = vocalization_arr[:samples]
 
-    print(f"shape of array for UMAP {predictions.shape}")
+    print(f"shape of array for PGA {predictions.shape}")
+
+    # Perform PGA
+    print("Performing Principal Geodesic Analysis...")
+    pga_outputs = fast_pga(predictions, n_components=pga_components)
+    print("PGA complete. Shape of PGA outputs:", pga_outputs.shape)
 
     # Fit the UMAP reducer       
-    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='euclidean')
-    # reducer_cluster = umap.UMAP(n_neighbors=200, min_dist=0, n_components=6, metric='cosine')
+    print("Initializing UMAP reducer...")
+    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
+    print("UMAP reducer initialized.")
 
-    # Z-score the activations before PCA
-    from sklearn.preprocessing import StandardScaler
-    scaler = StandardScaler()
-    zscored_predictions = scaler.fit_transform(predictions)
+    print("Generating HDBSCAN labels...")
+    hdbscan_labels = generate_hdbscan_labels(pga_outputs, min_samples=1, min_cluster_size=int(samples/min_cluster_size))
+    print("HDBSCAN labels generated. Unique labels found:", np.unique(hdbscan_labels))
 
-    # Fit the PCA reducer
-    from sklearn.decomposition import PCA
-    pca = PCA(n_components=pca_components)
-    
-    pca_outputs = pca.fit_transform(zscored_predictions)
-
-    hdbscan_labels = generate_hdbscan_labels(pca_outputs, min_cluster_size=min_cluster_size)
-
-    embedding_outputs = reducer.fit_transform(pca_outputs)
-    # embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)
+    print("Fitting UMAP reducer to PGA outputs...")
+    embedding_outputs = reducer.fit_transform(pga_outputs)
+    print("UMAP fitting complete. Shape of embedding outputs:", embedding_outputs.shape)
 
     # add the color black as silences
     cmap_ground_truth = glasbey.extend_palette(["#000000"], palette_size=30)
@@ -364,7 +385,8 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         original_spectogram=original_spec_arr, 
         vocalization=vocalization_arr,
         file_indices=file_indices,
-        file_map=file_map
+        file_map=file_map,
+        pga_outputs=pga_outputs  # Add PGA outputs to the saved file
     )
 
 def process_dataset_for_umap(

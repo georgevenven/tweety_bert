@@ -20,8 +20,8 @@ mkdir -p "$TEMP_DIR"
 mkdir -p "$SPECS"
 
 # Define search parameters
-declare -a PCA_COMPONENTS=(32 64)
-declare -a MIN_CLUSTER_SIZE=(500 5000)
+declare -a PCA_COMPONENTS=(16 32 64)
+declare -a MIN_CLUSTER_SIZE=(100 200 500 1000)
 
 # # Point to wave folder, and generate 1000 files 
 # echo "Generating spectrograms..."
@@ -29,7 +29,7 @@ python src/spectogram_generator.py --src_dir "$WAV_FOLDER" --dst_dir "$SPECS" --
 
 # Call count_timebins.py and store the return value
 echo "Counting timebins and generating folds..."
-python scripts/count_timebins.py --dir_path "$SPECS" --target_timebins 500000 --temp_folds_path "$TEMP_DIR/folds" | {
+python scripts/count_timebins.py --dir_path "$SPECS" --target_timebins 1000000 --temp_folds_path "$TEMP_DIR/folds" | {
     while IFS= read -r line; do
         if [[ $line == "FOLD_PATHS_START" ]]; then
             read_paths=true
@@ -54,7 +54,7 @@ python scripts/count_timebins.py --dir_path "$SPECS" --target_timebins 500000 --
                         --experiment_folder "experiments/$MODEL_NAME" \
                         --data_dir "$path" \
                         --save_name "$save_name" \
-                        --samples 500000 \
+                        --samples 1000000 \
                         --pca_components "$pca" \
                         --min_cluster_size "$cluster_size"
                 done
