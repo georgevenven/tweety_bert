@@ -5,8 +5,6 @@ from scipy.optimize import linear_sum_assignment
 from collections import Counter
 from typing import Dict, List, Tuple, Union
 import numpy.typing as npt
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
 from tqdm import tqdm
 
 def syllable_to_phrase_labels(arr, silence=-1):
@@ -256,6 +254,13 @@ def calculate_average_phrase_length(labels, target_label):
 
     return np.mean(phrase_lengths) if phrase_lengths else 0
 
+def calculate_r2_identity(y_true, y_pred):
+    """Calculate R² for y=x model (identity line)"""
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    r2 = 1 - (ss_res / ss_tot)
+    return r2
+
 # Function to process files with a given smoothing window
 def process_files(smoothing_window):
     ground_truth_entropies = []
@@ -304,11 +309,14 @@ def process_files(smoothing_window):
 def plot_and_calculate_r2(results, smoothing_window, max_entropy, max_phrase_length):
     ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids = results
 
-    # Plot transition entropy with regression line
+    # Plot transition entropy
     plt.figure(figsize=(12, 6))
-    sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, hue=file_ids, size=ground_truth_entropies, sizes=(20, 200), palette='viridis', alpha=0.7, edgecolor='w', linewidth=0.5)
-    model_entropy = LinearRegression().fit(np.array(ground_truth_entropies).reshape(-1, 1), np.array(hdbscan_entropies))
-    plt.plot(ground_truth_entropies, model_entropy.predict(np.array(ground_truth_entropies).reshape(-1, 1)), color='red', linestyle='--', label='Fit Line')
+    sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, hue=file_ids, 
+                    size=ground_truth_entropies, sizes=(20, 200), palette='viridis', 
+                    alpha=0.7, edgecolor='w', linewidth=0.5)
+    # Plot y=x line instead of regression
+    x_range = np.linspace(0, max_entropy, 100)
+    plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
     plt.xlabel('Ground Truth Average Phrase Entropy')
     plt.ylabel('HDBSCAN Average Phrase Entropy')
     plt.title(f'Average Phrase Entropy Comparison (Smoothing Window: {smoothing_window})')
@@ -319,11 +327,14 @@ def plot_and_calculate_r2(results, smoothing_window, max_entropy, max_phrase_len
     plt.savefig(f'average_phrase_entropy_comparison_{smoothing_window}.png')
     plt.close()
 
-    # Plot average phrase length with regression line
+    # Plot average phrase length
     plt.figure(figsize=(12, 6))
-    sns.scatterplot(x=ground_truth_avg_phrase_lengths, y=hdbscan_avg_phrase_lengths, hue=file_ids, size=ground_truth_avg_phrase_lengths, sizes=(20, 200), palette='viridis', alpha=0.7, edgecolor='w', linewidth=0.5)
-    model_phrase_length = LinearRegression().fit(np.array(ground_truth_avg_phrase_lengths).reshape(-1, 1), np.array(hdbscan_avg_phrase_lengths))
-    plt.plot(ground_truth_avg_phrase_lengths, model_phrase_length.predict(np.array(ground_truth_avg_phrase_lengths).reshape(-1, 1)), color='red', linestyle='--', label='Fit Line')
+    sns.scatterplot(x=ground_truth_avg_phrase_lengths, y=hdbscan_avg_phrase_lengths, 
+                    hue=file_ids, size=ground_truth_avg_phrase_lengths, sizes=(20, 200), 
+                    palette='viridis', alpha=0.7, edgecolor='w', linewidth=0.5)
+    # Plot y=x line instead of regression
+    x_range = np.linspace(0, max_phrase_length, 100)
+    plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
     plt.xlabel('Ground Truth Average Phrase Length')
     plt.ylabel('HDBSCAN Average Phrase Length')
     plt.title(f'Average Phrase Length Comparison (Smoothing Window: {smoothing_window})')
@@ -334,23 +345,23 @@ def plot_and_calculate_r2(results, smoothing_window, max_entropy, max_phrase_len
     plt.savefig(f'average_phrase_length_comparison_{smoothing_window}.png')
     plt.close()
 
-    # Calculate R² for both metrics
-    r2_entropy = r2_score(hdbscan_entropies, model_entropy.predict(np.array(ground_truth_entropies).reshape(-1, 1)))
-    r2_phrase_length = r2_score(hdbscan_avg_phrase_lengths, model_phrase_length.predict(np.array(ground_truth_avg_phrase_lengths).reshape(-1, 1)))
+    # Calculate R² for both metrics using y=x model
+    r2_entropy = calculate_r2_identity(np.array(ground_truth_entropies), np.array(hdbscan_entropies))
+    r2_phrase_length = calculate_r2_identity(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths))
 
     return r2_entropy, r2_phrase_length
 
 # New function to process files for multiple window sizes
 def process_multiple_window_sizes():
-    window_sizes = list(range(25, 1001, 25))  # Changed to increments of 25
+    window_sizes = list(range(0, 1001, 100))
     r2_values_entropy = []
     r2_values_phrase_length = []
     r2_values_combined = []
 
     for window_size in tqdm(window_sizes, desc="Processing window sizes"):
         results = process_files(smoothing_window=window_size)
-        r2_entropy = r2_score(results[0], results[1])
-        r2_phrase_length = r2_score(results[2], results[3])
+        r2_entropy = calculate_r2_identity(np.array(results[0]), np.array(results[1]))
+        r2_phrase_length = calculate_r2_identity(np.array(results[2]), np.array(results[3]))
         avg_r2 = (r2_entropy + r2_phrase_length) / 2
         r2_values_entropy.append((window_size, r2_entropy))
         r2_values_phrase_length.append((window_size, r2_phrase_length))
