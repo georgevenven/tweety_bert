@@ -20,8 +20,8 @@ mkdir -p "$TEMP_DIR"
 mkdir -p "$SPECS"
 
 # Define search parameters
-declare -a PCA_COMPONENTS=(16 32 64)
-declare -a MIN_CLUSTER_SIZE=(100 200 500 1000)
+declare -a PCA_COMPONENTS=(64 128)
+declare -a MIN_CLUSTER_SIZE=(300 400 500 600 700 800 900 1000)
 
 # # Point to wave folder, and generate 1000 files 
 # echo "Generating spectrograms..."

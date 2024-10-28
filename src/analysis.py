@@ -308,13 +308,15 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
     print("UMAP reducer initialized.")
 
-    print("Generating HDBSCAN labels...")
-    hdbscan_labels = generate_hdbscan_labels(pga_outputs, min_samples=1, min_cluster_size=int(samples/min_cluster_size))
-    print("HDBSCAN labels generated. Unique labels found:", np.unique(hdbscan_labels))
 
     print("Fitting UMAP reducer to PGA outputs...")
     embedding_outputs = reducer.fit_transform(pga_outputs)
     print("UMAP fitting complete. Shape of embedding outputs:", embedding_outputs.shape)
+
+
+    print("Generating HDBSCAN labels...")
+    hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=int(samples/min_cluster_size))
+    print("HDBSCAN labels generated. Unique labels found:", np.unique(hdbscan_labels))
 
     # add the color black as silences
     cmap_ground_truth = glasbey.extend_palette(["#000000"], palette_size=30)

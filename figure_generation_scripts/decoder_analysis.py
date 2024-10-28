@@ -800,7 +800,7 @@ class StateSwitchingAnalysis:
                 entropy = 0.0
                 for to_state in set(label for _, label in transition_counts if _ == from_state):
                     transition_probability = transition_counts[(from_state, to_state)] / state_counts[from_state]
-                    entropy -= transition_probability * np.log2(transition_probability)
+                    entropy -= transition_probability * np.log(transition_probability)
                 branch_entropies[from_state] = entropy
 
             # Calculate total transition entropy (TE)
