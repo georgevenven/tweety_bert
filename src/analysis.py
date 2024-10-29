@@ -387,9 +387,8 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
         original_spectogram=original_spec_arr, 
         vocalization=vocalization_arr,
         file_indices=file_indices,
-        file_map=file_map,
-        pga_outputs=pga_outputs  # Add PGA outputs to the saved file
-    )
+        file_map=file_map    
+        )
 
 def process_dataset_for_umap(
     model, device, data_dir, samples, layer_index, dict_key,
@@ -685,7 +684,7 @@ def sliding_window_umap(model, device, data_dir="test_llb16",
             shave_index = num_times * context
             data = data[:,:,:,:shave_index]
 
-            ba100tch, channel, freq, time_bins = data.shape 
+            batch, channel, freq, time_bins = data.shape 
 
             # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches 
             data = data.permute(0,-1, 1, 2)
