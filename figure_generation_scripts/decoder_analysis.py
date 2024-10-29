@@ -1053,18 +1053,18 @@ if __name__ == "__main__":
     json_files_with_dates = [
         # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/llb3_songs_decoded_database.json', '2024-03-07 00:00:00'),
         # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/llb11_songs_decoded_database.json', '2024-03-07 00:00:00'),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5177_variable_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5203_static_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5336_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5337_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5371_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5443_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5271_decoded.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5283_decoded.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5505_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5347_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5468_RC3_decoded_database.json', None),
-        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5509_decoded_database.json', None)
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5177_variable_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5203_static_decoded_database.json', None),
+        ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5336_decoded_database.json', None)
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5337_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5371_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5443_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5271_decoded.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20240930T185033Z-001/USA5283_decoded.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5505_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5347_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5468_RC3_decoded_database.json', None),
+        # ('/home/george-vengrovski/Downloads/drive-download-20241007T224715Z-001/USA5509_decoded_database.json', None)
     ]
     
     for json_file_path, trial_date_str in json_files_with_dates:

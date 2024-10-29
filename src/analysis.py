@@ -298,10 +298,10 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
 
     print(f"shape of array for PGA {predictions.shape}")
 
-    # Perform PGA
-    print("Performing Principal Geodesic Analysis...")
-    pga_outputs = fast_pga(predictions, n_components=pga_components)
-    print("PGA complete. Shape of PGA outputs:", pga_outputs.shape)
+    # # Perform PGA
+    # print("Performing Principal Geodesic Analysis...")
+    # pga_outputs = fast_pga(predictions, n_components=pga_components)
+    # print("PGA complete. Shape of PGA outputs:", pga_outputs.shape)
 
     # Fit the UMAP reducer       
     print("Initializing UMAP reducer...")
@@ -310,7 +310,7 @@ def plot_umap_projection(model, device, data_dir, category_colors_file="test_llb
 
 
     print("Fitting UMAP reducer to PGA outputs...")
-    embedding_outputs = reducer.fit_transform(pga_outputs)
+    embedding_outputs = reducer.fit_transform(predictions)
     print("UMAP fitting complete. Shape of embedding outputs:", embedding_outputs.shape)
 
 

@@ -353,7 +353,7 @@ def plot_and_calculate_r2(results, smoothing_window, max_entropy, max_phrase_len
 
 # New function to process files for multiple window sizes
 def process_multiple_window_sizes():
-    window_sizes = list(range(0, 1001, 100))
+    window_sizes = list(range(0, 1001, 25))
     r2_values_entropy = []
     r2_values_phrase_length = []
     r2_values_combined = []
