@@ -15,7 +15,7 @@ SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Diana-SSD/GEORGE/spring_fall_
 EVENT_DATES=("2024-07-20")  # Example date
 
 # Number of samples to select (optional)
-NUM_SAMPLES=5
+NUM_SAMPLES=500
 
 # Temporary directory paths
 TEMP_DIR="./temp"
@@ -54,7 +54,7 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "$SPEC_FILES_PRE" "$SPEC_FILES_POST" \
     --save_name "$BIRD_NAME" \
-    --samples 5e3
+    --samples 1e6
 
 # Train and save Decoder 
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"

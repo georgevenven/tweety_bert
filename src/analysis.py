@@ -133,6 +133,12 @@ def plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_ind
     data_1 = embedding_outputs[dataset_1_mask]
     data_2 = embedding_outputs[dataset_2_mask]
 
+    # Create sample count string for title
+    sample_counts = (
+        f"Samples - {os.path.basename(data_dirs[0])}: {len(data_1):,}, "
+        f"{os.path.basename(data_dirs[1])}: {len(data_2):,}"
+    )
+
     # Create 2D histograms
     bins = 300
     heatmap_1, xedges, yedges = np.histogram2d(data_1[:, 0], data_1[:, 1], bins=bins)
@@ -151,39 +157,41 @@ def plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_ind
     rgb_image[..., 1] = np.clip(heatmap_2.T * brightness_factor, 0, 1)  # Green channel
     rgb_image[..., 2] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Blue channel
 
-    # Create the comparison plot
-    fig = plt.figure(figsize=(18, 6))
-    
     # Plot dataset 1
-    plt.subplot(1, 3, 1)
-    plt.imshow(heatmap_1.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-              origin='lower', cmap='Purples', vmax=0.1)
-    plt.title(f"Dataset: {os.path.basename(data_dirs[0])}", fontsize=16)
-    plt.xlabel('UMAP Dimension 1')
-    plt.ylabel('UMAP Dimension 2')
+    fig1, ax1 = plt.subplots(figsize=(6, 6))
+    ax1.imshow(heatmap_1.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+               origin='lower', cmap='Purples', vmax=0.1)
+    ax1.set_title(f"Dataset: {os.path.basename(data_dirs[0])}", fontsize=16)
+    ax1.set_xlabel('UMAP Dimension 1')
+    ax1.set_ylabel('UMAP Dimension 2')
+    fig1.tight_layout()
+    fig1.savefig(os.path.join(experiment_dir, "dataset_1.png"), dpi=300)
+    fig1.savefig(os.path.join(experiment_dir, "dataset_1.svg"))
+    plt.close(fig1)
 
     # Plot dataset 2
-    plt.subplot(1, 3, 2)
-    plt.imshow(heatmap_2.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-              origin='lower', cmap='Greens', vmax=0.1)
-    plt.title(f"Dataset: {os.path.basename(data_dirs[1])}", fontsize=16)
-    plt.xlabel('UMAP Dimension 1')
+    fig2, ax2 = plt.subplots(figsize=(6, 6))
+    ax2.imshow(heatmap_2.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+               origin='lower', cmap='Greens', vmax=0.1)
+    ax2.set_title(f"Dataset: {os.path.basename(data_dirs[1])}", fontsize=16)
+    ax2.set_xlabel('UMAP Dimension 1')
+    fig2.tight_layout()
+    fig2.savefig(os.path.join(experiment_dir, "dataset_2.png"), dpi=300)
+    fig2.savefig(os.path.join(experiment_dir, "dataset_2.svg"))
+    plt.close(fig2)
 
     # Plot overlap
-    plt.subplot(1, 3, 3)
-    plt.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-              origin='lower')
-    plt.title("Overlapping Datasets", fontsize=16)
-    plt.xlabel('UMAP Dimension 1')
+    fig3, ax3 = plt.subplots(figsize=(6, 6))
+    ax3.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+               origin='lower')
+    ax3.set_title("Overlapping Datasets", fontsize=16)
+    ax3.set_xlabel('UMAP Dimension 1')
+    fig3.tight_layout()
+    fig3.savefig(os.path.join(experiment_dir, "overlap.png"), dpi=300)
+    fig3.savefig(os.path.join(experiment_dir, "overlap.svg"))
+    plt.close(fig3)
 
-    # Add main title
-    plt.suptitle(f"Dataset Comparison - {save_name}", fontsize=20)
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
     
-    # Save the plot
-    plt.savefig(os.path.join(experiment_dir, "dataset_comparison.png"))
-    plt.close()
-
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                          layer_index=None, dict_key=None, 
                          context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True, 
@@ -221,7 +229,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 # Retrieve the next batch
                 data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
 
-                # temporary fix for corrupted data
+                # Temporary fix for corrupted data
                 if data.shape[1] < 100:
                     continue
 
@@ -257,7 +265,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 else:
                     continue
 
-                if raw_spectogram == False:
+                if not raw_spectogram:
                     data = data.unsqueeze(1)
                     data = data.permute(0, 1, 3, 2)
 
@@ -321,7 +329,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 print(f"Dataset {data_dir} exhausted after {dataset_samples} samples")
                 break
 
-    # convert the list of batch * samples * features to samples * features
+    # Convert the list of batch * samples * features to samples * features
     ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
     spec_arr = np.concatenate(spec_arr, axis=0)
     file_indices = np.concatenate(file_indices_arr, axis=0)
@@ -349,7 +357,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         file_indices = file_indices[vocalization_indices]
         dataset_indices = dataset_indices[vocalization_indices]  # Add this line
 
-    # razor off any extra datapoints
+    # Limit to the specified number of samples
     if samples > len(predictions):
         samples = len(predictions)
     else:
@@ -372,120 +380,90 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=int(samples/min_cluster_size))
     print("HDBSCAN labels generated. Unique labels found:", np.unique(hdbscan_labels))
 
-    # add the color black as silences
-    cmap_ground_truth = glasbey.extend_palette(["#000000"], palette_size=30)
-    cmap_ground_truth = mcolors.ListedColormap(cmap_ground_truth)
-
-    # Compute unique labels and their corresponding colors for ground truth labels
+    # Get unique labels and create color palettes
+    unique_clusters = np.unique(hdbscan_labels)
     unique_ground_truth_labels = np.unique(ground_truth_labels)
-    ground_truth_label_colors = {label: cmap_ground_truth.colors[label % len(cmap_ground_truth.colors)] 
-                               for label in unique_ground_truth_labels}
+    
+    def create_color_palette(n_colors):
+        """Create a color palette with the specified number of colors"""
+        colors = glasbey.create_palette(palette_size=n_colors)
+        
+        def hex_to_rgb(hex_str):
+            # Remove '#' if present
+            hex_str = hex_str.lstrip('#')
+            # Convert hex to RGB
+            return tuple(int(hex_str[i:i+2], 16)/255.0 for i in (0, 2, 4))
+        
+        # Convert hex colors to RGB tuples
+        rgb_colors = [hex_to_rgb(color) for color in colors]
+        return rgb_colors
 
-    # Create a colormap for HDBSCAN labels
-    cmap_hdbscan = glasbey.extend_palette(["#FFFFFF"], palette_size=30)
-    cmap_hdbscan = mcolors.ListedColormap(cmap_hdbscan)
-    hdbscan_colors = np.array([cmap_hdbscan.colors[label % len(cmap_hdbscan.colors)] 
-                              for label in hdbscan_labels])
+    # Create color palettes
+    n_ground_truth_labels = len(unique_ground_truth_labels)
+    n_hdbscan_clusters = len(unique_clusters)
+    ground_truth_colors = create_color_palette(n_ground_truth_labels)
+    hdbscan_colors = create_color_palette(n_hdbscan_clusters)
+    
+    # Make the first color in the HDBSCAN palette black
+    hdbscan_colors[0] = (0, 0, 0)
 
     # Create experiment-specific directory for images
     experiment_dir = os.path.join("imgs", "umap_plots", save_name)
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
 
-    # Create 2D histograms for HDBSCAN labels
-    bins = 300
-    heatmap_hdbscan, xedges, yedges = np.histogram2d(
-        embedding_outputs[:, 0], embedding_outputs[:, 1],
-        bins=bins,
-        weights=None
-    )
-    
-    # Create separate heatmaps for each HDBSCAN cluster
-    unique_clusters = np.unique(hdbscan_labels)
-    rgb_image_hdbscan = np.zeros((bins, bins, 3))
-    # Use default Glasbey palettes without adding black or white
-    ground_truth_colors = glasbey.palette
-    hdbscan_colors = glasbey.palette
-
-    # Adjust brightness factor
-    brightness_factor = 2
-
-    # Create RGB images
-    bins = 300
-    rgb_image_hdbscan = np.zeros((bins, bins, 3))
-    rgb_image_ground_truth = np.zeros((bins, bins, 3))
-
-    # Generate heatmaps for HDBSCAN labels
-    unique_clusters = np.unique(hdbscan_labels)
-    for cluster in unique_clusters:
-        if cluster == -1:  # Skip noise points
-            continue
-        mask = hdbscan_labels == cluster
-        cluster_data = embedding_outputs[mask]
-        if cluster_data.size == 0:
-            continue
-        heatmap, _, _ = np.histogram2d(
-            cluster_data[:, 0], cluster_data[:, 1],
-            bins=[xedges, yedges]
-        )
-        if heatmap.max() > 0:
-            heatmap = heatmap / heatmap.max()
-        else:
-            continue
-        color = mcolors.to_rgb(hdbscan_colors[cluster % len(hdbscan_colors)])
-        for i in range(3):
-            rgb_image_hdbscan[..., i] += heatmap.T * color[i]
-    rgb_image_hdbscan = np.clip(rgb_image_hdbscan * brightness_factor, 0, 1)
-
-    # Generate heatmaps for ground truth labels
-    unique_labels = np.unique(ground_truth_labels)
-    for label in unique_labels:
-        mask = ground_truth_labels == label
-        label_data = embedding_outputs[mask]
-        if label_data.size == 0:
-            continue
-        heatmap, _, _ = np.histogram2d(
-            label_data[:, 0], label_data[:, 1],
-            bins=[xedges, yedges]
-        )
-        if heatmap.max() > 0:
-            heatmap = heatmap / heatmap.max()
-        else:
-            continue
-        color = mcolors.to_rgb(ground_truth_colors[label % len(ground_truth_colors)])
-        for i in range(3):
-            rgb_image_ground_truth[..., i] += heatmap.T * color[i]
-    rgb_image_ground_truth = np.clip(rgb_image_ground_truth * brightness_factor, 0, 1)
-
     # Plot HDBSCAN labels
-    fig, ax = plt.subplots(figsize=(16, 16), facecolor='white')
-    ax.set_facecolor('white')
-    ax.imshow(rgb_image_hdbscan, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-            origin='lower')
-    ax.set_title("HDBSCAN Discovered Labels", fontsize=48)
-    ax.set_xlabel('UMAP Dimension 1', fontsize=48)
-    ax.set_ylabel('UMAP Dimension 2', fontsize=48)
-    ax.tick_params(axis='both', which='both', bottom=False, left=False,
-                labelbottom=False, labelleft=False)
+    fig1, ax1 = plt.subplots(figsize=(16, 16), facecolor='white')
+    ax1.set_facecolor('white')
+    ax1.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
+               c=hdbscan_labels, s=10, alpha=0.1, 
+               cmap=mcolors.ListedColormap(hdbscan_colors))
+    ax1.set_title("HDBSCAN Discovered Labels", fontsize=48)
+    ax1.set_xlabel('UMAP Dimension 1', fontsize=48)
+    ax1.set_ylabel('UMAP Dimension 2', fontsize=48)
+    ax1.tick_params(axis='both', which='both', bottom=False, left=False,
+                   labelbottom=False, labelleft=False)
     plt.tight_layout()
-    plt.savefig(os.path.join(experiment_dir, "hdbscan_density.png"),
-                facecolor=fig.get_facecolor(), edgecolor='none')
-    plt.close(fig)
+    plt.savefig(os.path.join(experiment_dir, "hdbscan_labels.png"),
+                facecolor=fig1.get_facecolor(), edgecolor='none')
+    plt.close(fig1)
 
     # Plot Ground Truth labels
-    fig, ax = plt.subplots(figsize=(16, 16), facecolor='white')
-    ax.set_facecolor('white')
-    ax.imshow(rgb_image_ground_truth, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-            origin='lower')
-    ax.set_title("Ground Truth Labels", fontsize=48)
-    ax.set_xlabel('UMAP Dimension 1', fontsize=48)
-    ax.set_ylabel('UMAP Dimension 2', fontsize=48)
-    ax.tick_params(axis='both', which='both', bottom=False, left=False,
-                labelbottom=False, labelleft=False)
+    fig2, ax2 = plt.subplots(figsize=(16, 16), facecolor='white')
+    ax2.set_facecolor('white')
+    ax2.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
+               c=ground_truth_labels, s=10, alpha=0.1,
+               cmap=mcolors.ListedColormap(ground_truth_colors))
+    ax2.set_title("Ground Truth Labels", fontsize=48)
+    ax2.set_xlabel('UMAP Dimension 1', fontsize=48)
+    ax2.set_ylabel('UMAP Dimension 2', fontsize=48)
+    ax2.tick_params(axis='both', which='both', bottom=False, left=False,
+                   labelbottom=False, labelleft=False)
     plt.tight_layout()
-    plt.savefig(os.path.join(experiment_dir, "ground_truth_density.png"),
-                facecolor=fig.get_facecolor(), edgecolor='none')
-    plt.close(fig)
+    plt.savefig(os.path.join(experiment_dir, "ground_truth_labels.png"),
+                facecolor=fig2.get_facecolor(), edgecolor='none')
+    plt.close(fig2)
+
+    # Save the data
+    np.savez(
+        f"files/{save_name}",
+        embedding_outputs=embedding_outputs,
+        hdbscan_labels=hdbscan_labels,
+        ground_truth_labels=ground_truth_labels,
+        s=spec_arr,
+        hdbscan_colors=hdbscan_colors,
+        ground_truth_colors=ground_truth_colors,
+        original_spectogram=original_spec_arr,
+        vocalization=vocalization_arr,
+        file_indices=file_indices,
+        dataset_indices=dataset_indices,
+        file_map=file_map
+    )
+
+    # Generate dataset comparison if there are exactly 2 datasets
+    if len(data_dirs) == 2:
+        plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_indices)
+
 
 def apply_windowing(arr, window_size, stride, flatten_predictions=False):
     """
