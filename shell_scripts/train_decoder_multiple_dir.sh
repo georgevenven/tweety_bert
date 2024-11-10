@@ -4,11 +4,11 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="USA5494"
+BIRD_NAME="USA5508"
 MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
 
 # Specify the WAV folder and song detection JSON path
-WAV_FOLDER="/media/george-vengrovski/Diana-SSD/GEORGE/FallvSpring2024_fallandspringcombined/USA5494_Combined"
+WAV_FOLDER="/media/george-vengrovski/Diana-SSD/GEORGE/FallvSpring2024_fallandspringcombined/USA5508_Combined"
 SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Diana-SSD/GEORGE/spring_fall_cohort_merged_output.json"
 
 # Event dates (you can specify multiple dates)

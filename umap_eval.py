@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Dict, List, Tuple, Union
 import numpy.typing as npt
 from tqdm import tqdm
+from scipy.stats import pearsonr
 
 def syllable_to_phrase_labels(arr, silence=-1):
     new_arr = np.array(arr, dtype=int)
@@ -138,7 +139,7 @@ class SequenceAnalyzer:
         plt.close()  # Close the figure to free up memory
 
 # Process the files
-files = ["files/llb3_fold4_pca_128_cluster_500.npz", "files/llb11.npz", "files/llb16.npz"]
+files = ["/media/george-vengrovski/flash-drive/llb3.npz", "/media/george-vengrovski/flash-drive/llb11.npz", "/media/george-vengrovski/flash-drive/llb16.npz"]
 analyzer = SequenceAnalyzer()
 
 # for file in files:
@@ -254,12 +255,10 @@ def calculate_average_phrase_length(labels, target_label):
 
     return np.mean(phrase_lengths) if phrase_lengths else 0
 
-def calculate_r2_identity(y_true, y_pred):
-    """Calculate R² for y=x model (identity line)"""
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    r2 = 1 - (ss_res / ss_tot)
-    return r2
+def calculate_pearson(y_true, y_pred):
+    """Calculate Pearson correlation coefficient"""
+    correlation, _ = pearsonr(y_true, y_pred)
+    return correlation
 
 # Function to process files with a given smoothing window
 def process_files(smoothing_window):
@@ -346,28 +345,28 @@ def plot_and_calculate_r2(results, smoothing_window, max_entropy, max_phrase_len
     plt.close()
 
     # Calculate R² for both metrics using y=x model
-    r2_entropy = calculate_r2_identity(np.array(ground_truth_entropies), np.array(hdbscan_entropies))
-    r2_phrase_length = calculate_r2_identity(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths))
+    r2_entropy = calculate_pearson(np.array(ground_truth_entropies), np.array(hdbscan_entropies))
+    r2_phrase_length = calculate_pearson(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths))
 
     return r2_entropy, r2_phrase_length
 
 # New function to process files for multiple window sizes
 def process_multiple_window_sizes():
-    window_sizes = list(range(0, 1001, 25))
-    r2_values_entropy = []
-    r2_values_phrase_length = []
-    r2_values_combined = []
+    window_sizes = list(range(0, 300, 100))
+    pearson_values_entropy = []
+    pearson_values_phrase_length = []
+    pearson_values_combined = []
 
     for window_size in tqdm(window_sizes, desc="Processing window sizes"):
         results = process_files(smoothing_window=window_size)
-        r2_entropy = calculate_r2_identity(np.array(results[0]), np.array(results[1]))
-        r2_phrase_length = calculate_r2_identity(np.array(results[2]), np.array(results[3]))
-        avg_r2 = (r2_entropy + r2_phrase_length) / 2
-        r2_values_entropy.append((window_size, r2_entropy))
-        r2_values_phrase_length.append((window_size, r2_phrase_length))
-        r2_values_combined.append((window_size, avg_r2))
+        pearson_entropy = calculate_pearson(np.array(results[0]), np.array(results[1]))
+        pearson_phrase_length = calculate_pearson(np.array(results[2]), np.array(results[3]))
+        avg_pearson = (pearson_entropy + pearson_phrase_length) / 2
+        pearson_values_entropy.append((window_size, pearson_entropy))
+        pearson_values_phrase_length.append((window_size, pearson_phrase_length))
+        pearson_values_combined.append((window_size, avg_pearson))
 
-    return r2_values_entropy, r2_values_phrase_length, r2_values_combined
+    return pearson_values_entropy, pearson_values_phrase_length, pearson_values_combined
 
 # Calculate the maximum entropy and phrase length across all datasets
 def calculate_max_values():
@@ -392,32 +391,29 @@ def calculate_max_values():
 max_entropy, max_phrase_length = calculate_max_values()
 
 # Process files with multiple window sizes
-r2_values_entropy, r2_values_phrase_length, r2_values_combined = process_multiple_window_sizes()
+pearson_values_entropy, pearson_values_phrase_length, pearson_values_combined = process_multiple_window_sizes()
 
 # Plot R² values
-plt.figure(figsize=(12, 8))  # Increased figure size
-window_sizes, r2_entropy = zip(*r2_values_entropy)
-_, r2_phrase_length = zip(*r2_values_phrase_length)
-_, r2_combined = zip(*r2_values_combined)
+plt.figure(figsize=(12, 8))
+window_sizes, pearson_entropy = zip(*pearson_values_entropy)
+_, pearson_phrase_length = zip(*pearson_values_phrase_length)
+_, pearson_combined = zip(*pearson_values_combined)
 
-plt.scatter(window_sizes, r2_entropy, label='Entropy', alpha=0.7)
-plt.scatter(window_sizes, r2_phrase_length, label='Phrase Duration', alpha=0.7)
-plt.scatter(window_sizes, r2_combined, label='Combined Average', alpha=0.7)
+plt.scatter(window_sizes, pearson_entropy, label='Entropy', alpha=0.7)
+plt.scatter(window_sizes, pearson_phrase_length, label='Phrase Duration', alpha=0.7)
+plt.scatter(window_sizes, pearson_combined, label='Combined Average', alpha=0.7)
 
-plt.xlabel('Smoothing Window Size', fontsize=14)  # Increased font size
-plt.ylabel('R² Value', fontsize=14)  # Increased font size
-plt.title('R² Values for Different Smoothing Window Sizes', fontsize=16)  # Increased font size
-plt.legend(fontsize=12)  # Increased legend font size
+plt.xlabel('Smoothing Window Size', fontsize=14)
+plt.ylabel('Pearson Correlation Coefficient', fontsize=14)
+plt.title('Pearson Correlation for Different Smoothing Window Sizes', fontsize=16)
+plt.legend(fontsize=12)
 plt.grid(True, linestyle='--', alpha=0.5)
 
-# Increase tick label font size
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
-
-# Adjust layout to prevent cutting off labels
 plt.tight_layout()
 
-plt.savefig('r2_values_by_window_size.png', dpi=300)
+plt.savefig('pearson_correlation_by_window_size.png', dpi=300)
 plt.close()
 
 print("Processing complete. Check the generated plots for results.")

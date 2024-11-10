@@ -2,38 +2,56 @@ import os
 import random
 import argparse
 
-def split_bird_ids(input_dir, test_percentage):
+def collect_all_files(input_dir):
     """
-    Splits the bird ID directories into training and testing sets based on the specified percentage.
+    Recursively collects all files in the input directory.
 
     Args:
-        input_dir (str): The directory containing subdirectories of bird IDs.
-        test_percentage (float): The percentage of directories to be used for testing.
+        input_dir (str): The directory to search for files.
 
     Returns:
-        tuple: Two lists of directories, one for training and one for testing.
+        list: A list of file paths.
     """
-    # Collect all subdirectories (bird IDs) in the input directory
-    bird_ids = [os.path.join(input_dir, d) for d in os.listdir(input_dir) if os.path.isdir(os.path.join(input_dir, d))]
+    file_paths = []
+    for root, dirs, files in os.walk(input_dir):
+        for name in files:
+            file_paths.append(os.path.join(root, name))
+    return file_paths
 
-    # Calculate the number of directories to be used for testing
-    total_dirs = len(bird_ids)
-    num_test_dirs = int(total_dirs * test_percentage / 100)
+def split_files(input_dir, test_percentage):
+    """
+    Splits the files in the input directory into training and testing sets based on the specified percentage.
 
-    # Shuffle the list of bird IDs
-    random.shuffle(bird_ids)
+    Args:
+        input_dir (str): The directory containing files or subdirectories with files.
+        test_percentage (float): The percentage of files to be used for testing.
+
+    Returns:
+        tuple: Two lists of file paths, one for training and one for testing.
+    """
+    # Collect all files in the input directory, including nested files
+    all_files = collect_all_files(input_dir)
+
+    # Calculate the number of files to be used for testing
+    total_files = len(all_files)
+    num_test_files = int(total_files * test_percentage / 100)
+
+    # Shuffle the list of files
+    random.shuffle(all_files)
 
     # Split the shuffled list into test and train sets
-    test_dirs = bird_ids[:num_test_dirs]
-    train_dirs = bird_ids[num_test_dirs:]
+    test_files = all_files[:num_test_files]
+    train_files = all_files[num_test_files:]
 
-    return train_dirs, test_dirs
+    return train_files, test_files
 
 def main():
     # Set up argument parsing
-    parser = argparse.ArgumentParser(description="Split bird ID directories into training and testing sets.")
-    parser.add_argument("input_dir", type=str, help="The directory containing subdirectories of bird IDs.")
-    parser.add_argument("test_percentage", type=float, help="The percentage of directories to be used for testing.")
+    parser = argparse.ArgumentParser(description="Split files into training and testing sets.")
+    parser.add_argument("input_dir", type=str, help="The directory containing files or subdirectories with files.")
+    parser.add_argument("test_percentage", type=float, help="The percentage of files to be used for testing.")
+    parser.add_argument("--train_output", type=str, default="train_files.txt", help="File to write train file paths.")
+    parser.add_argument("--test_output", type=str, default="test_files.txt", help="File to write test file paths.")
     args = parser.parse_args()
 
     # Validate the input directory
@@ -46,13 +64,20 @@ def main():
         print("Error: Test percentage must be a number between 0 and 100.")
         return
 
-    # Split the bird IDs into training and testing sets
-    train_dirs, test_dirs = split_bird_ids(args.input_dir, args.test_percentage)
+    # Split the files into training and testing sets
+    train_files, test_files = split_files(args.input_dir, args.test_percentage)
 
-    # Output the lists of directories as space-separated strings
-    print(" ".join(train_dirs))
-    print(" ".join(test_dirs))
+    # Write the lists of files to the specified output files
+    with open(args.train_output, 'w') as f:
+        for file_path in train_files:
+            f.write(f"{file_path}\n")
+
+    with open(args.test_output, 'w') as f:
+        for file_path in test_files:
+            f.write(f"{file_path}\n")
+
+    print(f"Train files written to {args.train_output}")
+    print(f"Test files written to {args.test_output}")
 
 if __name__ == "__main__":
     main()
-
