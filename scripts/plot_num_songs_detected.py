@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # Configuration variables
-JSON_PATH = '/home/george-vengrovski/Documents/projects/tweety_bert_paper/merged_output.json'
-SINGLE_BIRD = "USA5288"  # Set to None for all birds, or a string like "USA5336" for a specific bird
+JSON_PATH = '/media/george-vengrovski/flash-drive/jsons/merged_output.json'
+SINGLE_BIRD = None  # Set to None for all birds, or a string like "USA5336" for a specific bird
 
 class FileParser:
     def parse_date_time(self, file_path, format="standard"):

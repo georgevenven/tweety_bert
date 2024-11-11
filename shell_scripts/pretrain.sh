@@ -8,8 +8,19 @@ INPUT_DIR="/home/george-vengrovski/Documents/testost_pretrain"
 SONG_DETECTION_JSON_PATH=None
 TEST_PERCENTAGE=20
 EXPERIMENT_NAME="TESTOSTERONE_MODEL"
-TRAIN_FILE_LIST="train_files.txt"
-TEST_FILE_LIST="test_files.txt"
+TEMP_DIR="./temp"
+TRAIN_FILE_LIST="$TEMP_DIR/train_files.txt"
+TEST_FILE_LIST="$TEMP_DIR/test_files.txt"
+
+# Remove the temp directory if it exists to avoid interference
+if [ -d "$TEMP_DIR" ]; then
+    rm -rf "$TEMP_DIR"
+    echo "Removed existing temporary directory: $TEMP_DIR"
+fi
+
+# Create temp directory
+mkdir -p "$TEMP_DIR"
+echo "Created temporary directory: $TEMP_DIR"
 
 # Call the Python script to split files
 python3 scripts/split_files_into_train_and_test.py "$INPUT_DIR" "$TEST_PERCENTAGE" --train_output "$TRAIN_FILE_LIST" --test_output "$TEST_FILE_LIST"
@@ -24,25 +35,15 @@ printf '%s\n' "${train_files[@]}"
 echo "Test files:"
 printf '%s\n' "${test_files[@]}"
 
-# Create temp, train, and test directories if they do not exist at the same level as the script
-TEMP_DIR="./temp"
+# Create train and test directories inside TEMP_DIR
 TRAIN_DIR="$TEMP_DIR/train_dir"
 TEST_DIR="$TEMP_DIR/test_dir"
 
-if [ ! -d "$TEMP_DIR" ]; then
-    mkdir -p "$TEMP_DIR"
-    echo "Created temporary directory: $TEMP_DIR"
-fi
+mkdir -p "$TRAIN_DIR"
+echo "Created training directory: $TRAIN_DIR"
 
-if [ ! -d "$TRAIN_DIR" ]; then
-    mkdir -p "$TRAIN_DIR"
-    echo "Created training directory: $TRAIN_DIR"
-fi
-
-if [ ! -d "$TEST_DIR" ]; then
-    mkdir -p "$TEST_DIR"
-    echo "Created testing directory: $TEST_DIR"
-fi
+mkdir -p "$TEST_DIR"
+echo "Created testing directory: $TEST_DIR"
 
 # Copy train files into TRAIN_DIR, maintaining directory structure
 for file in "${train_files[@]}"; do
@@ -77,3 +78,7 @@ python3 src/spectogram_generator.py --src_dir "$TEST_DIR" --dst_dir "$TEST_DIR" 
 
 # Run TweetyBERT
 python3 src/TweetyBERT.py --experiment_name "$EXPERIMENT_NAME" --train_dir "$TRAIN_DIR" --test_dir "$TEST_DIR"
+
+# Delete the temp directory after processing is complete
+rm -rf "$TEMP_DIR"
+echo "Deleted temporary directory and its contents: $TEMP_DIR"
