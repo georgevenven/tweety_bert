@@ -305,50 +305,64 @@ def process_files(smoothing_window):
     return (ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids)
 
 # Modify the plot_and_calculate_r2 function
-def plot_and_calculate_r2(results, smoothing_window, max_entropy, max_phrase_length):
+def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phrase_length):
     ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids = results
-
+    
     # Plot transition entropy
-    plt.figure(figsize=(12, 6))
-    sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, hue=file_ids, 
-                    size=ground_truth_entropies, sizes=(20, 200), palette='viridis', 
+    plt.figure(figsize=(12, 6), dpi=300)  # Higher DPI for better resolution
+    scatter = sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, hue=file_ids, 
+                    size=ground_truth_entropies, sizes=(50, 200), palette='viridis', 
                     alpha=0.7, edgecolor='w', linewidth=0.5)
-    # Plot y=x line instead of regression
+    
+    # Plot y=x line
     x_range = np.linspace(0, max_entropy, 100)
     plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
-    plt.xlabel('Ground Truth Average Phrase Entropy')
-    plt.ylabel('HDBSCAN Average Phrase Entropy')
-    plt.title(f'Average Phrase Entropy Comparison (Smoothing Window: {smoothing_window})')
-    plt.legend()
+    
+    # Calculate and display Pearson correlation
+    pearson = calculate_pearson(np.array(ground_truth_entropies), np.array(hdbscan_entropies))
+    plt.text(0.05, 0.95, f'Pearson r = {pearson:.3f}', 
+             transform=plt.gca().transAxes, fontsize=12, 
+             bbox=dict(facecolor='white', alpha=0.8))
+    
+    plt.xlabel('Ground Truth Average Phrase Entropy', fontsize=12)
+    plt.ylabel('HDBSCAN Average Phrase Entropy', fontsize=12)
+    plt.title(f'Average Phrase Entropy Comparison\n(Smoothing Window: {smoothing_window})', fontsize=14)
+    plt.legend(title='File ID', fontsize=10, title_fontsize=10)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.xlim(0, max_entropy)
     plt.ylim(0, max_entropy)
-    plt.savefig(f'average_phrase_entropy_comparison_{smoothing_window}.png')
+    plt.tight_layout()
+    plt.savefig(f'phrase_entropy_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     # Plot average phrase length
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, 6), dpi=300)  # Higher DPI for better resolution
     sns.scatterplot(x=ground_truth_avg_phrase_lengths, y=hdbscan_avg_phrase_lengths, 
-                    hue=file_ids, size=ground_truth_avg_phrase_lengths, sizes=(20, 200), 
+                    hue=file_ids, size=ground_truth_avg_phrase_lengths, sizes=(50, 200), 
                     palette='viridis', alpha=0.7, edgecolor='w', linewidth=0.5)
-    # Plot y=x line instead of regression
+    
+    # Plot y=x line
     x_range = np.linspace(0, max_phrase_length, 100)
     plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
-    plt.xlabel('Ground Truth Average Phrase Length')
-    plt.ylabel('HDBSCAN Average Phrase Length')
-    plt.title(f'Average Phrase Length Comparison (Smoothing Window: {smoothing_window})')
-    plt.legend()
+    
+    # Calculate and display Pearson correlation
+    pearson = calculate_pearson(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths))
+    plt.text(0.05, 0.95, f'Pearson r = {pearson:.3f}', 
+             transform=plt.gca().transAxes, fontsize=12, 
+             bbox=dict(facecolor='white', alpha=0.8))
+    
+    plt.xlabel('Ground Truth Average Phrase Length', fontsize=12)
+    plt.ylabel('HDBSCAN Average Phrase Length', fontsize=12)
+    plt.title(f'Average Phrase Length Comparison\n(Smoothing Window: {smoothing_window})', fontsize=14)
+    plt.legend(title='File ID', fontsize=10, title_fontsize=10)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.xlim(0, max_phrase_length)
     plt.ylim(0, max_phrase_length)
-    plt.savefig(f'average_phrase_length_comparison_{smoothing_window}.png')
+    plt.tight_layout()
+    plt.savefig(f'phrase_length_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-    # Calculate R² for both metrics using y=x model
-    r2_entropy = calculate_pearson(np.array(ground_truth_entropies), np.array(hdbscan_entropies))
-    r2_phrase_length = calculate_pearson(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths))
-
-    return r2_entropy, r2_phrase_length
+    return pearson_entropy, pearson_phrase_length
 
 # New function to process files for multiple window sizes
 def process_multiple_window_sizes():
