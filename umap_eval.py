@@ -50,6 +50,9 @@ def smooth_labels(labels, window_size=50):
                 left -= 1
                 right += 1
 
+    if window_size == 0:
+        return labels
+
     smoothed_labels = np.zeros_like(labels)
     for i in range(len(labels)):
         start = max(0, i - window_size // 2)
@@ -187,9 +190,12 @@ def process_files(smoothing_window):
         # Compute mapping before smoothing
         ground_truth_phrase_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
-        # Create shared area matrix using original HDBSCAN labels
+        # Fill in -1 labels in hdbscan_labels by smoothing with window_size=0
+        hdbscan_labels_filled = smooth_labels(hdbscan_labels, window_size=0)
+
+        # Create shared area matrix using filled HDBSCAN labels
         normalized_matrix, unique_ground_truth, unique_predicted = analyzer.create_shared_area_matrix(
-            ground_truth_phrase_labels, hdbscan_labels)
+            ground_truth_phrase_labels, hdbscan_labels_filled)
 
         # Use merged labels mapping (ground truth labels to HDBSCAN labels)
         mapping = create_merged_label_mapping(
@@ -198,7 +204,7 @@ def process_files(smoothing_window):
         # Map ground truth labels before smoothing
         mapped_ground_truth_phrase_labels = np.array([mapping[label] for label in ground_truth_phrase_labels])
 
-        # Apply smoothing to the HDBSCAN labels
+        # Apply smoothing to the original HDBSCAN labels
         smoothed_hdbscan_labels = smooth_labels(hdbscan_labels, window_size=smoothing_window)
 
         # Process each mapped HDBSCAN label
@@ -250,7 +256,7 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
     # Plot scatter points
     scatter = sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, 
                               hue=file_ids, 
-                              size=sizes,  # Use the sizes computed from counts
+                              size=sizes,
                               sizes=(min_size, max_size), palette='viridis', 
                               alpha=0.7, edgecolor='w', linewidth=0.5,
                               zorder=2)
@@ -261,10 +267,9 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
              transform=plt.gca().transAxes, fontsize=18, 
              bbox=dict(facecolor='white', alpha=0.8))
 
-    plt.xlabel('Mapped Ground Truth Average Phrase Entropy', fontsize=24)
+    plt.xlabel('Ground Truth Average Phrase Entropy', fontsize=24)
     plt.ylabel('HDBSCAN Average Phrase Entropy', fontsize=24)
     plt.title(f'Average Phrase Entropy Comparison\n(Smoothing Window: {smoothing_window})', fontsize=24)
-    plt.legend(title='File ID', fontsize=18, title_fontsize=18)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.xlim(0, max_entropy)
     plt.ylim(0, max_entropy)
@@ -272,9 +277,10 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
     plt.yticks(fontsize=18)
     plt.tight_layout()
 
-    # Remove the size legend
+    # Create legend with only Bird ID
     handles, labels = plt.gca().get_legend_handles_labels()
-    plt.legend(handles[:len(set(file_ids))], labels[:len(set(file_ids))], title='File ID', fontsize=18, title_fontsize=18)
+    plt.legend(handles[:len(set(file_ids))], [f'Bird {id+1}' for id in range(len(set(file_ids)))], 
+              title='Bird ID', fontsize=18, title_fontsize=18)
 
     plt.savefig(f'phrase_entropy_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
     plt.close()
@@ -284,12 +290,12 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
 
     # Plot y=x line
     x_range = np.linspace(0, max_phrase_length, 100)
-    plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
+    plt.plot(x_range, x_range, color='red', linestyle='--', zorder=1)
 
     # Plot scatter points
     scatter = sns.scatterplot(x=ground_truth_avg_phrase_lengths, y=hdbscan_avg_phrase_lengths, 
                               hue=file_ids, 
-                              size=sizes,  # Use the sizes computed from counts
+                              size=sizes,
                               sizes=(min_size, max_size), palette='viridis', 
                               alpha=0.7, edgecolor='w', linewidth=0.5,
                               zorder=2)
@@ -300,10 +306,9 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
              transform=plt.gca().transAxes, fontsize=18, 
              bbox=dict(facecolor='white', alpha=0.8))
 
-    plt.xlabel('Mapped Ground Truth Average Phrase Length', fontsize=24)
+    plt.xlabel('Ground Truth Phrase Length', fontsize=24)
     plt.ylabel('HDBSCAN Average Phrase Length', fontsize=24)
     plt.title(f'Average Phrase Length Comparison\n(Smoothing Window: {smoothing_window})', fontsize=24)
-    plt.legend(title='File ID', fontsize=18, title_fontsize=18)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.xlim(0, max_phrase_length)
     plt.ylim(0, max_phrase_length)
@@ -311,11 +316,17 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
     plt.yticks(fontsize=18)
     plt.tight_layout()
 
+    # Create legend with only Bird ID in bottom right
+    handles, labels = plt.gca().get_legend_handles_labels()
+    plt.legend(handles[:len(set(file_ids))], [f'Bird {id+1}' for id in range(len(set(file_ids)))], 
+              title='Bird ID', fontsize=18, title_fontsize=18,
+              loc='lower right')
+
     plt.savefig(f'phrase_length_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 def process_multiple_window_sizes():
-    window_sizes = list(range(0, 200, 100))
+    window_sizes = list(range(0, 1000, 50))
     pearson_values_entropy = []
     pearson_values_phrase_length = []
     pearson_values_combined = []
@@ -396,20 +407,39 @@ def visualize_diagonalized_merged_mapping(normalized_matrix, unique_ground_truth
 
     # Add boxes of matching colors around ground truth labels merged into a single HDBSCAN label
     hdbscan_label_colors = {}
-    color_palette = sns.color_palette("hls", len(optimal_hdbscan))
+    color_palette = sns.color_palette("husl", len(optimal_hdbscan))  # Changed to husl for brighter colors
+    
     for idx, hdbscan_label in enumerate(optimal_hdbscan):
         hdbscan_label_colors[hdbscan_label] = color_palette[idx]
 
+    # Draw rectangles with increased linewidth
     for hdbscan_label in optimal_hdbscan:
         gt_labels_mapped = [gt_label for gt_label in optimal_ground_truth if mapping[gt_label] == hdbscan_label]
         if len(gt_labels_mapped) > 1:
             gt_indices = [list(optimal_ground_truth).index(gt_label) for gt_label in gt_labels_mapped]
+            gt_indices.sort()
+            
+            groups = []
+            current_group = [gt_indices[0]]
+            
+            for i in range(1, len(gt_indices)):
+                if gt_indices[i] == gt_indices[i-1] + 1:
+                    current_group.append(gt_indices[i])
+                else:
+                    groups.append(current_group)
+                    current_group = [gt_indices[i]]
+            groups.append(current_group)
+            
             j = list(optimal_hdbscan).index(hdbscan_label)
-            i_min = min(gt_indices)
-            i_max = max(gt_indices)
-            # Draw rectangle
-            rect = plt.Rectangle((j, i_min), 1, i_max - i_min + 1, fill=False, edgecolor=hdbscan_label_colors[hdbscan_label], linewidth=2)
-            ax.add_patch(rect)
+            for group in groups:
+                i_min = min(group)
+                i_max = max(group)
+                rect = plt.Rectangle((j, i_min), 1, i_max - i_min + 1, 
+                                   fill=False, 
+                                   edgecolor=hdbscan_label_colors[hdbscan_label], 
+                                   linewidth=3,  # Increased linewidth
+                                   alpha=1.0)    # Full opacity
+                ax.add_patch(rect)
 
     plt.xlabel('HDBSCAN Labels', fontsize=24)
     plt.ylabel('Ground Truth Phrase Labels', fontsize=24)
@@ -493,9 +523,12 @@ for file in files:
     # Process labels using best window size
     ground_truth_phrase_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
-    # Create shared area matrix using original HDBSCAN labels
+    # Fill in -1 labels in hdbscan_labels by smoothing with window_size=0
+    hdbscan_labels_filled = smooth_labels(hdbscan_labels, window_size=0)
+
+    # Create shared area matrix using filled HDBSCAN labels
     normalized_matrix, unique_ground_truth, unique_predicted = analyzer.create_shared_area_matrix(
-        ground_truth_phrase_labels, hdbscan_labels)
+        ground_truth_phrase_labels, hdbscan_labels_filled)
 
     # Use merged labels mapping (ground truth labels to HDBSCAN labels)
     mapping = create_merged_label_mapping(
@@ -504,7 +537,7 @@ for file in files:
     # Map ground truth labels before smoothing
     mapped_ground_truth_phrase_labels = np.array([mapping[label] for label in ground_truth_phrase_labels])
 
-    # Apply smoothing to the HDBSCAN labels
+    # Apply smoothing to the original HDBSCAN labels
     smoothed_hdbscan_labels = smooth_labels(hdbscan_labels, window_size=best_window)
 
     # Visualize the diagonalized mapping matrix
