@@ -3,8 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.optimize import linear_sum_assignment
 from collections import Counter
-from typing import Dict, List, Tuple, Union
-import numpy.typing as npt
+from typing import Dict, List, Tuple
 from tqdm import tqdm
 from scipy.stats import pearsonr
 
@@ -20,7 +19,7 @@ def syllable_to_phrase_labels(arr, silence=-1):
                 new_arr[start_of_phrase_index:i] = current_syllable
             current_syllable = value
             start_of_phrase_index = i
-            
+
             if first_non_silence_label is None:  # Found the first non-silence label
                 first_non_silence_label = value
 
@@ -50,7 +49,7 @@ def smooth_labels(labels, window_size=50):
                     break
                 left -= 1
                 right += 1
-    
+
     smoothed_labels = np.zeros_like(labels)
     for i in range(len(labels)):
         start = max(0, i - window_size // 2)
@@ -62,8 +61,8 @@ def smooth_labels(labels, window_size=50):
 
 class SequenceAnalyzer:
     @staticmethod
-    def create_shared_area_matrix(ground_truth: npt.NDArray, 
-                                predicted: npt.NDArray) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
+    def create_shared_area_matrix(ground_truth: np.ndarray, 
+                                  predicted: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create and normalize shared area matrix between ground truth and predicted labels."""
         unique_ground_truth = np.unique(ground_truth)
         unique_predicted = np.unique(predicted)
@@ -74,143 +73,40 @@ class SequenceAnalyzer:
         for i, gt_label in enumerate(unique_ground_truth):
             for j, pred_label in enumerate(unique_predicted):
                 shared_matrix[i, j] = np.sum((ground_truth == gt_label) & 
-                                           (predicted == pred_label))
+                                             (predicted == pred_label))
         
-        # Normalize rows
-        row_sums = shared_matrix.sum(axis=1, keepdims=True)
-        normalized_matrix = np.divide(shared_matrix, row_sums, 
-                                    where=row_sums != 0)
+        # Normalize columns (since we are mapping ground truth to HDBSCAN labels)
+        col_sums = shared_matrix.sum(axis=0, keepdims=True)
+        normalized_matrix = np.divide(shared_matrix, col_sums, where=col_sums != 0)
         
         return normalized_matrix, unique_ground_truth, unique_predicted
 
-    @staticmethod
-    def find_optimal_mapping(normalized_matrix: npt.NDArray,
-                           unique_ground_truth: npt.NDArray,
-                           unique_predicted: npt.NDArray) -> Tuple[Dict[int, int], npt.NDArray, npt.NDArray]:
-        """Find optimal mapping between predicted and ground truth labels."""
-        cost_matrix = -normalized_matrix
-        row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        
-        # Create mapping dictionary
-        mapping = {unique_predicted[col]: unique_ground_truth[row]
-                  for row, col in zip(row_ind, col_ind)}
-        
-        # Map unmapped labels to noise (-1)
-        all_predicted = set(unique_predicted)
-        mapped_predicted = set(mapping.keys())
-        for label in (all_predicted - mapped_predicted):
-            mapping[label] = -1
-            
-        return mapping, row_ind, col_ind
-
-    @staticmethod
-    def evaluate_mapping(ground_truth: npt.NDArray, 
-                        predicted: npt.NDArray,
-                        mapping: Dict[int, int]) -> Tuple[int, float]:
-        """Evaluate mapping quality."""
-        remapped = np.array([mapping[label] for label in predicted])
-        differences = np.sum(remapped != ground_truth)
-        difference_percentage = (differences / len(ground_truth)) * 100
-        return differences, difference_percentage
-
-    @staticmethod
-    def visualize_mapping(normalized_matrix: npt.NDArray,
-                         row_ind: npt.NDArray,
-                         col_ind: npt.NDArray,
-                         unique_ground_truth: npt.NDArray,
-                         unique_predicted: npt.NDArray,
-                         title: str) -> None:
-        """Visualize the mapping matrix and save to disk."""
-        optimal_matrix = normalized_matrix[row_ind][:, col_ind]
-        optimal_ground_truth = unique_ground_truth[row_ind]
-        optimal_predicted = unique_predicted[col_ind]
-        
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(optimal_matrix, annot=False, cmap="viridis",
-                   xticklabels=optimal_predicted,
-                   yticklabels=optimal_ground_truth)
-        plt.xlabel('HDBSCAN Labels')
-        plt.ylabel('Ground Truth Phrase Labels')
-        plt.title(f'Optimally Arranged Normalized Shared Area Matrix\n{title}')
-        
-        # Save the plot to disk instead of showing it
-        filename = f"mapping_matrix_{title.replace(' ', '_').replace(':', '_')}.png"
-        plt.savefig(filename)
-        plt.close()  # Close the figure to free up memory
-
-# Process the files
-files = ["/media/george-vengrovski/flash-drive/llb3.npz", "/media/george-vengrovski/flash-drive/llb11.npz", "/media/george-vengrovski/flash-drive/llb16.npz"]
-analyzer = SequenceAnalyzer()
-
-# for file in files:
-#     # Load data
-#     data = np.load(file)
-#     ground_truth_labels = data['ground_truth_labels']
-#     hdbscan_labels = data['hdbscan_labels']
-    
-#     # Process labels using your functions
-#     hdbscan_labels = smooth_labels(hdbscan_labels, window_size=0)
-#     ground_truth_phrase_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
-    
-#     # Create shared area matrix
-#     normalized_matrix, unique_ground_truth, unique_predicted = analyzer.create_shared_area_matrix(
-#         ground_truth_phrase_labels, hdbscan_labels)
-    
-#     # Find optimal mapping
-#     mapping, row_ind, col_ind = analyzer.find_optimal_mapping(
-#         normalized_matrix, unique_ground_truth, unique_predicted)
-    
-#     # Evaluate mapping
-#     differences, difference_percentage = analyzer.evaluate_mapping(
-#         ground_truth_phrase_labels, hdbscan_labels, mapping)
-    
-#     # Print results
-#     print(f"\nFile: {file}")
-#     print(f"Number of differences: {differences}")
-#     print(f"Percentage of differences: {difference_percentage:.2f}%")
-    
-#     # Visualize results
-#     analyzer.visualize_mapping(
-#         normalized_matrix, row_ind, col_ind,
-#         unique_ground_truth, unique_predicted,
-#         f"File: {file}"
-#     )
-
-import numpy as np
-from scipy.optimize import linear_sum_assignment
-
-def create_merged_label_mapping(normalized_matrix, unique_ground_truth_labels, unique_hdbscan_labels):
+def create_merged_label_mapping(normalized_matrix, unique_ground_truth_labels, unique_hdbscan_labels, ground_truth_labels):
     """
-    Creates a mapping that allows multiple HDBSCAN labels to map to a single ground truth label
-    when that ground truth label is the best match for each HDBSCAN label.
+    Creates a mapping that allows multiple ground truth labels to map to a single HDBSCAN label
+    when that HDBSCAN label is the best match for each ground truth label.
     """
-    col_sums = normalized_matrix.sum(axis=0, keepdims=True)
-    col_normalized_matrix = normalized_matrix / col_sums
+    row_sums = normalized_matrix.sum(axis=1, keepdims=True)
+    row_normalized_matrix = np.divide(normalized_matrix, row_sums, 
+                                      where=row_sums != 0)  # Avoid division by zero
     
     label_mapping = {}
-    for hdbscan_idx, hdbscan_label in enumerate(unique_hdbscan_labels):
-        best_match_idx = np.argmax(col_normalized_matrix[:, hdbscan_idx])
-        label_mapping[hdbscan_label] = unique_ground_truth_labels[best_match_idx]
+    
+    # Map each ground truth label to the HDBSCAN label with the highest normalized value
+    for gt_idx, gt_label in enumerate(unique_ground_truth_labels):
+        if row_sums[gt_idx, 0] > 0:  # Only map if there are any matches
+            best_match_idx = np.argmax(normalized_matrix[gt_idx, :])
+            label_mapping[gt_label] = unique_hdbscan_labels[best_match_idx]
+        else:
+            label_mapping[gt_label] = -1  # Map to noise if no matches
+    
+    # Ensure all ground truth labels are in the mapping
+    all_gt_labels = np.unique(ground_truth_labels)
+    for label in all_gt_labels:
+        if label not in label_mapping:
+            label_mapping[label] = -1  # Map any missing labels to noise
     
     return label_mapping
-
-def reduce_phrases(arr, remove_silence=True):
-    current_element = arr[0]
-    reduced_list = []
-
-    for i, value in enumerate(arr):
-        if value != current_element:
-            reduced_list.append(current_element)
-            current_element = value
-
-        # append last phrase
-        if i == len(arr) - 1:
-            reduced_list.append(current_element)
-
-    if remove_silence:
-        reduced_list = [value for value in reduced_list if value != 0]
-
-    return np.array(reduced_list)
 
 def calculate_average_phrase_entropy(labels, target_label):
     transition_counts = Counter()
@@ -255,9 +151,20 @@ def calculate_average_phrase_length(labels, target_label):
 
     return np.mean(phrase_lengths) if phrase_lengths else 0
 
-def calculate_pearson(y_true, y_pred):
-    """Calculate Pearson correlation coefficient"""
-    correlation, _ = pearsonr(y_true, y_pred)
+def calculate_weighted_pearson(y_true, y_pred, weights):
+    """Calculate weighted Pearson correlation coefficient."""
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+    weights = np.array(weights)
+
+    mean_y_true = np.average(y_true, weights=weights)
+    mean_y_pred = np.average(y_pred, weights=weights)
+
+    cov = np.average((y_true - mean_y_true) * (y_pred - mean_y_pred), weights=weights)
+    var_y_true = np.average((y_true - mean_y_true) ** 2, weights=weights)
+    var_y_pred = np.average((y_pred - mean_y_pred) ** 2, weights=weights)
+
+    correlation = cov / np.sqrt(var_y_true * var_y_pred)
     return correlation
 
 # Function to process files with a given smoothing window
@@ -267,6 +174,7 @@ def process_files(smoothing_window):
     ground_truth_avg_phrase_lengths = []
     hdbscan_avg_phrase_lengths = []
     file_ids = []
+    phrase_counts = []
 
     analyzer = SequenceAnalyzer()
 
@@ -276,105 +184,148 @@ def process_files(smoothing_window):
         ground_truth_labels = data['ground_truth_labels']
         hdbscan_labels = data['hdbscan_labels']
 
-        # Apply smoothing
-        hdbscan_labels = smooth_labels(hdbscan_labels, window_size=smoothing_window)
+        # Compute mapping before smoothing
         ground_truth_phrase_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
-        # Create shared area matrix
+        # Create shared area matrix using original HDBSCAN labels
         normalized_matrix, unique_ground_truth, unique_predicted = analyzer.create_shared_area_matrix(
             ground_truth_phrase_labels, hdbscan_labels)
 
-        # Find optimal linear mapping
-        linear_mapping, row_ind, col_ind = analyzer.find_optimal_mapping(
-            normalized_matrix, unique_ground_truth, unique_predicted)
+        # Use merged labels mapping (ground truth labels to HDBSCAN labels)
+        mapping = create_merged_label_mapping(
+            normalized_matrix, unique_ground_truth, unique_predicted, ground_truth_phrase_labels)
 
-        # Process linear mapping
-        for hdbscan_label, gt_label in linear_mapping.items():
-            if gt_label != -1:  # Exclude noise
-                gt_entropy = calculate_average_phrase_entropy(ground_truth_phrase_labels, gt_label)
-                hdbscan_entropy = calculate_average_phrase_entropy(hdbscan_labels, hdbscan_label)
-                gt_phrase_length = calculate_average_phrase_length(ground_truth_phrase_labels, gt_label)
-                hdbscan_phrase_length = calculate_average_phrase_length(hdbscan_labels, hdbscan_label)
+        # Map ground truth labels before smoothing
+        mapped_ground_truth_phrase_labels = np.array([mapping[label] for label in ground_truth_phrase_labels])
 
-                ground_truth_entropies.append(gt_entropy)
-                hdbscan_entropies.append(hdbscan_entropy)
-                ground_truth_avg_phrase_lengths.append(gt_phrase_length)
-                hdbscan_avg_phrase_lengths.append(hdbscan_phrase_length)
-                file_ids.append(file_id)
+        # Apply smoothing to the HDBSCAN labels
+        smoothed_hdbscan_labels = smooth_labels(hdbscan_labels, window_size=smoothing_window)
 
-    return (ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids)
+        # Process each mapped HDBSCAN label
+        unique_mapped_labels = np.unique(mapped_ground_truth_phrase_labels)
+        for mapped_label in unique_mapped_labels:
+            if mapped_label == -1:
+                continue  # Skip noise
 
-# Modify the plot_and_calculate_r2 function
+            gt_entropy = calculate_average_phrase_entropy(mapped_ground_truth_phrase_labels, mapped_label)
+            hdbscan_entropy = calculate_average_phrase_entropy(smoothed_hdbscan_labels, mapped_label)
+
+            gt_phrase_length = calculate_average_phrase_length(mapped_ground_truth_phrase_labels, mapped_label)
+            hdbscan_phrase_length = calculate_average_phrase_length(smoothed_hdbscan_labels, mapped_label)
+
+            # Collect counts
+            phrase_count = np.sum(mapped_ground_truth_phrase_labels == mapped_label)
+
+            ground_truth_entropies.append(gt_entropy)
+            hdbscan_entropies.append(hdbscan_entropy)
+            ground_truth_avg_phrase_lengths.append(gt_phrase_length)
+            hdbscan_avg_phrase_lengths.append(hdbscan_phrase_length)
+            file_ids.append(file_id)
+            phrase_counts.append(phrase_count)
+
+    return (ground_truth_entropies, hdbscan_entropies, 
+            ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, 
+            file_ids, phrase_counts)
+
 def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phrase_length):
-    ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids = results
-    
+    ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids, phrase_counts = results
+
+    # Normalize phrase_counts to sizes between min_size and max_size
+    min_size = 50
+    max_size = 300
+    min_count = min(phrase_counts)
+    max_count = max(phrase_counts)
+    if max_count > min_count:
+        sizes = [min_size + (count - min_count) / (max_count - min_count) * (max_size - min_size) for count in phrase_counts]
+    else:
+        sizes = [min_size for _ in phrase_counts]
+
     # Plot transition entropy
-    plt.figure(figsize=(12, 6), dpi=300)  # Higher DPI for better resolution
-    scatter = sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, hue=file_ids, 
-                    size=ground_truth_entropies, sizes=(50, 200), palette='viridis', 
-                    alpha=0.7, edgecolor='w', linewidth=0.5)
-    
-    # Plot y=x line
+    plt.figure(figsize=(8, 8), dpi=300)
+
+    # Plot y=x line first (without label)
     x_range = np.linspace(0, max_entropy, 100)
-    plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
-    
+    plt.plot(x_range, x_range, color='red', linestyle='--', zorder=1)
+
+    # Plot scatter points
+    scatter = sns.scatterplot(x=ground_truth_entropies, y=hdbscan_entropies, 
+                              hue=file_ids, 
+                              size=sizes,  # Use the sizes computed from counts
+                              sizes=(min_size, max_size), palette='viridis', 
+                              alpha=0.7, edgecolor='w', linewidth=0.5,
+                              zorder=2)
+
     # Calculate and display Pearson correlation
-    pearson = calculate_pearson(np.array(ground_truth_entropies), np.array(hdbscan_entropies))
+    pearson = calculate_weighted_pearson(np.array(ground_truth_entropies), np.array(hdbscan_entropies), np.array(phrase_counts))
     plt.text(0.05, 0.95, f'Pearson r = {pearson:.3f}', 
-             transform=plt.gca().transAxes, fontsize=12, 
+             transform=plt.gca().transAxes, fontsize=18, 
              bbox=dict(facecolor='white', alpha=0.8))
-    
-    plt.xlabel('Ground Truth Average Phrase Entropy', fontsize=12)
-    plt.ylabel('HDBSCAN Average Phrase Entropy', fontsize=12)
-    plt.title(f'Average Phrase Entropy Comparison\n(Smoothing Window: {smoothing_window})', fontsize=14)
-    plt.legend(title='File ID', fontsize=10, title_fontsize=10)
+
+    plt.xlabel('Mapped Ground Truth Average Phrase Entropy', fontsize=24)
+    plt.ylabel('HDBSCAN Average Phrase Entropy', fontsize=24)
+    plt.title(f'Average Phrase Entropy Comparison\n(Smoothing Window: {smoothing_window})', fontsize=24)
+    plt.legend(title='File ID', fontsize=18, title_fontsize=18)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.xlim(0, max_entropy)
     plt.ylim(0, max_entropy)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     plt.tight_layout()
+
+    # Remove the size legend
+    handles, labels = plt.gca().get_legend_handles_labels()
+    plt.legend(handles[:len(set(file_ids))], labels[:len(set(file_ids))], title='File ID', fontsize=18, title_fontsize=18)
+
     plt.savefig(f'phrase_entropy_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     # Plot average phrase length
-    plt.figure(figsize=(12, 6), dpi=300)  # Higher DPI for better resolution
-    sns.scatterplot(x=ground_truth_avg_phrase_lengths, y=hdbscan_avg_phrase_lengths, 
-                    hue=file_ids, size=ground_truth_avg_phrase_lengths, sizes=(50, 200), 
-                    palette='viridis', alpha=0.7, edgecolor='w', linewidth=0.5)
-    
+    plt.figure(figsize=(8, 8), dpi=300)
+
     # Plot y=x line
     x_range = np.linspace(0, max_phrase_length, 100)
     plt.plot(x_range, x_range, color='red', linestyle='--', label='y=x')
-    
+
+    # Plot scatter points
+    scatter = sns.scatterplot(x=ground_truth_avg_phrase_lengths, y=hdbscan_avg_phrase_lengths, 
+                              hue=file_ids, 
+                              size=sizes,  # Use the sizes computed from counts
+                              sizes=(min_size, max_size), palette='viridis', 
+                              alpha=0.7, edgecolor='w', linewidth=0.5,
+                              zorder=2)
+
     # Calculate and display Pearson correlation
-    pearson = calculate_pearson(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths))
+    pearson = calculate_weighted_pearson(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths), np.array(phrase_counts))
     plt.text(0.05, 0.95, f'Pearson r = {pearson:.3f}', 
-             transform=plt.gca().transAxes, fontsize=12, 
+             transform=plt.gca().transAxes, fontsize=18, 
              bbox=dict(facecolor='white', alpha=0.8))
-    
-    plt.xlabel('Ground Truth Average Phrase Length', fontsize=12)
-    plt.ylabel('HDBSCAN Average Phrase Length', fontsize=12)
-    plt.title(f'Average Phrase Length Comparison\n(Smoothing Window: {smoothing_window})', fontsize=14)
-    plt.legend(title='File ID', fontsize=10, title_fontsize=10)
+
+    plt.xlabel('Mapped Ground Truth Average Phrase Length', fontsize=24)
+    plt.ylabel('HDBSCAN Average Phrase Length', fontsize=24)
+    plt.title(f'Average Phrase Length Comparison\n(Smoothing Window: {smoothing_window})', fontsize=24)
+    plt.legend(title='File ID', fontsize=18, title_fontsize=18)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.xlim(0, max_phrase_length)
     plt.ylim(0, max_phrase_length)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     plt.tight_layout()
+
     plt.savefig(f'phrase_length_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-    return pearson_entropy, pearson_phrase_length
-
-# New function to process files for multiple window sizes
 def process_multiple_window_sizes():
-    window_sizes = list(range(0, 300, 100))
+    window_sizes = list(range(0, 200, 100))
     pearson_values_entropy = []
     pearson_values_phrase_length = []
     pearson_values_combined = []
 
     for window_size in tqdm(window_sizes, desc="Processing window sizes"):
         results = process_files(smoothing_window=window_size)
-        pearson_entropy = calculate_pearson(np.array(results[0]), np.array(results[1]))
-        pearson_phrase_length = calculate_pearson(np.array(results[2]), np.array(results[3]))
+        ground_truth_entropies, hdbscan_entropies, ground_truth_avg_phrase_lengths, hdbscan_avg_phrase_lengths, file_ids, phrase_counts = results
+
+        pearson_entropy = calculate_weighted_pearson(np.array(ground_truth_entropies), np.array(hdbscan_entropies), np.array(phrase_counts))
+        pearson_phrase_length = calculate_weighted_pearson(np.array(ground_truth_avg_phrase_lengths), np.array(hdbscan_avg_phrase_lengths), np.array(phrase_counts))
         avg_pearson = (pearson_entropy + pearson_phrase_length) / 2
         pearson_values_entropy.append((window_size, pearson_entropy))
         pearson_values_phrase_length.append((window_size, pearson_phrase_length))
@@ -382,7 +333,6 @@ def process_multiple_window_sizes():
 
     return pearson_values_entropy, pearson_values_phrase_length, pearson_values_combined
 
-# Calculate the maximum entropy and phrase length across all datasets
 def calculate_max_values():
     max_entropy = 0
     max_phrase_length = 0
@@ -401,33 +351,169 @@ def calculate_max_values():
 
     return max_entropy, max_phrase_length
 
+def visualize_diagonalized_merged_mapping(normalized_matrix, unique_ground_truth, unique_hdbscan_labels, file_name, ground_truth_phrase_labels, hdbscan_labels, mapping):
+    """Visualize the diagonalized normalized matrix with boxes showing merged ground truth labels."""
+    # First get optimal arrangement using linear sum assignment
+    cost_matrix = -normalized_matrix.T  # Transpose to align with ground truth to HDBSCAN mapping
+    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+    # Reorder the matrix and labels (swap row_ind and col_ind)
+    optimal_matrix = normalized_matrix[np.ix_(col_ind, row_ind)]
+    optimal_ground_truth = unique_ground_truth[col_ind]
+    optimal_hdbscan = unique_hdbscan_labels[row_ind]
+
+    # Calculate frame error rate excluding silences and noise labels
+    mapped_ground_truth = np.array([mapping[label] for label in ground_truth_phrase_labels])
+    non_silence_mask = (mapped_ground_truth != -1) & (hdbscan_labels != -1)
+    filtered_mapped_ground_truth = mapped_ground_truth[non_silence_mask]
+    filtered_hdbscan = hdbscan_labels[non_silence_mask]
+
+    frame_errors = np.sum(filtered_mapped_ground_truth != filtered_hdbscan)
+    error_rate = (frame_errors / len(filtered_mapped_ground_truth)) * 100
+
+    # Save mapped labels information to text file
+    with open(f'mapped_labels_{file_name.replace(" ", "_").replace(":", "_")}.txt', 'w') as f:
+        f.write(f"Frame Error Rate: {error_rate:.2f}%\n\n")
+        f.write("Mapped Labels:\n")
+        merged_groups = {}
+        for gt_label, hdbscan_label in mapping.items():
+            if hdbscan_label not in merged_groups:
+                merged_groups[hdbscan_label] = []
+            merged_groups[hdbscan_label].append(gt_label)
+        for hdbscan_label, gt_labels_list in merged_groups.items():
+            if hdbscan_label != -1:
+                f.write(f"HDBSCAN Label {hdbscan_label} <- Ground Truth Labels {sorted(gt_labels_list)}\n")
+
+    print(f"Frame Error Rate for {file_name}: {error_rate:.2f}%")
+
+    plt.figure(figsize=(8, 8), dpi=300)
+    ax = sns.heatmap(optimal_matrix, annot=False, cmap="viridis",
+                     xticklabels=optimal_hdbscan,
+                     yticklabels=optimal_ground_truth)
+
+    colorbar = ax.collections[0].colorbar
+    colorbar.set_label('Normalized Shared Area', fontsize=14)
+
+    # Add boxes of matching colors around ground truth labels merged into a single HDBSCAN label
+    hdbscan_label_colors = {}
+    color_palette = sns.color_palette("hls", len(optimal_hdbscan))
+    for idx, hdbscan_label in enumerate(optimal_hdbscan):
+        hdbscan_label_colors[hdbscan_label] = color_palette[idx]
+
+    for hdbscan_label in optimal_hdbscan:
+        gt_labels_mapped = [gt_label for gt_label in optimal_ground_truth if mapping[gt_label] == hdbscan_label]
+        if len(gt_labels_mapped) > 1:
+            gt_indices = [list(optimal_ground_truth).index(gt_label) for gt_label in gt_labels_mapped]
+            j = list(optimal_hdbscan).index(hdbscan_label)
+            i_min = min(gt_indices)
+            i_max = max(gt_indices)
+            # Draw rectangle
+            rect = plt.Rectangle((j, i_min), 1, i_max - i_min + 1, fill=False, edgecolor=hdbscan_label_colors[hdbscan_label], linewidth=2)
+            ax.add_patch(rect)
+
+    plt.xlabel('HDBSCAN Labels', fontsize=24)
+    plt.ylabel('Ground Truth Phrase Labels', fontsize=24)
+    plt.title(f'Diagonalized Mapping Matrix\nFrame Error Rate: {error_rate:.2f}%', fontsize=24)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.tight_layout()
+
+    plt.savefig(f'diagonalized_mapping_matrix_{file_name.replace(" ", "_").replace(":", "_")}.png', 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+# Files to process
+files = [
+    "/media/george-vengrovski/flash-drive/llb3_for_paper.npz",
+    "/media/george-vengrovski/flash-drive/llb11_for_paper.npz",
+    "/media/george-vengrovski/flash-drive/llb16_for_paper.npz"
+]
+
 # Calculate max values
 max_entropy, max_phrase_length = calculate_max_values()
 
 # Process files with multiple window sizes
 pearson_values_entropy, pearson_values_phrase_length, pearson_values_combined = process_multiple_window_sizes()
 
-# Plot R² values
-plt.figure(figsize=(12, 8))
+# Plot Pearson correlation values
+plt.figure(figsize=(8, 8))
 window_sizes, pearson_entropy = zip(*pearson_values_entropy)
 _, pearson_phrase_length = zip(*pearson_values_phrase_length)
 _, pearson_combined = zip(*pearson_values_combined)
 
-plt.scatter(window_sizes, pearson_entropy, label='Entropy', alpha=0.7)
-plt.scatter(window_sizes, pearson_phrase_length, label='Phrase Duration', alpha=0.7)
-plt.scatter(window_sizes, pearson_combined, label='Combined Average', alpha=0.7)
+# Convert to numpy arrays for easier manipulation
+window_sizes = np.array(window_sizes)
+pearson_entropy = np.array(pearson_entropy)
+pearson_phrase_length = np.array(pearson_phrase_length)
+pearson_combined = np.array(pearson_combined)
 
-plt.xlabel('Smoothing Window Size', fontsize=14)
-plt.ylabel('Pearson Correlation Coefficient', fontsize=14)
-plt.title('Pearson Correlation for Different Smoothing Window Sizes', fontsize=16)
-plt.legend(fontsize=12)
+# Create smooth line using more points for combined average only
+x_smooth = np.linspace(min(window_sizes), max(window_sizes), 100)
+y_combined_smooth = np.interp(x_smooth, window_sizes, pearson_combined)
+
+# Plot points for all metrics
+plt.scatter(window_sizes, pearson_entropy, label='Entropy', alpha=0.7, zorder=2, s=100)
+plt.scatter(window_sizes, pearson_phrase_length, label='Phrase Duration', alpha=0.7, zorder=2, s=100)
+plt.scatter(window_sizes, pearson_combined, label='Combined Average', alpha=0.7, zorder=2, s=100)
+
+# Plot smoothed line only for combined average with dashed style
+plt.plot(x_smooth, y_combined_smooth, alpha=0.5, zorder=1, linestyle='--')
+
+plt.xlabel('Smoothing Window Size', fontsize=24)
+plt.ylabel('Pearson Correlation Coefficient', fontsize=24)
+plt.title('Pearson Correlation vs Window Sizes', fontsize=24)
+plt.legend(fontsize=18)
 plt.grid(True, linestyle='--', alpha=0.5)
 
-plt.xticks(fontsize=12)
-plt.yticks(fontsize=12)
+plt.xticks(fontsize=18)
+plt.yticks(fontsize=18)
 plt.tight_layout()
 
-plt.savefig('pearson_correlation_by_window_size.png', dpi=300)
+plt.savefig('pearson_by_window_size.png', dpi=300)
 plt.close()
 
 print("Processing complete. Check the generated plots for results.")
+
+# Find the best window size based on combined Pearson values
+window_sizes, combined_pearson = zip(*pearson_values_combined)
+best_window = window_sizes[np.argmax(combined_pearson)]
+print(f"Best smoothing window size: {best_window}")
+
+# Process files with the best window and create high-res correlation plots
+results = process_files(smoothing_window=best_window)
+plot_correlation_comparisons(results, best_window, max_entropy, max_phrase_length)
+
+analyzer = SequenceAnalyzer()
+for file in files:
+    # Load data
+    data = np.load(file)
+    ground_truth_labels = data['ground_truth_labels']
+    hdbscan_labels = data['hdbscan_labels']
+    
+    # Process labels using best window size
+    ground_truth_phrase_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
+
+    # Create shared area matrix using original HDBSCAN labels
+    normalized_matrix, unique_ground_truth, unique_predicted = analyzer.create_shared_area_matrix(
+        ground_truth_phrase_labels, hdbscan_labels)
+
+    # Use merged labels mapping (ground truth labels to HDBSCAN labels)
+    mapping = create_merged_label_mapping(
+        normalized_matrix, unique_ground_truth, unique_predicted, ground_truth_phrase_labels)
+
+    # Map ground truth labels before smoothing
+    mapped_ground_truth_phrase_labels = np.array([mapping[label] for label in ground_truth_phrase_labels])
+
+    # Apply smoothing to the HDBSCAN labels
+    smoothed_hdbscan_labels = smooth_labels(hdbscan_labels, window_size=best_window)
+
+    # Visualize the diagonalized mapping matrix
+    visualize_diagonalized_merged_mapping(
+        normalized_matrix,
+        unique_ground_truth,
+        unique_predicted,
+        f"File: {file.split('/')[-1]}, Window: {best_window}",
+        ground_truth_phrase_labels,
+        hdbscan_labels,
+        mapping
+    )
