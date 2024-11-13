@@ -9,6 +9,7 @@ experiments
 *.pdf
 *.html
 *.npz
+*.txt
 *.json
 /train
 /test
