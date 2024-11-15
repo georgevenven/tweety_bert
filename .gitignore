@@ -21,3 +21,4 @@ temp
 results 
 WhisperSeg/
 archive
+*.svg

@@ -283,6 +283,7 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
               title='Bird ID', fontsize=18, title_fontsize=18)
 
     plt.savefig(f'phrase_entropy_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'phrase_entropy_correlation_{smoothing_window}.svg', format='svg', bbox_inches='tight')
     plt.close()
 
     # Plot average phrase length
@@ -323,10 +324,11 @@ def plot_correlation_comparisons(results, smoothing_window, max_entropy, max_phr
               loc='lower right')
 
     plt.savefig(f'phrase_length_correlation_{smoothing_window}.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'phrase_length_correlation_{smoothing_window}.svg', format='svg', bbox_inches='tight')
     plt.close()
 
 def process_multiple_window_sizes():
-    window_sizes = list(range(0, 1000, 50))
+    window_sizes = list(range(0, 1000, 25))
     pearson_values_entropy = []
     pearson_values_phrase_length = []
     pearson_values_combined = []
@@ -450,6 +452,8 @@ def visualize_diagonalized_merged_mapping(normalized_matrix, unique_ground_truth
 
     plt.savefig(f'diagonalized_mapping_matrix_{file_name.replace(" ", "_").replace(":", "_")}.png', 
                 dpi=300, bbox_inches='tight')
+    plt.savefig(f'diagonalized_mapping_matrix_{file_name.replace(" ", "_").replace(":", "_")}.svg', 
+                format='svg', bbox_inches='tight')
     plt.close()
 
 # Files to process
@@ -500,6 +504,7 @@ plt.yticks(fontsize=18)
 plt.tight_layout()
 
 plt.savefig('pearson_by_window_size.png', dpi=300)
+plt.savefig('pearson_by_window_size.svg', format='svg')
 plt.close()
 
 print("Processing complete. Check the generated plots for results.")
