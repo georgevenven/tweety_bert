@@ -94,24 +94,19 @@ def execute_eval_of_experiments(experiment_configs, results_path):
         num_classes = deterimine_number_unique_classes(train_dir)
         train_loader, test_loader, eval_loader = setup_data_loaders(train_dir, test_dir, num_classes)
 
-        config_path = os.path.join(base_path, 'config.json')
-        weights_folder = os.path.join(base_path, 'saved_weights')
-
-        if os.path.exists(weights_folder):
-            files = os.listdir(weights_folder)
-            weights_file = get_highest_numbered_file(files)
-            
-            if weights_file and os.path.exists(config_path):
-                weight_path = os.path.join(weights_folder, weights_file)
-                print(f"Loading model from {weight_path}...")
-                model = load_model(config_path, weight_path)
-                config = load_config(config_path)
-                experiment_results = probe_eval(model, train_loader, test_loader, eval_loader, results_path, os.path.basename(base_path), config, num_classes, train_dir)
+        if os.path.exists(base_path):
+            print(f"Loading model from {base_path}...")
+            try:
+                model = load_model(base_path)
+                config = load_config(os.path.join(base_path, 'config.json'))
+                experiment_results = probe_eval(model, train_loader, test_loader, eval_loader, 
+                                             results_path, os.path.basename(base_path), 
+                                             config, num_classes, train_dir)
                 all_experiments_results[os.path.basename(base_path)] = experiment_results
-            else: 
-                print(f"Files for eval of experiment '{base_path}' not found")
+            except Exception as e:
+                print(f"Error loading experiment '{base_path}': {str(e)}")
         else:
-            print(f"Weights folder not found in {base_path}")
+            print(f"Experiment path not found: {base_path}")
 
     combined_results_file = os.path.join(results_path, 'combined_probe_results.json')
     print(f"Saving combined results to {combined_results_file}...")

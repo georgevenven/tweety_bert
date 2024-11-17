@@ -450,6 +450,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         embedding_outputs=embedding_outputs,
         hdbscan_labels=hdbscan_labels,
         ground_truth_labels=ground_truth_labels,
+        predictions=predictions,
         s=spec_arr,
         hdbscan_colors=hdbscan_colors,
         ground_truth_colors=ground_truth_colors,
@@ -459,11 +460,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         dataset_indices=dataset_indices,
         file_map=file_map
     )
-
-    # Generate dataset comparison if there are exactly 2 datasets
-    if len(data_dirs) == 2:
-        plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_indices)
-
 
 def apply_windowing(arr, window_size, stride, flatten_predictions=False):
     """

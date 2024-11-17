@@ -165,6 +165,6 @@ class UMAPSelector:
             plt.close(fig)
 
 # Usage example
-file_path = "/media/george-vengrovski/flash-drive/llb16_for_paper.npz"
+file_path = "files/llb3_predictions_for_fig2b.npz"
 selector = UMAPSelector(file_path, max_length=500)
 selector.plot_umap_with_selection()

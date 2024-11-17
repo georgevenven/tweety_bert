@@ -87,9 +87,9 @@ def split_files_equal_groups(source_folder, experiment_date, num_groups, output_
         else:
             print(f"Group {i+1}: No files")
 
-# Example usage
-source_folder = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_specs"
-output_directory = "/media/george-vengrovski/Extreme SSD/sham lesioned birds"
-experiment_date = "3-05"
-num_groups = 4
-split_files_equal_groups(source_folder, experiment_date, num_groups, output_directory)
+# # Example usage
+# source_folder = "/media/george-vengrovski/Extreme SSD/sham lesioned birds/USA5283_specs"
+# output_directory = "/media/george-vengrovski/Extreme SSD/sham lesioned birds"
+# experiment_date = "3-05"
+# num_groups = 4
+# split_files_equal_groups(source_folder, experiment_date, num_groups, output_directory)
