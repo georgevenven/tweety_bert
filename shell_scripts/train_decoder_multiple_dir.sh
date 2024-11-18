@@ -29,36 +29,36 @@ python scripts/copy_files_from_wavdir_to_multiple_event_dirs.py \
     "$OUTPUT_PATH" \
     --num_samples $NUM_SAMPLES
 
-# # Initialize an array to store spectrogram directories
-# DATA_DIRS=()
+# Initialize an array to store spectrogram directories
+DATA_DIRS=()
 
-# # Get the number of groups from the output directory structure
-# NUM_GROUPS=$(ls -d $OUTPUT_PATH/group_* | wc -l)
+# Get the number of groups from the output directory structure
+NUM_GROUPS=$(ls -d $OUTPUT_PATH/group_* | wc -l)
 
-# # Generate spectrograms for each group
-# for (( i=1; i<=$NUM_GROUPS; i++ ))
-# do
-#     GROUP_SRC_DIR="$OUTPUT_PATH/group_${i}"
-#     GROUP_SPEC_DIR="$TEMP_DIR/spec_files_group_$i"
-#     mkdir -p "$GROUP_SPEC_DIR"
-#     echo "Processing group $i"
-#     python src/spectogram_generator.py \
-#         --src_dir "$GROUP_SRC_DIR" \
-#         --dst_dir "$GROUP_SPEC_DIR" \
-#         --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
-#     DATA_DIRS+=("$GROUP_SPEC_DIR")
-# done
+# Generate spectrograms for each group
+for (( i=1; i<=$NUM_GROUPS; i++ ))
+do
+    GROUP_SRC_DIR="$OUTPUT_PATH/group_${i}"
+    GROUP_SPEC_DIR="$TEMP_DIR/spec_files_group_$i"
+    mkdir -p "$GROUP_SPEC_DIR"
+    echo "Processing group $i"
+    python src/spectogram_generator.py \
+        --src_dir "$GROUP_SRC_DIR" \
+        --dst_dir "$GROUP_SPEC_DIR" \
+        --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+    DATA_DIRS+=("$GROUP_SPEC_DIR")
+done
 
-# # UMAP with multiple directories
-# python figure_generation_scripts/dim_reduced_birdsong_plots.py \
-#     --experiment_folder "experiments/$MODEL_NAME" \
-#     --data_dir "${DATA_DIRS[@]}" \
-#     --save_name "$BIRD_NAME" \
-#     --samples 1e6
+# UMAP with multiple directories
+python figure_generation_scripts/dim_reduced_birdsong_plots.py \
+    --experiment_folder "experiments/$MODEL_NAME" \
+    --data_dir "${DATA_DIRS[@]}" \
+    --save_name "$BIRD_NAME" \
+    --samples 1e6
 
-# # Train and save Decoder
-# python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"
+# Train and save Decoder
+python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"
 
-# Clean up all temporary files
-# rm -rf "$TEMP_DIR"
-# echo "Cleaned up all temporary files"
+Clean up all temporary files
+rm -rf "$TEMP_DIR"
+echo "Cleaned up all temporary files"

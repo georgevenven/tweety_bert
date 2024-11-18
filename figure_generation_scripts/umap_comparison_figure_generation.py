@@ -29,21 +29,34 @@ def calculate_distribution_similarity(heatmap1, heatmap2):
    return similarity
 
 def calculate_statistical_significance(similarity_matrix):
-    """Calculate statistical significance of within vs between period differences."""
+    """Calculate statistical significance using exact permutation test."""
     # Extract within and between period similarities
-    within_periods = [
+    within_periods = np.array([
         similarity_matrix[0,1],  # Before1 vs Before2
         similarity_matrix[2,3]   # After1 vs After2
-    ]
+    ])
     
-    between_periods = [
-        similarity_matrix[0,2], similarity_matrix[0,3],  # Before1 vs After
-        similarity_matrix[1,2], similarity_matrix[1,3]   # Before2 vs After
-    ]
+    between_periods = np.array([
+        similarity_matrix[0,2], similarity_matrix[0,3],
+        similarity_matrix[1,2], similarity_matrix[1,3]
+    ])
     
-    # Perform Mann-Whitney U test
-    statistic, p_value = stats.mannwhitneyu(within_periods, between_periods,
-                                            alternative='greater')
+    # Observed difference in means
+    observed_diff = np.mean(within_periods) - np.mean(between_periods)
+    
+    # Get all possible combinations
+    all_similarities = np.concatenate([within_periods, between_periods])
+    all_possible_within = list(combinations(all_similarities, 2))
+    
+    # Calculate difference for each possible combination
+    perm_diffs = []
+    for within_combo in all_possible_within:
+        within = np.array(within_combo)
+        between = np.array([x for x in all_similarities if x not in within])
+        perm_diffs.append(np.mean(within) - np.mean(between))
+    
+    # Calculate exact p-value
+    p_value = np.mean(np.array(perm_diffs) >= observed_diff)
     
     return {
         'within_mean': np.mean(within_periods),

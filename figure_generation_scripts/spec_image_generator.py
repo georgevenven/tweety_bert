@@ -6,7 +6,7 @@ data = np.load('/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3
 spectrogram = data['s']  # Access the 's' array
 
 # Crop the spectrogram as specified
-spectrogram = spectrogram[10:216, 1250:2750]
+spectrogram = spectrogram[10:216, :]
 
 # Create the figure and plot without colorbar
 plt.figure(figsize=(30, 6))

@@ -3,8 +3,17 @@ import shutil
 import random
 import argparse
 from tqdm import tqdm
+import sys
 
-def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest, move_files=False):
+script_dir = os.path.dirname(__file__)
+project_root = os.path.dirname(script_dir)
+os.chdir(project_root)
+
+sys.path.append("src")
+
+from spectogram_generator import WavtoSpec
+
+def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest, move_files=False, generate_specs=False, song_detection_json=None):
     """
     Splits the npz files in the given folder into train and test sets based on the specified ratio
     and either copies or moves them to specified train and test destination folders based on the move_files flag.
@@ -15,13 +24,30 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
     train_folder_dest (str): The path to the destination train folder.
     test_folder_dest (str): The path to the destination test folder.
     move_files (bool): If True, files will be moved instead of copied. Defaults to False.
+    generate_specs (bool): If True, generates spectrograms for files before splitting. Defaults to False.
+    song_detection_json (str): Path to song detection JSON file for spectrogram generation.
     """
-    # Create train and test directories in the specified destination folders
+    # Generate spectrograms if requested
+    if generate_specs:
+        spec_generator = WavtoSpec(
+            src_dir=folder_path,
+            dst_dir=folder_path,  # Temporary storage in same directory
+            song_detection_json_path=song_detection_json
+        )
+        spec_generator.process_directory()
+        # Update folder_path to look for npz files instead of wav files
+        file_extension = '.npz'
+    else:
+        file_extension = '.npz'
+
+    # Create directories
     os.makedirs(train_folder_dest, exist_ok=True)
     os.makedirs(test_folder_dest, exist_ok=True)
 
-    # List all npz files in the source folder
-    all_files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f)) and f.endswith('.npz')]
+    # List all relevant files
+    all_files = [f for f in os.listdir(folder_path) 
+                 if os.path.isfile(os.path.join(folder_path, f)) 
+                 and f.endswith(file_extension)]
 
     # Shuffle the files
     random.shuffle(all_files)
@@ -50,18 +76,112 @@ def split_dataset(folder_path, train_ratio, train_folder_dest, test_folder_dest,
         else:
             shutil.copy2(src_file_path, dest_file_path)
 
+def split_from_lists(train_file_list, test_file_list, train_folder_dest, test_folder_dest, generate_specs=False, song_detection_json=None):
+    os.makedirs(train_folder_dest, exist_ok=True)
+    os.makedirs(test_folder_dest, exist_ok=True)
+
+    def process_file_list(file_list_path):
+        with open(file_list_path, 'r') as f:
+            return [os.path.splitext(os.path.basename(line.strip()))[0] for line in f.readlines()]
+
+    if generate_specs:
+        # Create a temporary directory for all spectrograms
+        temp_dir = os.path.join(os.path.dirname(train_folder_dest), 'temp_specs')
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Generate all spectrograms in temp directory
+        spec_generator = WavtoSpec(
+            src_dir='/media/george-vengrovski/George-SSD/llb_stuff/llb_birds',  # Base directory containing WAV files
+            dst_dir=temp_dir,
+            song_detection_json_path=song_detection_json
+        )
+        spec_generator.process_directory()
+
+        # Get lists of file basenames (without extensions)
+        train_files = process_file_list(train_file_list)
+        test_files = process_file_list(test_file_list)
+
+        # Move files to their respective directories
+        for spec_file in os.listdir(temp_dir):
+            if not spec_file.endswith('.npz'):
+                continue
+                
+            # Extract the base name without segment suffix
+            base_name = spec_file.split('_segment_')[0]
+            
+            if base_name in train_files:
+                shutil.move(
+                    os.path.join(temp_dir, spec_file),
+                    os.path.join(train_folder_dest, spec_file)
+                )
+            elif base_name in test_files:
+                shutil.move(
+                    os.path.join(temp_dir, spec_file),
+                    os.path.join(test_folder_dest, spec_file)
+                )
+
+        # Clean up temp directory
+        shutil.rmtree(temp_dir)
+    else:
+        # If not generating specs, just copy existing spec files
+        train_files = process_file_list(train_file_list)
+        test_files = process_file_list(test_file_list)
+        
+        for npz_file in os.listdir(folder_path):
+            if not npz_file.endswith('.npz'):
+                continue
+                
+            base_name = npz_file.split('_segment_')[0]
+            if base_name in train_files:
+                shutil.copy2(
+                    os.path.join(folder_path, npz_file),
+                    os.path.join(train_folder_dest, npz_file)
+                )
+            elif base_name in test_files:
+                shutil.copy2(
+                    os.path.join(folder_path, npz_file),
+                    os.path.join(test_folder_dest, npz_file)
+                )
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Split dataset into train and test sets.")
-    parser.add_argument("folder_path", type=str, help="The path to the folder containing the dataset.")
-    parser.add_argument("train_ratio", type=float, help="The ratio of npz files to be included in the train set.")
-    parser.add_argument("train_folder_dest", type=str, help="The path to the destination train folder.")
-    parser.add_argument("test_folder_dest", type=str, help="The path to the destination test folder.")
-    parser.add_argument("--move_files", action="store_true", help="If set, files will be moved instead of copied.")
+    # Configuration
+    config = {
+        # Common settings
+        'train_folder_dest': '/media/george-vengrovski/George-SSD/llb_stuff/llb_train',
+        'test_folder_dest': '/media/george-vengrovski/George-SSD/llb_stuff/llb_test',
+        'generate_specs': True,
+        'song_detection_json': '/media/george-vengrovski/George-SSD/llb_stuff/llb_birds/merged_output.json',
+        
+        # Choose mode: 'ratio' or 'lists'
+        'mode': 'lists',  # or 'ratio'
+        
+        # Settings for ratio mode
+        'folder_path': '/media/george-vengrovski/George-SSD/llb_stuff/llb_birds/yarden_data',
+        'train_ratio': 0.8,
+        'move_files': False,
+        
+        # Settings for lists mode
+        'train_list': '/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper/train_files.txt',
+        'test_list': '/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper/test_files.txt'
+    }
 
-    args = parser.parse_args()
-    split_dataset(args.folder_path, args.train_ratio, args.train_folder_dest, args.test_folder_dest, args.move_files)
-
-# Example usage with moving files
-# split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb3_george_specs', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb3_test', move_files=False)
-# split_dataset('/media/george-vengrovski/Extreme SSD/yarden_data/llb11_george_specs', 0.8, '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_train', '/media/george-vengrovski/Extreme SSD/yarden_data/llb11_test', move_files=False)
-split_dataset('/media/george-vengrovski/disk2/training_song_detector/Ellen_Specs/specs', 0.8, '/media/george-vengrovski/disk2/training_song_detector/Ellen_Specs/train', '/media/george-vengrovski/disk2/training_song_detector/Ellen_Specs/test', move_files=True)
+    # Execute based on mode
+    if config['mode'] == 'ratio':
+        split_dataset(
+            folder_path=config['folder_path'],
+            train_ratio=config['train_ratio'],
+            train_folder_dest=config['train_folder_dest'],
+            test_folder_dest=config['test_folder_dest'],
+            move_files=config['move_files'],
+            generate_specs=config['generate_specs'],
+            song_detection_json=config['song_detection_json']
+        )
+    else:  # lists mode
+        split_from_lists(
+            train_file_list=config['train_list'],
+            test_file_list=config['test_list'],
+            train_folder_dest=config['train_folder_dest'],
+            test_folder_dest=config['test_folder_dest'],
+            generate_specs=config['generate_specs'],
+            song_detection_json=config['song_detection_json']
+        )
