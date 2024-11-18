@@ -89,6 +89,15 @@ python3 src/spectogram_generator.py --src_dir "$TEST_WAV_DIR" --dst_dir "$TEST_D
 # Run TweetyBERT with the generated spectrogram directories
 python3 src/TweetyBERT.py --experiment_name "$EXPERIMENT_NAME" --train_dir "$TRAIN_DIR" --test_dir "$TEST_DIR"
 
+# Create experiments directory if it doesn't exist (it should exist by now, but just in case)
+EXPERIMENT_DIR="experiments/$EXPERIMENT_NAME"
+mkdir -p "$EXPERIMENT_DIR"
+
+# Copy train and test file lists to experiments directory
+cp "$TRAIN_FILE_LIST" "$EXPERIMENT_DIR/train_files.txt"
+cp "$TEST_FILE_LIST" "$EXPERIMENT_DIR/test_files.txt"
+echo "Copied train and test file lists to: $EXPERIMENT_DIR"
+
 # Delete the temp directory after processing is complete
 rm -rf "$TEMP_DIR"
 echo "Deleted temporary directory and its contents: $TEMP_DIR"

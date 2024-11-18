@@ -4,7 +4,7 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="USA5508_test"
+BIRD_NAME="USA5508_1million_test"
 MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
 
 # Specify the WAV folder and song detection JSON path
@@ -15,7 +15,7 @@ SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Diana-SSD/GEORGE/spring_fall_
 EVENT_DATES=("2024-07-20")  # Example date
 
 # Number of samples to select (optional)
-NUM_SAMPLES=50
+NUM_SAMPLES=150
 
 # Number of groups (must be an even number)
 NUM_GROUPS=4  # Change this to the desired even number of groups
@@ -59,7 +59,7 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "${DATA_DIRS[@]}" \
     --save_name "$BIRD_NAME" \
-    --samples 1e5
+    --samples 1e6
 
 # Train and save Decoder
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"
