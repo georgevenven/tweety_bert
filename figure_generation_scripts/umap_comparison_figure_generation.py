@@ -411,36 +411,34 @@ def plot_similarity_summary(results_df, save_dir):
     Create summary plots of similarities across birds.
     """
     # Set the style
-    sns.set_style("whitegrid")
-    sns.set_palette("husl")
+    plt.rcParams.update({'font.size': 24, 'text.color': 'black', 'axes.labelcolor': 'black',
+                        'xtick.color': 'black', 'ytick.color': 'black'})
     
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    # Create figure with single plot
+    fig, ax = plt.subplots(figsize=(10, 8))
     
-    # Plot 1: Within vs Between Period Similarities
+    # Prepare data
     data_to_plot = pd.melt(results_df[['Within_Before', 'Within_After', 'Between_Periods']], 
-                           var_name='Comparison', value_name='Similarity')
+                          var_name='Comparison', value_name='Similarity')
     
-    sns.boxplot(x='Comparison', y='Similarity', data=data_to_plot, ax=ax1)
-    sns.swarmplot(x='Comparison', y='Similarity', data=data_to_plot, color='0.25', ax=ax1)
+    # Create bar plot
+    sns.barplot(x='Comparison', y='Similarity', data=data_to_plot, ax=ax, 
+                capsize=0.1, errwidth=2, ci=68)
     
-    ax1.set_title('Distribution of Similarities Across Birds', fontsize=12)
-    ax1.set_xlabel('Comparison Type')
-    ax1.set_ylabel('Similarity (Cosine Similarity)')
+    # Customize plot
+    ax.set_xlabel('Comparison Type')
+    ax.set_ylabel('Similarity')
+    ax.set_ylim(0, 1)  # Fix y-axis from 0 to 1
     
-    # Plot 2: P-values
-    sns.histplot(data=results_df['P_value'], ax=ax2, bins=20)
-    ax2.axvline(0.05, color='r', linestyle='--', label='p=0.05')
-    ax2.set_title('Distribution of P-values', fontsize=12)
-    ax2.set_xlabel('P-value')
-    ax2.set_ylabel('Count')
-    ax2.legend()
+    # Clean up x-axis labels
+    new_labels = ['Within Before', 'Within After', 'Between Periods']
+    ax.set_xticklabels(new_labels)
     
-    # Add overall p-value using Fisher's method
+    # Calculate combined p-value using Fisher's method
     chi_square = -2 * np.sum(np.log(results_df['P_value']))
     dof = 2 * len(results_df)
     combined_p = 1 - stats.chi2.cdf(chi_square, dof)
-    plt.suptitle(f'Similarity Analysis Summary (Combined p = {combined_p:.2e})', fontsize=14)
+    plt.title(f'p = {combined_p:.2e}', pad=20)
     
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'similarity_summary.png'), dpi=300, bbox_inches='tight')
@@ -448,6 +446,7 @@ def plot_similarity_summary(results_df, save_dir):
     plt.close()
 
 if __name__ == "__main__":
-    npz_files = ["files/USA5508_1million_test.npz"]
-    save_dir = "seasonal_analysis_results"
+    # test on two birds
+    npz_files = ["files/USA5508_1million_test.npz", "files/USA5508_1million_test.npz"]
+    save_dir = "imgs/seasonality_analysis_results"
     results_df = analyze_multiple_birds(npz_files, save_dir) 

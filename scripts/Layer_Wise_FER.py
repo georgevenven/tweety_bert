@@ -52,7 +52,7 @@ def setup_data_loaders(train_dir, test_dir, num_classes, batch_size=96, segment_
 
     return train_loader, test_loader, eval_loader
 
-def probe_eval(model, train_loader, test_loader, eval_loader, results_path, folder, config, num_classes, train_dir):
+def probe_eval(model, train_loader, test_loader, eval_loader, results_path, folder, config, num_classes, train_dir, skip_existing=True):
     # Create base folder for layer-wise analysis
     folder_path = os.path.join(results_path, 'layer_wise_analysis')
     os.makedirs(folder_path, exist_ok=True)
@@ -78,10 +78,24 @@ def probe_eval(model, train_loader, test_loader, eval_loader, results_path, fold
     ]
 
     for layer_id, layer_num, nn_dim in tqdm(layer_output_pairs, desc=f"Probing Key Transformer Layers in {folder}", leave=False):
-        print(f"Evaluating transformer layer: {layer_id}, number: {layer_num}")
-        
         # Create specific folder for this layer
         layer_results_path = os.path.join(experiment_path, f'layer_{layer_num}_{layer_id}')
+        
+        # Check if this layer has already been processed
+        results_file = os.path.join(layer_results_path, 'results.json')
+        if skip_existing and os.path.exists(results_file):
+            print(f"Skipping already processed layer: {layer_id}, number: {layer_num}")
+            
+            # Load existing results
+            try:
+                with open(results_file, 'r') as f:
+                    layer_results = json.load(f)
+                all_results[f'layer_{layer_num}_{layer_id}'] = layer_results
+                continue
+            except Exception as e:
+                print(f"Error loading existing results for layer {layer_id}, number: {layer_num}. Will reprocess. Error: {str(e)}")
+        
+        print(f"Evaluating transformer layer: {layer_id}, number: {layer_num}")
         os.makedirs(layer_results_path, exist_ok=True)
 
         # Initialize probe model for this layer
@@ -171,21 +185,23 @@ def execute_eval_of_experiments(experiment_configs, results_path):
         train_dir = os.path.join(project_root, exp_config['train_dir'])
         test_dir = os.path.join(project_root, exp_config['test_dir'])
 
+        # Extract dataset name (llb3, llb11, or llb16) from train_dir
+        dataset_name = os.path.basename(train_dir).split('_')[0]
+
         # Setup data and model
         num_classes = determine_number_unique_classes(train_dir)
         train_loader, test_loader, eval_loader = setup_data_loaders(train_dir, test_dir, num_classes)
 
         if os.path.exists(base_path):
             try:
-                # Move the model to device immediately after loading
                 model = load_model(base_path).to(device)
                 config = load_config(os.path.join(base_path, 'config.json'))
                 experiment_results = probe_eval(
                     model, train_loader, test_loader, eval_loader, 
-                    results_path, os.path.basename(base_path), 
+                    results_path, dataset_name, 
                     config, num_classes, train_dir
                 )
-                all_experiments_results[os.path.basename(base_path)] = experiment_results
+                all_experiments_results[dataset_name] = experiment_results
             except Exception as e:
                 print(f"Error loading experiment '{base_path}': {str(e)}")
         else:
