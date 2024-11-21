@@ -95,22 +95,18 @@ import time  # Add this import at the top of the file
 class LinearProbeModel(nn.Module):
     def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", TweetyBERT_readout_dims=2, classifier_type="decoder"):
         super(LinearProbeModel, self).__init__()
+        # Define these first
+        self.num_classes = num_classes
+        self.logits_dim = num_classes  # This needs to be set before creating the classifier
         self.model_type = model_type
         self.freeze_layers = freeze_layers
         self.layer_num = layer_num
         self.layer_id = layer_id
         self.model = model
         self.TweetyBERT_readout_dims = TweetyBERT_readout_dims
-        self.num_classes = num_classes 
 
-        if self.num_classes == 2:
-            self.num_classes = 1
-            self.logits_dim = 1 
-        else:
-            self.logits_dim = num_classes
-
+        # Now create the classifier
         if classifier_type == "decoder":
-            # Define a 3-layer decoder with ReLU activations
             self.classifier = nn.Sequential(
                 nn.Linear(TweetyBERT_readout_dims, 128),    
                 nn.GELU(),
@@ -119,10 +115,10 @@ class LinearProbeModel(nn.Module):
                 nn.Linear(64, self.logits_dim)
             )
             self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
-
-
         elif classifier_type == "linear_probe":
             self.classifier = nn.Linear(TweetyBERT_readout_dims, self.logits_dim)
+
+        if self.freeze_layers and self.model is not None:
             self.freeze_all_but_classifier(self.model)
 
     def forward(self, input):
@@ -238,7 +234,7 @@ class LinearProbeTrainer():
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.test_loader = test_loader
-        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=1e-2, weight_decay=0.0)
+        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=lr, weight_decay=0.0)
         self.plotting = plotting
         self.batches_per_eval = batches_per_eval
         self.desired_total_batches = desired_total_batches
@@ -246,6 +242,7 @@ class LinearProbeTrainer():
         self.use_tqdm = use_tqdm
         self.moving_avg_window = moving_avg_window  # Window size for moving average
         self.scaler = GradScaler()  # Initialize GradScaler for mixed precision
+        self.train_loss_buffer = []  # Add this line to store recent training losses
 
     def frame_error_rate(self, y_pred, y_true):
         if y_pred.shape[1] == 1:  # Binary classification
@@ -267,17 +264,17 @@ class LinearProbeTrainer():
             try:
                 spectrogram, label, vocalization, _ = next(test_iter)
             except StopIteration:
-                test_iter = iter(self.test_loader)  # Reinitialize the iterator
+                test_iter = iter(self.test_loader)
                 spectrogram, label, vocalization, _ = next(test_iter)
 
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
 
-            output = self.model.forward(spectrogram)
-
-            label = label.argmax(dim=-1)
-            output = output.permute(0, 2, 1)
-
-            loss = self.model.cross_entropy_loss(predictions=output, targets=label)
+            # Add autocast for validation as well
+            with autocast():
+                output = self.model.forward(spectrogram)
+                label = label.argmax(dim=-1)
+                output = output.permute(0, 2, 1)
+                loss = self.model.cross_entropy_loss(predictions=output, targets=label)
 
             total_val_loss = loss.item()
             total_frame_error = self.frame_error_rate(output, label).item()
@@ -302,30 +299,43 @@ class LinearProbeTrainer():
             try:
                 spectrogram, label, vocalization, _ = next(train_iter)
             except StopIteration:
-                train_iter = iter(self.train_loader)  # Reinitialize the iterator
+                train_iter = iter(self.train_loader)
                 spectrogram, label, vocalization, _ = next(train_iter)
 
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             self.optimizer.zero_grad()
-         
-            output = self.model.forward(spectrogram)
+            
+            # Add autocast context manager for mixed precision training
+            with autocast():
+                output = self.model.forward(spectrogram)
+                label = label.argmax(dim=-1)
+                output = output.permute(0, 2, 1)
+                loss = self.model.cross_entropy_loss(predictions=output, targets=label)
 
-            label = label.argmax(dim=-1)
-            output = output.permute(0, 2, 1)
-
-            loss = self.model.cross_entropy_loss(predictions=output, targets=label)
-
-            loss.backward()
-            self.optimizer.step()
+            # Use the scaler for backward pass and optimization
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
             total_batches += 1
+            # Store loss in buffer
+            self.train_loss_buffer.append(loss.item())
+            # Keep only the last moving_avg_window values
+            if len(self.train_loss_buffer) > self.moving_avg_window:
+                self.train_loss_buffer.pop(0)
+
             if total_batches % self.batches_per_eval == 0:
+                # Training loss is smoothed using moving average
+                smoothed_train_loss = np.mean(self.train_loss_buffer)
+                
+                # Validation loss is raw (not smoothed) from single validation batch
                 avg_val_loss, avg_frame_error = self.validate_model(test_iter)
 
                 raw_loss_list.append(loss.item())
                 raw_val_loss_list.append(avg_val_loss)
                 raw_frame_error_rate_list.append(avg_frame_error)
 
+                # Validation loss is smoothed only for early stopping purposes
                 if len(raw_val_loss_list) >= self.moving_avg_window:
                     moving_avg_val_loss = np.mean(raw_val_loss_list[-self.moving_avg_window:])
                     moving_avg_frame_error = np.mean(raw_frame_error_rate_list[-self.moving_avg_window:])
@@ -343,7 +353,10 @@ class LinearProbeTrainer():
                             break
 
                 if self.use_tqdm: 
-                    print(f'Step {total_batches}: Train Loss {loss.item():.4f} FER = {avg_frame_error:.2f}%, Val Loss = {avg_val_loss:.4f}')
+                    if len(raw_val_loss_list) >= self.moving_avg_window:
+                        print(f'Step {total_batches}: Train Loss {smoothed_train_loss:.4f} FER = {moving_avg_frame_error:.2f}%, Val Loss = {moving_avg_val_loss:.4f}')
+                    else:
+                        print(f'Step {total_batches}: Train Loss {smoothed_train_loss:.4f} FER = {avg_frame_error:.2f}%, Val Loss = {avg_val_loss:.4f}')
 
             if stop_training:
                 break
@@ -452,9 +465,24 @@ class ModelEvaluator:
             for cls, (errors, correct) in enumerate(zip(errors_per_class, correct_per_class))
         }
         total_frame_error_rate = (total_errors / total_frames * 100 if total_frames > 0 else float('nan'))
-        return class_frame_error_rates, total_frame_error_rate
+        return class_frame_error_rates, total_frame_error_rate, errors_per_class, correct_per_class
 
-    def save_results(self, class_frame_error_rates, total_frame_error_rate, folder_path, layer_id=None, layer_num=None, plot=False):
+    def save_results(self, class_frame_error_rates, total_frame_error_rate, folder_path, errors_per_class=None, correct_per_class=None, layer_id=None, layer_num=None, plot=False):
+        # Calculate total frames per class
+        total_frames_per_class = {
+            cls: errors + correct 
+            for cls, (errors, correct) in enumerate(zip(errors_per_class, correct_per_class))
+        }
+        
+        # Calculate total frames across all classes
+        total_frames = sum(total_frames_per_class.values())
+        
+        # Calculate proportions
+        class_proportions = {
+            cls: frames / total_frames 
+            for cls, frames in total_frames_per_class.items()
+        }
+
         # Conditional filename based on whether layer_id and layer_num are provided
         if layer_id is not None and layer_num is not None:
             suffix = f'_{layer_id}_{layer_num}'
@@ -463,15 +491,16 @@ class ModelEvaluator:
 
         # Save plot if plot parameter is True
         if plot:
-            plot_filename = f'{folder_path}_frame_error_rate_plot{suffix}.png'
-            self.plot_error_rates(class_frame_error_rates, plot_filename, os.path.dirname(folder_path))
+            plot_filename = os.path.join(folder_path, f'frame_error_rate_plot{suffix}.png')
+            self.plot_error_rates(class_frame_error_rates, plot_filename, folder_path)
 
         # Save data to JSON
         results_data = {
             'class_frame_error_rates': class_frame_error_rates,
-            'total_frame_error_rate': total_frame_error_rate
+            'total_frame_error_rate': total_frame_error_rate,
+            'class_proportions': class_proportions
         }
-        json_filename = f'{folder_path}_results{suffix}.json'
+        json_filename = os.path.join(folder_path, f'results{suffix}.json')
         with open(json_filename, 'w') as file:
             json.dump(results_data, file)
 

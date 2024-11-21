@@ -20,16 +20,45 @@ def determine_number_unique_classes(dir):
         unique_labels.update(labels)
 
     return len(unique_labels)
+
+def syllable_to_phrase_labels(arr, silence=0):
+    new_arr = np.array(arr, dtype=int)
+    current_syllable = None
+    start_of_phrase_index = None
+    first_non_silence_label = None  # To track the first non-silence syllable
+
+    for i, value in enumerate(new_arr):
+        if value != silence and value != current_syllable:
+            if start_of_phrase_index is not None:
+                new_arr[start_of_phrase_index:i] = current_syllable
+            current_syllable = value
+            start_of_phrase_index = i
+            
+            if first_non_silence_label is None:  # Found the first non-silence label
+                first_non_silence_label = value
+
+    if start_of_phrase_index is not None:
+        new_arr[start_of_phrase_index:] = current_syllable
+
+    # Replace the initial silence with the first non-silence syllable label
+    if new_arr[0] == silence and first_non_silence_label is not None:
+        for i in range(len(new_arr)):
+            if new_arr[i] != silence:
+                break
+            new_arr[i] = first_non_silence_label
+
+    return new_arr
     
 
 class SongDataSet_Image(Dataset):
-    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False, min_length=100):
+    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False, min_length=100, phrase_labels=False):
         self.file_paths = [os.path.join(file_dir, file) for file in os.listdir(file_dir)]
         self.num_classes = num_classes
         self.infinite_loader = infinite_loader
         self.segment_length = segment_length
         self.pitch_shift = pitch_shift
         self.min_length = min_length  # Add min_length parameter
+        self.phrase_labels = phrase_labels
 
     def apply_pitch_shift(self, spectrogram):
         # Shift the pitch of the spectrogram according to a normal distribution
@@ -78,6 +107,11 @@ class SongDataSet_Image(Dataset):
 
             # Process labels
             ground_truth_labels = np.array(data['labels'], dtype=int)
+            # print("First 1000 labels before processing:", ground_truth_labels[:1000])
+            if self.phrase_labels:
+                ground_truth_labels = syllable_to_phrase_labels(ground_truth_labels)
+            # print("First 1000 labels after processing:", ground_truth_labels[:1000])
+
             vocalization = np.array(data['vocalization'], dtype=int)
             
             ground_truth_labels = torch.from_numpy(ground_truth_labels).long().squeeze(0)

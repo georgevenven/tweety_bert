@@ -17,8 +17,17 @@ def delete_small_npz_files(directory):
                 os.remove(file_path)
                 print(f"Deleted {file_path} (size: {file_size} bytes)")
 
-# Specify the directory to clean up
-directory_to_clean = '/path/to/your/directory'
+# List of directories to clean
+directories_to_clean = [
+    '/media/george-vengrovski/George-SSD/llb_stuff/llb3_test',
+    '/media/george-vengrovski/George-SSD/llb_stuff/llb3_train',
+    '/media/george-vengrovski/George-SSD/llb_stuff/llb11_test',
+    '/media/george-vengrovski/George-SSD/llb_stuff/llb11_train',
+    '/media/george-vengrovski/George-SSD/llb_stuff/llb16_test',
+    '/media/george-vengrovski/George-SSD/llb_stuff/llb16_train'
+]
 
-# Call the function to delete small .npz files
-delete_small_npz_files(directory_to_clean)
+# Process each directory
+for directory in directories_to_clean:
+    print(f"\nProcessing directory: {directory}")
+    delete_small_npz_files(directory)

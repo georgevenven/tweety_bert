@@ -54,12 +54,13 @@ def load_config(config_path):
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
-def load_model(experiment_folder):
+def load_model(experiment_folder, random_init=False):
     """
     Initialize and load the model with the given configuration and weights from the experiment folder.
 
     Args:
     experiment_folder (str): The path to the experiment folder containing the config and weights.
+    random_init (bool): If True, use random initialization instead of loading weights.
 
     Returns:
     torch.nn.Module: The initialized model.
@@ -86,13 +87,16 @@ def load_model(experiment_folder):
         length=config['context']
     )
 
-    # Find the weight file with the highest step number
-    weight_files = [f for f in os.listdir(weight_folder) if f.startswith('model_step_') and f.endswith('.pth')]
-    if weight_files:
-        latest_weight_file = max(weight_files, key=lambda f: int(f.split('_')[-1].split('.')[0]))
-        weight_path = os.path.join(weight_folder, latest_weight_file)
-        load_weights(dir=weight_path, model=model)
+    # Skip loading weights if random_init is True
+    if not random_init:
+        weight_files = [f for f in os.listdir(weight_folder) if f.startswith('model_step_') and f.endswith('.pth')]
+        if weight_files:
+            latest_weight_file = max(weight_files, key=lambda f: int(f.split('_')[-1].split('.')[0]))
+            weight_path = os.path.join(weight_folder, latest_weight_file)
+            load_weights(dir=weight_path, model=model)
+        else:
+            print("No weight files found. Model loaded with randomly initiated weights.")
     else:
-        print("Model loaded with randomly initiated weights.")
+        print("Model initialized with random weights as requested.")
 
     return model

@@ -260,7 +260,7 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         fig, ax = plt.subplots(figsize=(6, 6))
         cmap = 'Greens' if i in after_indices else 'Purples'  # Use green for after periods
         im = ax.imshow(heatmap.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                       origin='lower', cmap=cmap, vmax=0.1)
+                       origin='lower', cmap=cmap, vmax=0.1, aspect='equal')
         ax.set_title(f"{label}", fontsize=16)
         ax.set_xlabel('UMAP Dimension 1')
         ax.set_ylabel('UMAP Dimension 2')
@@ -298,7 +298,7 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     # Plot combined before
     fig, ax = plt.subplots(figsize=(6, 6))
     im = ax.imshow(before_heatmap.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                   origin='lower', cmap='Purples', vmax=0.1)
+                   origin='lower', cmap='Purples', vmax=0.1, aspect='equal')
     ax.set_title(f"Combined Before", fontsize=16)
     ax.set_xlabel('UMAP Dimension 1')
     ax.set_ylabel('UMAP Dimension 2')
@@ -310,7 +310,7 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     # Plot combined after
     fig, ax = plt.subplots(figsize=(6, 6))
     im = ax.imshow(after_heatmap.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                   origin='lower', cmap='Greens', vmax=0.1)
+                   origin='lower', cmap='Greens', vmax=0.1, aspect='equal')
     ax.set_title(f"Combined After", fontsize=16)
     ax.set_xlabel('UMAP Dimension 1')
     ax.set_ylabel('UMAP Dimension 2')
@@ -322,7 +322,7 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     # Plot overlap
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-              origin='lower')
+              origin='lower', aspect='equal')
     ax.set_title("Before vs After Overlap", fontsize=16)
     ax.set_xlabel('UMAP Dimension 1')
     ax.set_ylabel('UMAP Dimension 2')
@@ -363,7 +363,7 @@ def plot_all_heatmaps_combined(embedding_outputs, dataset_indices, save_dir, bir
         # Use green colormap for after periods (indices 2 and 3)
         cmap = 'Greens' if i >= 2 else 'Purples'
         ax.imshow(heatmap_norm.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                  origin='lower', cmap=cmap, vmax=0.1)
+                  origin='lower', cmap=cmap, vmax=0.1, aspect='equal')
         ax.set_title(f"{label}", fontsize=14)
         ax.set_xlabel('UMAP 1')
         ax.set_ylabel('UMAP 2')
@@ -378,7 +378,7 @@ def plot_all_heatmaps_combined(embedding_outputs, dataset_indices, save_dir, bir
     before_heatmap_norm = before_heatmap / before_heatmap.max()
     
     ax_before.imshow(before_heatmap_norm.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                     origin='lower', cmap='Purples', vmax=0.1)
+                     origin='lower', cmap='Purples', vmax=0.1, aspect='equal')
     ax_before.set_title("Combined Before", fontsize=14)
     ax_before.set_xlabel('UMAP 1')
     ax_before.set_ylabel('UMAP 2')
@@ -393,7 +393,7 @@ def plot_all_heatmaps_combined(embedding_outputs, dataset_indices, save_dir, bir
     after_heatmap_norm = after_heatmap / after_heatmap.max()
     
     ax_after.imshow(after_heatmap_norm.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                    origin='lower', cmap='Greens', vmax=0.1)
+                    origin='lower', cmap='Greens', vmax=0.1, aspect='equal')
     ax_after.set_title("Combined After", fontsize=14)
     ax_after.set_xlabel('UMAP 1')
     ax_after.set_ylabel('UMAP 2')
