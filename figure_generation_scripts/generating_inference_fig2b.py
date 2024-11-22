@@ -58,11 +58,8 @@ spec_subset = spec[:n_samples]
 reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
 embedding = reducer.fit_transform(predictions_subset)
 
-# Create segment-based colors
-primary_colors = ['#FF0000', '#0000FF', '#008000']
-colors = []
-for i in range(n_segments):
-    colors.extend([primary_colors[i]] * segment_size)
+# Create segment-based colors - now all blue
+colors = ['#0000FF'] * n_samples  # Using blue for all points
 
 # Plot UMAP projection
 plt.figure(figsize=(10, 10))
