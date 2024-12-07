@@ -38,10 +38,13 @@ for fold_dir in "$TEMP_DIR/folds"/fold_*; do
         mkdir -p "$spec_dir"
         
         echo "Generating spectrograms for fold $fold_number..."
+        echo "Source directory: $fold_dir"
+        echo "Destination directory: $spec_dir"
         python src/spectogram_generator.py \
             --src_dir "$fold_dir" \
             --dst_dir "$spec_dir" \
-            --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+            --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
+            || echo "Error generating spectrograms"
         
         save_name="${BIRD_NAME}_fold${fold_number}"
         echo "Running UMAP for Fold: $fold_number"

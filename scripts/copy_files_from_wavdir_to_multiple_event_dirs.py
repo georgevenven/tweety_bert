@@ -226,29 +226,33 @@ if args.test_set_file:
     with open(args.test_set_file, 'r') as f:
         test_files = [line.strip() for line in f.readlines()]
     print(f"Loaded {len(test_files)} files from test set file")
-    print(f"First few test files: {test_files[:5]}")
 
-    # Filter song data for test files only
-    song_files = {entry['filename']: entry 
-                  for entry in song_data 
-                  if entry.get('song_present', False) and 
-                  any(test_file in entry['filename'] for test_file in test_files)}
+    # First, create a map of available wav files
+    base_dir = Path(args.directory_path)
+    available_wav_files = {}
+    for file_path in base_dir.rglob('*.wav'):
+        if file_path.is_file():
+            available_wav_files[file_path.name] = file_path
+
+    # Filter song data for test files that actually exist in wav directory
+    song_files = {}
+    for entry in song_data:
+        if entry.get('song_present', False):
+            filename = Path(entry['filename']).name
+            if any(test_file in entry['filename'] for test_file in test_files):
+                if filename in available_wav_files:
+                    song_files[entry['filename']] = entry
+                else:
+                    print(f"Skipping file not found in wav directory: {filename}")
     
-    print(f"\nFound {len(song_files)} matching files in JSON data")
-    if len(song_files) == 0:
-        print("\nDebug information:")
-        print("Checking first 5 entries in JSON data:")
-        for i, entry in enumerate(song_data[:5]):
-            print(f"\nEntry {i+1}:")
-            print(f"  Filename: {entry.get('filename', 'No filename')}")
-            print(f"  Song present: {entry.get('song_present', 'Not specified')}")
-            matches = [test_file for test_file in test_files if test_file in entry.get('filename', '')]
-            print(f"  Matches test files: {bool(matches)}")
-            if matches:
-                print(f"  Matched with: {matches}")
+    print(f"\nFound {len(song_files)} matching files in JSON data that exist in wav directory")
 
-    # Create folds
+    # Create folds only with files that exist
     file_list = list(song_files.keys())
+    if not file_list:
+        print("No valid files found after filtering. Exiting...")
+        sys.exit(1)
+
     folds = create_random_folds(file_list, args.songs_per_fold)
     print(f"\nCreated {len(folds)} folds")
 
@@ -259,22 +263,17 @@ if args.test_set_file:
         
         print(f"\nProcessing fold {fold_idx}:")
         files_copied = 0
-        files_not_found = 0
         
         # Copy files to fold directory
         for filename in fold_files:
-            source_file = find_file_in_directory(Path(filename).name, args.directory_path)
-            if source_file:
+            source_file = available_wav_files.get(Path(filename).name)
+            if source_file:  # This check is redundant now but kept for safety
                 shutil.copy(source_file, fold_output_dir / Path(filename).name)
                 files_copied += 1
-            else:
-                files_not_found += 1
-                print(f"  Could not find file: {filename}")
         
         print(f"Group {fold_idx} summary:")
-        print(f"  - Files attempted: {len(fold_files)}")
+        print(f"  - Files in fold: {len(fold_files)}")
         print(f"  - Files copied: {files_copied}")
-        print(f"  - Files not found: {files_not_found}")
 
 else:
     # Original temporal selection mode

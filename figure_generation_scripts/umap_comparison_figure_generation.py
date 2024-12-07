@@ -48,7 +48,7 @@ def calculate_distribution_similarity(heatmap1, heatmap2):
    return similarity
 
 def calculate_statistical_significance(similarity_matrix):
-    """Calculate statistical significance using exact permutation test."""
+    """Calculate statistical significance using exact permutation test for both between and within period comparisons."""
     # Extract within and between period similarities
     within_periods = np.array([
         similarity_matrix[0,1],  # Before1 vs Before2
@@ -60,29 +60,47 @@ def calculate_statistical_significance(similarity_matrix):
         similarity_matrix[1,2], similarity_matrix[1,3]
     ])
     
-    # Observed difference in means
-    observed_diff = np.mean(within_periods) - np.mean(between_periods)
+    # Observed difference for between periods
+    observed_diff_between = np.mean(within_periods) - np.mean(between_periods)
     
-    # Get all possible combinations
-    all_similarities = np.concatenate([within_periods, between_periods])
-    all_possible_within = list(combinations(all_similarities, 2))
+    # Observed difference for within periods
+    observed_diff_within = similarity_matrix[0,1] - similarity_matrix[2,3]  # Before vs After similarity
     
-    # Calculate difference for each possible combination
-    perm_diffs = []
-    for within_combo in all_possible_within:
+    # Get all possible combinations for between-period test
+    all_similarities_between = np.concatenate([within_periods, between_periods])
+    all_possible_within_between = list(combinations(all_similarities_between, 2))
+    
+    # Calculate difference for each possible combination (between-period test)
+    perm_diffs_between = []
+    for within_combo in all_possible_within_between:
         within = np.array(within_combo)
-        between = np.array([x for x in all_similarities if x not in within])
-        perm_diffs.append(np.mean(within) - np.mean(between))
+        between = np.array([x for x in all_similarities_between if x not in within])
+        perm_diffs_between.append(np.mean(within) - np.mean(between))
     
-    # Calculate exact p-value
-    p_value = np.mean(np.array(perm_diffs) >= observed_diff)
+    # Calculate exact p-value for between-period test
+    p_value_between = np.mean(np.array(perm_diffs_between) >= observed_diff_between)
+    
+    # Get all possible combinations for within-period test
+    all_within_similarities = np.array([similarity_matrix[0,1], similarity_matrix[2,3]])
+    
+    # Calculate all possible differences for within-period test
+    perm_diffs_within = [
+        all_within_similarities[0] - all_within_similarities[1],  # Original order
+        all_within_similarities[1] - all_within_similarities[0]   # Swapped order
+    ]
+    
+    # Calculate exact p-value for within-period test
+    p_value_within = np.mean(np.abs(perm_diffs_within) >= np.abs(observed_diff_within))
     
     return {
         'within_mean': np.mean(within_periods),
         'within_std': np.std(within_periods),
         'between_mean': np.mean(between_periods),
         'between_std': np.std(between_periods),
-        'p_value': p_value
+        'p_value_between': p_value_between,
+        'p_value_within': p_value_within,
+        'within_before': similarity_matrix[0,1],
+        'within_after': similarity_matrix[2,3]
     }
 
 def plot_similarity_comparison(similarity_matrix, stats_results, save_dir, bird_id):
@@ -92,14 +110,14 @@ def plot_similarity_comparison(similarity_matrix, stats_results, save_dir, bird_
     
     # Plot 1: Matrix with block structure
     sns.heatmap(similarity_matrix, 
-                annot=True,  # Show numbers in cells
-                fmt='.3f',   # Format numbers to 3 decimal places
+                annot=True,
+                fmt='.3f',
                 xticklabels=['Before1', 'Before2', 'After1', 'After2'],
                 yticklabels=['Before1', 'Before2', 'After1', 'After2'],
                 ax=ax1, 
                 cmap='RdPu',
-                vmin=0,      # Force scale to start at 0
-                vmax=1)      # Force scale to end at 1
+                vmin=0,
+                vmax=1)
     ax1.set_title('Similarity Matrix')
     
     # Add block labels for visual grouping
@@ -115,7 +133,7 @@ def plot_similarity_comparison(similarity_matrix, stats_results, save_dir, bird_
     bars = ax2.bar(['Within Periods', 'Between Periods'], means, yerr=stds,
                    capsize=5, color=['blue', 'red'])
     ax2.set_ylabel('Similarity')
-    ax2.set_title(f'Similarity Comparison\np = {stats_results["p_value"]:.3e}')
+    ax2.set_title(f'Similarity Comparison\nBetween p = {stats_results["p_value_between"]:.3e}\nWithin p = {stats_results["p_value_within"]:.3e}')
     
     # Add exact values on bars
     for bar in bars:
@@ -190,14 +208,18 @@ def plot_pairwise_comparisons(embedding_outputs, dataset_indices, save_dir, bird
     print(f"Within Before Period: {within_before:.3f}")
     print(f"Within After Period: {within_after:.3f}")
     print(f"Between Periods: {between_periods:.3f}")
-    print(f"Statistical Test: p = {stats_results['p_value']:.3e}")
+    print(f"Statistical Tests:")
+    print(f"  Between Periods: p = {stats_results['p_value_between']:.3e}")
+    print(f"  Within Periods: p = {stats_results['p_value_within']:.3e}")
     
     return {
         'within_before': within_before,
         'within_after': within_after,
         'between_periods': between_periods,
         'similarity_matrix': similarities,
-        'p_value': stats_results['p_value'],
+        'p_value': stats_results['p_value_between'],  # Keep this for backward compatibility
+        'p_value_between': stats_results['p_value_between'],
+        'p_value_within': stats_results['p_value_within'],
         'within_mean': stats_results['within_mean'],
         'within_std': stats_results['within_std'],
         'between_mean': stats_results['between_mean'],
@@ -241,7 +263,9 @@ def analyze_multiple_birds(npz_files, save_dir):
             'Within_Before': [r['within_before'] for r in results],
             'Within_After': [r['within_after'] for r in results],
             'Between_Periods': [r['between_periods'] for r in results],
-            'P_value': [r['p_value'] for r in results],
+            'P_value': [r['p_value'] for r in results],  # Keep for backward compatibility
+            'p_value_between': [r['p_value_between'] for r in results],  # Add this
+            'p_value_within': [r['p_value_within'] for r in results],    # Add this
             'Within_Mean': [r['within_mean'] for r in results],
             'Within_Std': [r['within_std'] for r in results],
             'Between_Mean': [r['between_mean'] for r in results],
@@ -251,7 +275,7 @@ def analyze_multiple_birds(npz_files, save_dir):
             'dataset_indices': [r['dataset_indices'] for r in results]
         })
         
-        # Print detailed file information
+        # Update the detailed file information printing
         print("\nDetailed File Information:")
         for idx, row in results_df.iterrows():
             print(f"\nBird: {row['Bird']}")
@@ -259,7 +283,9 @@ def analyze_multiple_birds(npz_files, save_dir):
             print(f"Within Before similarity: {row['Within_Before']:.3f}")
             print(f"Within After similarity: {row['Within_After']:.3f}")
             print(f"Between Periods similarity: {row['Between_Periods']:.3f}")
-            print(f"P-value: {row['P_value']:.3e}")
+            print(f"P-values:")
+            print(f"  Between Periods: {row['p_value_between']:.3e}")
+            print(f"  Within Periods: {row['p_value_within']:.3e}")
         
         plot_similarity_summary(results_df, save_dir)
         results_df.to_csv(os.path.join(save_dir, 'all_birds_results.csv'))
@@ -776,11 +802,17 @@ def plot_similarity_summary(results_df, save_dir):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     
-    # Calculate combined p-value using Fisher's method
-    chi_square = -2 * np.sum(np.log(results_df['P_value']))
-    dof = 2 * len(results_df)
-    combined_p = 1 - stats.chi2.cdf(chi_square, dof)
-    plt.title(f'p = {combined_p:.2e}', pad=20)
+    # Calculate combined p-values using Fisher's method for both tests
+    chi_square_between = -2 * np.sum(np.log(results_df['p_value_between']))
+    chi_square_within = -2 * np.sum(np.log(results_df['p_value_within']))
+    dof_between = 2 * len(results_df)
+    dof_within = 2 * len(results_df)
+    
+    combined_p_between = 1 - stats.chi2.cdf(chi_square_between, dof_between)
+    combined_p_within = 1 - stats.chi2.cdf(chi_square_within, dof_within)
+    
+    plt.title(f'Between periods: p = {combined_p_between:.2e}\nWithin periods: p = {combined_p_within:.2e}', 
+              pad=20)
     
     # Update x-axis labels with point counts
     new_labels = []
