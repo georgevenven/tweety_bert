@@ -1,14 +1,16 @@
 #!/bin/bash
 
+### IN THE FUTURE, THE BEHAVIOR OF THIS SHELL SCRIPT AS WELL AS TRAIN DECODER MULTIPLE DIR AND COPY FILES FROM WAVDIR TO MULTIPLE EVENT DIRS SHOULD BE REFACTORED
+
 # Navigate up one directory
 cd ..
 
-# Variable for model name 
+# Variables for model and bird names
 BIRD_NAME="llb3"
-MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
-WAV_FOLDER="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_songs"
+MODEL_NAME="LLB_Model_For_Paper"
+WAV_FOLDER="/media/george-vengrovski/George-SSD/llb_stuff/llb_birds/yarden_data/llb3_songs"
 SONG_DETECTION_JSON_PATH="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/onset_offset_results.json"
-
+TEST_SET_FILE="experiments/LLB_Model_For_Paper/test_files.txt"  # Add your test set file path here
 
 # Create temp directory
 TEMP_DIR="./temp"
@@ -19,51 +21,37 @@ echo "Setting up directories..."
 mkdir -p "$TEMP_DIR"
 mkdir -p "$SPECS"
 
-# Define search parameters
-declare -a PCA_COMPONENTS=(64 128)
-declare -a MIN_CLUSTER_SIZE=(300 400 500 600 700 800 900 1000)
+# Create folds from test set
+echo "Creating folds from test set..."
+python scripts/copy_files_from_wavdir_to_multiple_event_dirs.py \
+    "$WAV_FOLDER" \
+    "$SONG_DETECTION_JSON_PATH" \
+    "$TEMP_DIR/folds" \
+    --test_set_file "$TEST_SET_FILE" \
+    --songs_per_fold 100
 
-# # Point to wave folder, and generate 1000 files 
-# echo "Generating spectrograms..."
-python src/spectogram_generator.py --src_dir "$WAV_FOLDER" --dst_dir "$SPECS" --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
-
-# Call count_timebins.py and store the return value
-echo "Counting timebins and generating folds..."
-python scripts/count_timebins.py --dir_path "$SPECS" --target_timebins 1000000 --temp_folds_path "$TEMP_DIR/folds" | {
-    while IFS= read -r line; do
-        if [[ $line == "FOLD_PATHS_START" ]]; then
-            read_paths=true
-        elif [[ $line == "FOLD_PATHS_END" ]]; then
-            read_paths=false
-        elif [[ $read_paths == true ]]; then
-            paths+=("$line")
-        fi
-    done
-
-    for path in "${paths[@]}"; do
-        echo "Processing fold at path: $path"
-        # Extract fold number from path
-        fold_number=$(basename "$path" | grep -oP 'fold_\K\d+')
-        # Ensure $path is a directory
-        if [ -d "$path" ]; then
-            for pca in "${PCA_COMPONENTS[@]}"; do
-                for cluster_size in "${MIN_CLUSTER_SIZE[@]}"; do
-                    save_name="${BIRD_NAME}_fold${fold_number}_pca_${pca}_cluster_${cluster_size}"
-                    echo "Running UMAP with PCA: $pca, Min Cluster Size: $cluster_size, Fold: $fold_number"
-                    python figure_generation_scripts/dim_reduced_birdsong_plots.py \
-                        --experiment_folder "experiments/$MODEL_NAME" \
-                        --data_dir "$path" \
-                        --save_name "$save_name" \
-                        --samples 1000000 \
-                        --pca_components "$pca" \
-                        --min_cluster_size "$cluster_size"
-                done
-            done
-        else
-            echo "Error: $path is not a directory"
-        fi
-    done
-}
+# Process each fold
+for fold_dir in "$TEMP_DIR/folds"/fold_*; do
+    if [ -d "$fold_dir" ]; then
+        fold_number=$(basename "$fold_dir" | grep -oP 'fold_\K\d+')
+        spec_dir="$SPECS/fold_$fold_number"
+        mkdir -p "$spec_dir"
+        
+        echo "Generating spectrograms for fold $fold_number..."
+        python src/spectogram_generator.py \
+            --src_dir "$fold_dir" \
+            --dst_dir "$spec_dir" \
+            --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+        
+        save_name="${BIRD_NAME}_fold${fold_number}"
+        echo "Running UMAP for Fold: $fold_number"
+        python figure_generation_scripts/dim_reduced_birdsong_plots.py \
+            --experiment_folder "experiments/$MODEL_NAME" \
+            --data_dir "$spec_dir" \
+            --save_name "$save_name" \
+            --samples 1000
+    fi
+done
 
 # Delete temp files 
 echo "Cleaning up temporary files..."

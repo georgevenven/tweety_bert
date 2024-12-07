@@ -114,7 +114,7 @@ def plot_similarity_comparison(similarity_matrix, stats_results, save_dir, bird_
     
     bars = ax2.bar(['Within Periods', 'Between Periods'], means, yerr=stds,
                    capsize=5, color=['blue', 'red'])
-    ax2.set_ylabel('Similarity (Cosine Similarity)')
+    ax2.set_ylabel('Similarity')
     ax2.set_title(f'Similarity Comparison\np = {stats_results["p_value"]:.3e}')
     
     # Add exact values on bars
@@ -282,8 +282,28 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         os.makedirs(save_dir)
     
     # Get consistent binning using all data
-    all_data = embedding_outputs
-    _, xedges, yedges = np.histogram2d(all_data[:, 0], all_data[:, 1], bins=bins)
+    _, xedges, yedges = np.histogram2d(embedding_outputs[:, 0], embedding_outputs[:, 1], bins=bins)
+    
+    def make_axes_square(ax, data):
+        # Get the current data limits
+        x_min, x_max = data[:, 0].min(), data[:, 0].max()
+        y_min, y_max = data[:, 1].min(), data[:, 1].max()
+        
+        # Calculate the ranges
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        
+        # Find the larger range
+        max_range = max(x_range, y_range)
+        
+        # Calculate the centers
+        x_center = (x_max + x_min) / 2
+        y_center = (y_max + y_min) / 2
+        
+        # Set new limits
+        ax.set_xlim(x_center - max_range/2, x_center + max_range/2)
+        ax.set_ylim(y_center - max_range/2, y_center + max_range/2)
+        ax.set_aspect('equal')
     
     # Prepare file map dictionary
     if file_map is not None:
@@ -291,17 +311,38 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     else:
         file_map_dict = {}
     
-    # Plot individual heatmaps
-    individual_heatmaps = []
-    for i, label in enumerate(labels):
+    # Generate all heatmaps first with global normalization
+    heatmaps = []
+    for i in range(4):  # For all 4 periods
         mask = dataset_indices == i
         current_data = embedding_outputs[mask]
-        
-        # Create heatmap
         heatmap, _, _ = np.histogram2d(current_data[:, 0], current_data[:, 1], 
-                                       bins=[xedges, yedges])
-        heatmap = heatmap / heatmap.max()
-        individual_heatmaps.append(heatmap)
+                                     bins=[xedges, yedges])
+        heatmaps.append(heatmap)
+    
+    # Find global maximum for normalization
+    global_max = max(hmap.max() for hmap in heatmaps)
+    
+    # Normalize all heatmaps together
+    normalized_heatmaps = [hmap / global_max for hmap in heatmaps]
+    
+    # Calculate brightness factor after normalization
+    all_densities = []
+    for hmap in normalized_heatmaps:
+        non_zero_mask = hmap > 0
+        if non_zero_mask.any():
+            all_densities.extend(hmap[non_zero_mask])
+    
+    mean_density = np.mean(all_densities)
+    target_brightness = 0.35  # Changed from 0.5 to 0.35
+    brightness_factor = target_brightness / mean_density
+    
+    print(f"Bird {bird_id} - Mean density: {mean_density:.6f}, Brightness factor: {brightness_factor:.2f}")
+    
+    # Plot individual heatmaps
+    for i, (label, heatmap) in enumerate(zip(labels, normalized_heatmaps)):
+        mask = dataset_indices == i
+        current_data = embedding_outputs[mask]
         
         # Get dates and number of points
         group_file_indices = file_indices[mask]
@@ -330,9 +371,11 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         
         # Plot individual map with appropriate colormap
         fig, ax = plt.subplots(figsize=(6, 6))
-        cmap = 'Greens' if i in after_indices else 'Purples'  # Use green for after periods
-        im = ax.imshow(heatmap.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                       origin='lower', cmap=cmap, vmax=0.1, aspect='equal')
+        cmap = 'Greens' if i in after_indices else 'Purples'
+        im = ax.imshow(heatmap.T * brightness_factor, 
+                      extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+                      origin='lower', cmap=cmap, vmax=1.0)  # vmax=1.0 since we're applying brightness factor
+        make_axes_square(ax, embedding_outputs)
         ax.set_title(ax_title, fontsize=16)
         ax.set_xlabel('UMAP Dimension 1')
         ax.set_ylabel('UMAP Dimension 2')
@@ -341,10 +384,15 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
         plt.close(fig)
     
-    # Create combined before
+    # Create combined before heatmap
+    before_heatmap = np.zeros_like(heatmaps[0])
+    for idx in before_indices:
+        before_heatmap += normalized_heatmaps[idx]
+    before_heatmap /= len(before_indices)
+    
+    # Get dates for combined before
     before_mask = np.isin(dataset_indices, before_indices)
     before_data = embedding_outputs[before_mask]
-    
     before_file_indices = file_indices[before_mask]
     dates = []
     unique_file_indices = np.unique(before_file_indices)
@@ -366,19 +414,12 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         date_str = ""
     num_points = len(before_data)
     
-    before_heatmap = np.zeros_like(individual_heatmaps[0])
-    # Sum heatmaps for before periods
-    for idx in before_indices:
-        before_heatmap += individual_heatmaps[idx]
-    before_heatmap /= len(before_indices)
-    
-    # Normalize combined heatmaps
-    before_heatmap = before_heatmap / before_heatmap.max()
-    
     # Plot combined before
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(before_heatmap.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                   origin='lower', cmap='Purples', vmax=0.1, aspect='equal')
+    im = ax.imshow(before_heatmap.T * brightness_factor, 
+                   extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+                   origin='lower', cmap='Purples', vmax=1.0)
+    make_axes_square(ax, embedding_outputs)
     ax.set_title(f"Combined Before\n{date_range_str}\nPoints: {num_points}", fontsize=16)
     ax.set_xlabel('UMAP Dimension 1')
     ax.set_ylabel('UMAP Dimension 2')
@@ -388,10 +429,15 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
     plt.close(fig)
     
-    # Create combined after
+    # Create combined after heatmap
+    after_heatmap = np.zeros_like(heatmaps[0])
+    for idx in after_indices:
+        after_heatmap += normalized_heatmaps[idx]
+    after_heatmap /= len(after_indices)
+    
+    # Get dates for combined after
     after_mask = np.isin(dataset_indices, after_indices)
     after_data = embedding_outputs[after_mask]
-    
     after_file_indices = file_indices[after_mask]
     dates = []
     unique_file_indices = np.unique(after_file_indices)
@@ -413,19 +459,12 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         date_str = ""
     num_points = len(after_data)
     
-    after_heatmap = np.zeros_like(individual_heatmaps[0])
-    # Sum heatmaps for after periods
-    for idx in after_indices:
-        after_heatmap += individual_heatmaps[idx]
-    after_heatmap /= len(after_indices)
-    
-    # Normalize combined heatmaps
-    after_heatmap = after_heatmap / after_heatmap.max()
-    
     # Plot combined after
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(after_heatmap.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-                   origin='lower', cmap='Greens', vmax=0.1, aspect='equal')
+    im = ax.imshow(after_heatmap.T * brightness_factor, 
+                   extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+                   origin='lower', cmap='Greens', vmax=1.0)
+    make_axes_square(ax, embedding_outputs)
     ax.set_title(f"Combined After\n{date_range_str}\nPoints: {num_points}", fontsize=16)
     ax.set_xlabel('UMAP Dimension 1')
     ax.set_ylabel('UMAP Dimension 2')
@@ -435,23 +474,110 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
     plt.close(fig)
     
-    # Plot overlap
-    brightness_factor = 4
-    rgb_image = np.zeros((before_heatmap.shape[0], before_heatmap.shape[1], 3))
-    rgb_image[..., 0] = np.clip(before_heatmap.T * brightness_factor, 0, 1)  # Red
-    rgb_image[..., 1] = np.clip(after_heatmap.T * brightness_factor, 0, 1)   # Green
-    rgb_image[..., 2] = np.clip(before_heatmap.T * brightness_factor, 0, 1)  # Blue
+    # Add pairwise overlap plots
+    pairs = list(combinations(range(4), 2))  # Gets all pairs of indices
     
+    for idx1, idx2 in pairs:
+        rgb_image = np.zeros((heatmaps[0].shape[0], heatmaps[0].shape[1], 3))
+        
+        # Apply brightness factor to overlaps
+        rgb_image[..., 0] = np.clip(normalized_heatmaps[idx1].T * brightness_factor, 0, 1)  # Red
+        rgb_image[..., 2] = np.clip(normalized_heatmaps[idx1].T * brightness_factor, 0, 1)  # Blue
+        rgb_image[..., 1] = np.clip(normalized_heatmaps[idx2].T * brightness_factor, 0, 1)  # Green
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(6, 6))
+        
+        # Set background color to black
+        fig.patch.set_facecolor('black')
+        ax.set_facecolor('black')
+        
+        # Plot the image
+        ax.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+                 origin='lower')
+        make_axes_square(ax, embedding_outputs)
+        
+        # Style the plot
+        ax.set_title(f"{labels[idx1]} vs {labels[idx2]} Overlap", fontsize=16, color='white')
+        ax.set_xlabel('UMAP Dimension 1', color='white')
+        ax.set_ylabel('UMAP Dimension 2', color='white')
+        
+        # Make tick labels white
+        ax.tick_params(colors='white')
+        
+        # Remove the white edge around the plot
+        ax.spines['bottom'].set_color('white')
+        ax.spines['top'].set_color('white')
+        ax.spines['right'].set_color('white')
+        ax.spines['left'].set_color('white')
+        
+        fig.tight_layout()
+        filename = f"{bird_id}_overlap_{labels[idx1]}_{labels[idx2]}"
+        
+        # Save with transparent=False to ensure black background is saved
+        fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300, 
+                    facecolor='black', edgecolor='none', bbox_inches='tight')
+        fig.savefig(os.path.join(save_dir, f'{filename}.svg'), 
+                    facecolor='black', edgecolor='none', bbox_inches='tight')
+        plt.close(fig)
+    
+    # After all other plots, add the before vs after combined visualization
+    # Combine all before periods into one heatmap
+    all_before_heatmap = np.zeros_like(heatmaps[0])
+    for idx in before_indices:
+        all_before_heatmap += normalized_heatmaps[idx]
+    all_before_heatmap /= len(before_indices)
+    
+    # Combine all after periods into one heatmap
+    all_after_heatmap = np.zeros_like(heatmaps[0])
+    for idx in after_indices:
+        all_after_heatmap += normalized_heatmaps[idx]
+    all_after_heatmap /= len(after_indices)
+    
+    # Create RGB overlay of all before vs all after
+    rgb_image = np.zeros((heatmaps[0].shape[0], heatmaps[0].shape[1], 3))
+    
+    # Before periods in purple (R and B channels)
+    rgb_image[..., 0] = np.clip(all_before_heatmap.T * brightness_factor, 0, 1)  # Red
+    rgb_image[..., 2] = np.clip(all_before_heatmap.T * brightness_factor, 0, 1)  # Blue
+    
+    # After periods in green
+    rgb_image[..., 1] = np.clip(all_after_heatmap.T * brightness_factor, 0, 1)  # Green
+    
+    # Create figure
     fig, ax = plt.subplots(figsize=(6, 6))
+    
+    # Set background color to black
+    fig.patch.set_facecolor('black')
+    ax.set_facecolor('black')
+    
+    # Plot the image
     ax.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-              origin='lower', aspect='equal')
-    ax.set_title(f"Before vs After Overlap", fontsize=16)
-    ax.set_xlabel('UMAP Dimension 1')
-    ax.set_ylabel('UMAP Dimension 2')
+             origin='lower')
+    make_axes_square(ax, embedding_outputs)
+    
+    # Style the plot
+    ax.set_title("All Before vs All After Overlap", fontsize=16, color='white')
+    ax.set_xlabel('UMAP Dimension 1', color='white')
+    ax.set_ylabel('UMAP Dimension 2', color='white')
+    
+    # Make tick labels white
+    ax.tick_params(colors='white')
+    
+    # Remove the white edge around the plot
+    ax.spines['bottom'].set_color('white')
+    ax.spines['top'].set_color('white')
+    ax.spines['right'].set_color('white')
+    ax.spines['left'].set_color('white')
+    
     fig.tight_layout()
-    filename = f"{bird_id}_overlap_{date_str}"
-    fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300)
-    fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
+    filename = f"{bird_id}_all_before_vs_all_after_overlap"
+    
+    # Save with transparent=False to ensure black background is saved
+    fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300, 
+                facecolor='black', edgecolor='none', bbox_inches='tight')
+    fig.savefig(os.path.join(save_dir, f'{filename}.svg'), 
+                facecolor='black', edgecolor='none', bbox_inches='tight')
     plt.close(fig)
 
 def plot_all_heatmaps_combined(embedding_outputs, dataset_indices, save_dir, bird_id, file_indices, file_map, 
@@ -617,65 +743,38 @@ def parse_date_time(file_path, format="standard"):
 
 def plot_similarity_summary(results_df, save_dir):
     """Create summary plots of similarities across birds."""
-    plt.rcParams.update({'font.size': 24, 'text.color': 'black', 'axes.labelcolor': 'black',
-                        'xtick.color': 'black', 'ytick.color': 'black'})
+    # Set style parameters
+    plt.style.use('seaborn-v0_8')
+    plt.rcParams.update({
+        'font.size': 28,              # Doubled from 14
+        'axes.labelsize': 28,         # Doubled from 14
+        'axes.titlesize': 32,         # Doubled from 16
+        'xtick.labelsize': 28,        # Doubled from 14
+        'ytick.labelsize': 28,        # Doubled from 14
+        'figure.titlesize': 32,       # Doubled from 16
+        'legend.fontsize': 28,        # Added for completeness
+        'figure.figsize': (15, 12)    # Increased figure size to accommodate larger text
+    })
     
     # Create figure with single plot
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots()
     
     # Prepare data
     data_to_plot = pd.melt(results_df[['Within_Before', 'Within_After', 'Between_Periods']], 
                           var_name='Comparison', value_name='Similarity')
     
-    # Create bar plot
-    sns.barplot(x='Comparison', y='Similarity', data=data_to_plot, ax=ax, 
-                capsize=0.1, errwidth=2, ci=68)
+    # Create bar plot with improved styling
+    sns.barplot(x='Comparison', y='Similarity', data=data_to_plot, ax=ax,
+                color='#2b6d89',  # Darker blue color
+                capsize=0.1, 
+                errwidth=2, 
+                ci=68,
+                width=0.7)  # Slightly thinner bars
     
-    # Process each bird's data
-    print("\nDetailed Information by Bird:")
-    for idx, row in results_df.iterrows():
-        bird_id = row['Bird']
-        dataset_indices = row['dataset_indices']
-        file_map_dict = row['file_map'].item()
-        file_indices = row['file_indices']
-        
-        print(f"\nBird: {bird_id}")
-        
-        # Process each group
-        for group_idx in range(4):
-            mask = dataset_indices == group_idx
-            point_count = np.sum(mask)
-            unique_indices = np.unique(file_indices[mask])
-            
-            # Get dates from files
-            dates = []
-            for idx in unique_indices:
-                idx = int(idx)
-                if idx in file_map_dict:
-                    file_path = file_map_dict[idx][0]
-                    date_time, _ = parse_date_time(file_path)
-                    if date_time:
-                        dates.append(date_time)
-            
-            if dates:
-                min_date = min(dates)
-                max_date = max(dates)
-                
-                # Create descriptive group name based on date range
-                group_name = f"group_{min_date.strftime('%Y-%m-%d')}_to_{max_date.strftime('%Y-%m-%d')}"
-                
-                print(f"\n  {group_name}:")
-                print(f"    Points: {point_count:,}")
-                print(f"    Date Range: {min_date.strftime('%Y-%m-%d %H:%M')} to {max_date.strftime('%Y-%m-%d %H:%M')}")
-                print(f"    Number of unique files: {len(unique_indices)}")
-                print(f"    Number of files with valid dates: {len(dates)}")
-                print(f"    Recording hours: {min([d.hour for d in dates]):02d}:00 to {max([d.hour for d in dates]):02d}:00")
-                print(f"    Days spanned: {(max_date - min_date).days + 1}")
-            else:
-                print(f"\n  Group {group_idx}:")
-                print(f"    Points: {point_count:,}")
-                print("    Date Range: Could not determine dates")
-                print(f"    Number of unique files: {len(unique_indices)}")
+    # Customize plot appearance
+    ax.set_ylim(0, 1.0)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     
     # Calculate combined p-value using Fisher's method
     chi_square = -2 * np.sum(np.log(results_df['P_value']))
@@ -697,14 +796,24 @@ def plot_similarity_summary(results_df, save_dir):
                 mask = np.ones_like(dataset_indices, dtype=bool)
             total_points += np.sum(mask)
         
+        # Format the label with consistent font size
         label = f"{comp.replace('_', ' ')}\n(n={total_points:,})"
         new_labels.append(label)
     
-    ax.set_xticklabels(new_labels, fontsize=10)
+    ax.set_xticklabels(new_labels, rotation=0, ha='center')
+    ax.set_ylabel('Similarity')
     
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, 'similarity_summary.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(save_dir, 'similarity_summary.svg'), bbox_inches='tight')
+    # Increase spacing at bottom to prevent label cutoff
+    plt.subplots_adjust(bottom=0.2)
+    
+    # Save with tight layout
+    plt.savefig(os.path.join(save_dir, 'similarity_summary.png'), 
+                dpi=300, 
+                bbox_inches='tight',
+                pad_inches=0.5)  # Added padding to prevent text cutoff
+    plt.savefig(os.path.join(save_dir, 'similarity_summary.svg'), 
+                bbox_inches='tight',
+                pad_inches=0.5)
     plt.close()
 
 if __name__ == "__main__":

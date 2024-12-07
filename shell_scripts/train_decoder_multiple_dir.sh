@@ -4,15 +4,15 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="USA5508_1million_test"
-MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
+BIRD_NAME="LLb3_test_with_modification_toscrtipt"
+MODEL_NAME="LLB_Model_For_Paper"
 
 # Specify the WAV folder and song detection JSON path
-WAV_FOLDER="/media/george-vengrovski/Diana-SSD/GEORGE/FallvSpring2024_fallandspringcombined/USA5508_Combined"
-SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Diana-SSD/GEORGE/spring_fall_cohort_merged_output.json"
+WAV_FOLDER="/media/george-vengrovski/George-SSD/llb_stuff/llb_birds/yarden_data/llb3_songs"
+SONG_DETECTION_JSON_PATH="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/onset_offset_results.json"
 
 # Number of samples to select (optional)
-NUM_SAMPLES=150
+NUM_SAMPLES=15
 
 # Temporary directory paths
 TEMP_DIR="./temp"
@@ -54,11 +54,11 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "${DATA_DIRS[@]}" \
     --save_name "$BIRD_NAME" \
-    --samples 1e6
+    --samples 1e4
 
 # Train and save Decoder
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"
 
-Clean up all temporary files
+#Clean up all temporary files
 rm -rf "$TEMP_DIR"
 echo "Cleaned up all temporary files"

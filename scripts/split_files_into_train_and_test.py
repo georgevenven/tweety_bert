@@ -1,6 +1,7 @@
 import os
 import random
 import argparse
+from pathlib import Path
 
 def collect_all_files(input_dir):
     """
@@ -52,6 +53,7 @@ def main():
     parser.add_argument("test_percentage", type=float, help="The percentage of files to be used for testing.")
     parser.add_argument("--train_output", type=str, default="train_files.txt", help="File to write train file paths.")
     parser.add_argument("--test_output", type=str, default="test_files.txt", help="File to write test file paths.")
+    parser.add_argument("--full_paths", action="store_true", help="Store full paths instead of basenames")
     args = parser.parse_args()
 
     # Validate the input directory
@@ -70,11 +72,13 @@ def main():
     # Write the lists of files to the specified output files
     with open(args.train_output, 'w') as f:
         for file_path in train_files:
-            f.write(f"{file_path}\n")
+            path = file_path if args.full_paths else Path(file_path).name
+            f.write(f"{path}\n")
 
     with open(args.test_output, 'w') as f:
         for file_path in test_files:
-            f.write(f"{file_path}\n")
+            path = file_path if args.full_paths else Path(file_path).name
+            f.write(f"{path}\n")
 
     print(f"Train files written to {args.train_output}")
     print(f"Test files written to {args.test_output}")
