@@ -45,9 +45,8 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
         python src/spectogram_generator.py \
             --src_dir "$fold_dir" \
             --dst_dir "$spec_dir" \
-            --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
-            >"$spec_dir/log.txt" 2>&1
-
+            --song_detection_json_path "$SONG_DETECTION_JSON_PATH" 
+            
         save_name="${BIRD_NAME}_fold${fold_number}"
         echo "Running UMAP for Fold: $fold_number"
         python figure_generation_scripts/dim_reduced_birdsong_plots.py \
