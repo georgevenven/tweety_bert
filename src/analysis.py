@@ -377,7 +377,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     print("UMAP fitting complete. Shape of embedding outputs:", embedding_outputs.shape)
 
     print("Generating HDBSCAN labels...")
-    hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=int(samples/min_cluster_size))
+    hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
     print("HDBSCAN labels generated. Unique labels found:", np.unique(hdbscan_labels))
 
     # Get unique labels and create color palettes

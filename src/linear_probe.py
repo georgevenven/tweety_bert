@@ -305,7 +305,6 @@ class LinearProbeTrainer():
             spectrogram, label, vocalization = spectrogram.to(self.device), label.to(self.device), vocalization.to(self.device)
             self.optimizer.zero_grad()
             
-            # Add autocast context manager for mixed precision training
             with autocast():
                 output = self.model.forward(spectrogram)
                 label = label.argmax(dim=-1)

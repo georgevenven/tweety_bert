@@ -26,25 +26,29 @@ configurations = [
         "name": "TweetyBERT_linear_probe",
         "freeze_layers": True,
         "model_type": "neural_net",
-        "layer_id": "attention_output"
+        "layer_id": "attention_output",
+        "learning_rate": 1e-2
     },
     {
         "name": "TweetyBERT_finetuned",
         "freeze_layers": False,
-        "model_type": "neural_net" ,
-        "layer_id": "embedding" ## will automatically use the last layer 
+        "model_type": "neural_net",
+        "layer_id": "embedding",  # will automatically use the last layer
+        "learning_rate": 3e-4
     },
     {
         "name": "TweetyBERT_untrained",
         "freeze_layers": True,
         "model_type": "neural_net",
-        "layer_id": "attention_output" 
+        "layer_id": "attention_output",
+        "learning_rate": 1e-2
     },
     {
         "name": "linear_probe_raw_spectrogram",
         "freeze_layers": True,
         "model_type": "raw",
-        "layer_id": None # nn not used here 
+        "layer_id": None,  # nn not used here
+        "learning_rate": 1e-2
     }
 ]
 
@@ -99,7 +103,7 @@ for dataset in tqdm(datasets, desc="Processing datasets"):
             train_loader=train_loader,
             test_loader=test_loader,
             device=device,
-            lr=3e-4,
+            lr=config["learning_rate"],
             plotting=False,
             batches_per_eval=25,
             desired_total_batches=5000,
