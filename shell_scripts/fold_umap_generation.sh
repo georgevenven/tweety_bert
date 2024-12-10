@@ -46,6 +46,10 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --src_dir "$fold_dir" \
             --dst_dir "$spec_dir" \
             --song_detection_json_path "$SONG_DETECTION_JSON_PATH" 
+        
+        # Add removal of empty Yarden data files
+        echo "Removing empty Yarden data files from fold $fold_number..."
+        python scripts/remove_empty_yarden_data.py "$spec_dir"
             
         save_name="${BIRD_NAME}_fold${fold_number}"
         echo "Running UMAP for Fold: $fold_number"

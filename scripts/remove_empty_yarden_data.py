@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from pathlib import Path
+import argparse
 
 def process_directory(directory_path):
     """
@@ -42,7 +43,18 @@ def process_directory(directory_path):
     
     print(f"\nTotal files deleted: {deleted_count}")
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Remove unlabeled YARDEN data files from a directory."
+    )
+    parser.add_argument(
+        "directory_path",
+        type=str,
+        help="Path to the directory containing NPZ files to process"
+    )
+    
+    args = parser.parse_args()
+    process_directory(args.directory_path)
+
 if __name__ == "__main__":
-    # Replace with your directory path
-    directory_path = "/media/george-vengrovski/George-SSD/llb_stuff"
-    process_directory(directory_path)
+    main()

@@ -117,7 +117,7 @@ def probe_eval(model, train_loader, test_loader, eval_loader, results_path, fold
             train_loader=train_loader, 
             test_loader=test_loader, 
             device=device, 
-            lr=6e-4, 
+            lr=1e-2, 
             plotting=False, 
             batches_per_eval=25, 
             desired_total_batches=1000, 
