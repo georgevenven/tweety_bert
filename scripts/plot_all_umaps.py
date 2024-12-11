@@ -1,84 +1,83 @@
+#!/usr/bin/env python3
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
-import gc
-from torch import no_grad
 import os
 import sys
 import json
-import re
-from torch.utils.data import DataLoader
 from tqdm import tqdm
+from torch import no_grad
+import gc
 
+# Add src directory to path for imports
 script_dir = os.path.dirname(__file__)
 project_root = os.path.dirname(script_dir)
 os.chdir(project_root)
-
 sys.path.append("src")
 
-from linear_probe import LinearProbeModel, LinearProbeTrainer,ModelEvaluator
-from utils import load_model, detailed_count_parameters, load_config
-from data_class import SongDataSet_Image, CollateFunction
-from src.analysis import plot_umap_projection
-from data_class import SongDataSet_Image
+from utils import load_model, load_config
+from data_class import determine_number_unique_classes
+from analysis import plot_umap_projection
 
-def load_config_from_path(path):
-    with open(path, 'r') as f:
-        config = json.load(f)  # Load and parse the JSON file
-    return config 
 
-# Change to relative paths for train and test directories
-train_dir = "files/llb3_train"
-test_dir = "files/llb3_test"
-# Print changes
-train_dir = os.path.join(project_root, "files/llb3_train")
-test_dir = os.path.join(project_root, "files/llb3_test")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
-train_dataset = SongDataSet_Image(train_dir, num_classes=21, psuedo_labels_generated=False)
-test_dataset = SongDataSet_Image(test_dir, num_classes=21, psuedo_labels_generated=False)
+def plot_umap_for_layers(model, results_path, folder, config, category_colors_file, umap_data_dirs, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
+    """
+    This function plots UMAP projections for each target layer and saves them.
+    No FER analysis is performed here.
+    """
 
-collate_fn = CollateFunction(segment_length=1000)  # Adjust the segment length if needed
-
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=collate_fn)
-test_loader = DataLoader(test_dataset, batch_size=4, shuffle=True, collate_fn=collate_fn)
-
-def probe_eval(model, train_loader, test_loader, results_path, folder, config):
-    folder_path = os.path.join(results_path, folder)
+    folder_path = os.path.join(results_path, 'layer_wise_analysis')
     os.makedirs(folder_path, exist_ok=True)
 
-    layer_output_pairs = model.get_layer_output_pairs()
+    experiment_path = os.path.join(folder_path, folder)
+    os.makedirs(experiment_path, exist_ok=True)
 
-    all_results = {}
+    # Define the specific layers we want to analyze.
+    target_layers = [
+        ('attention_output', 'Attention output'),
+        ('intermediate_residual_stream', 'Intermediate residual'),
+        ('feed_forward_output_gelu', 'FF output after GELU'),
+        ('feed_forward_output', 'Final FF output')
+    ]
 
-    for layer_id, layer_num, nn_dim in tqdm(layer_output_pairs, desc=f"Probing Layers in {folder}", leave=False, unit="layer"):
-        print(f"Evaluating for layer: {layer_id}, number: {layer_num}")
+    # Filter model layers to only include our target layers
+    layer_output_pairs = [
+        (layer_id, layer_num, nn_dim) 
+        for layer_id, layer_num, nn_dim in model.get_layer_output_pairs()
+        if any(target[0] in layer_id for target in target_layers)
+    ]
 
+    for layer_id, layer_num, nn_dim in tqdm(layer_output_pairs, desc=f"Plotting UMAP for Layers in {folder}", leave=False):
+        layer_results_path = os.path.join(experiment_path, f'layer_{layer_num}_{layer_id}')
+        os.makedirs(layer_results_path, exist_ok=True)
 
-        umap_path = os.path.join(folder_path, f"UMAP of layer_num: {layer_num} sub_layer: {layer_id}.png") 
-        category_colors_path = os.path.join(project_root, "files/category_colors_llb3.pkl") 
+        umap_save_name = os.path.join(layer_results_path, f"umap_layer_{layer_num}_{layer_id}")
+
+        if skip_existing and (os.path.exists(umap_save_name + '.png') or os.path.exists(umap_save_name + '.pdf')):
+            print(f"Skipping UMAP for already processed layer: {layer_id}, number: {layer_num}")
+            continue
+
+        print(f"Plotting UMAP for layer: {layer_id}, number: {layer_num}")
 
         try:
             with no_grad():
                 plot_umap_projection(
-                model=model, 
-                device=device, 
-                data_dir="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/llb3_test",
-                remove_silences=False,  # Using new config parameter``
-                samples=3e4, 
-                file_path="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/category_colors_llb3.pkl", 
-                layer_index=layer_num, 
-                dict_key=layer_id, 
-                time_bins_per_umap_point=1, 
-                context=1000,  # Using new config parameter
-                raw_spectogram=False,
-                save_dict_for_analysis = False,
-                save_dir=umap_path,
-                compute_svm= False,
-                color_scheme = "Label"
+                    model=model,
+                    device=device,
+                    data_dirs=umap_data_dirs,
+                    samples=umap_samples,
+                    category_colors_file=category_colors_file,
+                    layer_index=layer_num,
+                    dict_key=layer_id,
+                    context=1000,
+                    raw_spectogram=False,
+                    save_dict_for_analysis=True,
+                    save_name=umap_save_name,
+                    min_cluster_size=min_cluster_size
                 )
-            
         except Exception as e:
-            error_file_path = os.path.join(folder_path, "UMAP_Error_Log.txt")
+            error_file_path = os.path.join(layer_results_path, "UMAP_Error_Log.txt")
             with open(error_file_path, "w") as file:
                 file.write(f"UMAP plot for layer_num: {layer_num}, sub_layer: {layer_id} could not be created.\n")
                 file.write(f"Error: {e}")
@@ -87,54 +86,72 @@ def probe_eval(model, train_loader, test_loader, results_path, folder, config):
         if device.type == 'cuda':
             torch.cuda.empty_cache()
 
-    return all_results
+
+def execute_umap_plotting(experiment_configs, results_path, category_colors_file, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
+    """
+    Executes UMAP plotting across multiple experiments.
+    """
+    for exp_config in experiment_configs:
+        base_path = os.path.join(project_root, exp_config['experiment_path'])
+
+        if os.path.exists(base_path):
+            try:
+                model = load_model(base_path).to(device)
+                config = load_config(os.path.join(base_path, 'config.json'))
+
+                # Extract dataset name from train_dir for folder naming
+                train_dir = os.path.join(project_root, exp_config['train_dir'])
+                dataset_name = os.path.basename(train_dir).split('_')[0]
+
+                # Use the actual data directories from the config
+                umap_data_dirs = [train_dir]  # Add test_dir too if needed: [train_dir, os.path.join(project_root, exp_config['test_dir'])]
+
+                plot_umap_for_layers(
+                    model=model,
+                    results_path=results_path,
+                    folder=dataset_name,
+                    config=config,
+                    category_colors_file=category_colors_file,
+                    umap_data_dirs=umap_data_dirs,  # Pass the actual directory paths
+                    umap_samples=umap_samples,
+                    min_cluster_size=min_cluster_size,
+                    skip_existing=skip_existing
+                )
+            except Exception as e:
+                print(f"Error loading experiment '{base_path}': {str(e)}")
+        else:
+            print(f"Experiment path not found: {base_path}")
 
 
-def get_highest_numbered_file(files):
-    weights_files = [f for f in files if re.match(r'model_step_\d+\.pth', f)]
-    if not weights_files:
-        return None
-    highest_num = max([int(re.search(r'\d+', f).group()) for f in weights_files])
-    return f'model_step_{highest_num}.pth'
+# Example experiment configuration
+experiment_configs = [
+    {
+        "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
+        "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb3_train",
+        "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb3_test"
+    },
+    {
+        "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
+        "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb11_train",
+        "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb11_test"
+    },
+    {
+        "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
+        "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb16_train",
+        "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb16_test"
+    }
+]
 
-import json
-
-def execute_eval_of_experiments(base_path, results_path, train_loader, test_loader):
-    base_path = os.path.join(project_root, base_path)  # Combine with project_root
-    results_path = os.path.join(project_root, results_path)  # Combine with project_root
-    experiment_folders = [folder for folder in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, folder)) and folder != 'archive']
-    
-    all_experiments_results = {}  # Dictionary to store results from all experiments
-
-    for folder in tqdm(experiment_folders, desc="Evaluating Experiments", unit="experiment"):
-        folder_path = os.path.join(base_path, folder)
-        config_path = os.path.join(folder_path, 'config.json')  # Correctly form the path
-
-        weights_folder = os.path.join(folder_path, 'saved_weights')
-
-        if os.path.exists(weights_folder):
-            files = os.listdir(weights_folder)
-            weights_file = get_highest_numbered_file(files)
-                
-            if weights_file and config_path:
-                weight_path = os.path.join(weights_folder, weights_file)
-                model = load_model(config_path, weight_path)
-                config = load_config(config_path)
-                experiment_results = probe_eval(model, train_loader, test_loader, results_path, folder, config)
-                all_experiments_results[folder] = experiment_results
-            else: 
-                print(f"Files for eval of experiment '{folder}' not found")
-
-    combined_results_file = os.path.join(results_path, 'combined_probe_results.json')
-    with open(combined_results_file, 'w') as f:
-        json.dump(all_experiments_results, f)
-
-    return all_experiments_results
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
-
-experiment_paths = "experiments"
 results_path = "results"
+category_colors_file = "files/category_colors_llb3.pkl"
+umap_samples = 1e4
+min_cluster_size = 500
 
-all_results = execute_eval_of_experiments(experiment_paths, results_path, train_loader, test_loader)
+execute_umap_plotting(
+    experiment_configs=experiment_configs,
+    results_path=results_path,
+    category_colors_file=category_colors_file,
+    umap_samples=umap_samples,
+    min_cluster_size=min_cluster_size,
+    skip_existing=True
+)
