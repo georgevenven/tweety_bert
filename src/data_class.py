@@ -1,3 +1,10 @@
+"""
+Describe the speed hack here ...In order to achieve faster training speeds, we employ a clever trick in the initialization of the data loading process. Rather than allowing the dataset to fully exhaust and trigger a reinitialization of the DataLoader, we simulate an infinitely large dataset by setting the dataset’s length to a very large number (e.g., 1e12). Each call to the dataset’s __getitem__() simply selects a random file from the directory, ensuring a continuous stream of samples without ever completing a full “epoch” in the conventional sense. This approach prevents the overhead associated with repeatedly creating and tearing down worker processes and resetting iteration states. When a particular file fails to load or is too short, the dataset catches the exception and immediately attempts another file, thereby skipping any problematic data without halting the training loop. Consequently, the GPU remains consistently fed with data, improving utilization and effectively reducing training wall-clock time. Although this strategy breaks from the traditional epoch-based training paradigm, in practice it exposes the model to a similar distribution of samples over time. The absence of explicit epochs means that stopping criteria can now be determined based on the number of training steps or a target metric, rather than dataset passes. By removing periodic DataLoader reconstruction and preserving a steady data flow, we achieve substantial training speed-ups. In summary, this “infinite dataset” hack is a simple yet effective method to streamline data loading and accelerate the overall training process.
+
+
+"""
+
+
 import torch.nn.functional as F
 import os
 import numpy as np

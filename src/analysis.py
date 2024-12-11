@@ -461,214 +461,259 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         file_map=file_map
     )
 
-def apply_windowing(arr, window_size, stride, flatten_predictions=False):
-    """
-    Apply windowing to the input array.
+# def apply_windowing(arr, window_size, stride, flatten_predictions=False):
+#     """
+#     Apply windowing to the input array.
 
-    Parameters:
-    - arr: The input array to window, expected shape (num_samples, features) for predictions and (num_samples,) for labels.
-    - window_size: The size of each window.
-    - stride: The stride between windows.
-    - flatten_predictions: A boolean indicating whether to flatten the windowed predictions.
+#     Parameters:
+#     - arr: The input array to window, expected shape (num_samples, features) for predictions and (num_samples,) for labels.
+#     - window_size: The size of each window.
+#     - stride: The stride between windows.
+#     - flatten_predictions: A boolean indicating whether to flatten the windowed predictions.
 
-    Returns:
-    - windowed_arr: The windowed version of the input array.
-    """
-    num_samples, features = arr.shape if len(arr.shape) > 1 else (arr.shape[0], 1)
-    num_windows = (num_samples - window_size) // stride + 1
-    windowed_arr = np.lib.stride_tricks.as_strided(
-        arr,
-        shape=(num_windows, window_size, features),
-        strides=(arr.strides[0] * stride, arr.strides[0], arr.strides[-1]),
-        writeable=False
-    )
+#     Returns:
+#     - windowed_arr: The windowed version of the input array.
+#     """
+#     num_samples, features = arr.shape if len(arr.shape) > 1 else (arr.shape[0], 1)
+#     num_windows = (num_samples - window_size) // stride + 1
+#     windowed_arr = np.lib.stride_tricks.as_strided(
+#         arr,
+#         shape=(num_windows, window_size, features),
+#         strides=(arr.strides[0] * stride, arr.strides[0], arr.strides[-1]),
+#         writeable=False
+#     )
 
-    if flatten_predictions and features > 1:
-        # Flatten each window for predictions
-        windowed_arr = windowed_arr.reshape(num_windows, -1)
+#     if flatten_predictions and features > 1:
+#         # Flatten each window for predictions
+#         windowed_arr = windowed_arr.reshape(num_windows, -1)
     
-    return windowed_arr
+#     return windowed_arr
 
 
-def sliding_window_umap(model, device, data_dir="test_llb16",
-                         remove_silences=False, samples=100, category_colors_file='category_colors.pkl', 
-                         layer_index=None, dict_key=None, time_bins_per_umap_point=100, 
-                         context=1000, save_dir=None, raw_spectogram=False, save_dict_for_analysis=False, compute_svm=False, color_scheme="Syllable", window_size=100, stride=1):
-    predictions_arr = []
-    ground_truth_labels_arr = []
-    spec_arr = [] 
+# def sliding_window_umap(model, device, data_dir="test_llb16",
+#                          remove_silences=False, samples=100, category_colors_file='category_colors.pkl', 
+#                          layer_index=None, dict_key=None, time_bins_per_umap_point=100, 
+#                          context=1000, save_dir=None, raw_spectogram=False, save_dict_for_analysis=False, compute_svm=False, color_scheme="Syllable", window_size=100, stride=1):
+#     predictions_arr = []
+#     ground_truth_labels_arr = []
+#     spec_arr = [] 
 
-    # Reset Figure
-    plt.figure(figsize=(8, 6))
+#     # Reset Figure
+#     plt.figure(figsize=(8, 6))
 
-    # to allow sci notation 
-    samples = int(samples)
-    total_samples = 0
+#     # to allow sci notation 
+#     samples = int(samples)
+#     total_samples = 0
 
-    data_loader = load_data(data_dir=data_dir, context=context)
-    data_loader_iter = iter(data_loader)
+#     data_loader = load_data(data_dir=data_dir, context=context)
+#     data_loader_iter = iter(data_loader)
 
-    while total_samples < samples:
-        try:
-            # Retrieve the next batch
-            data, ground_truth_label = next(data_loader_iter)
+#     while total_samples < samples:
+#         try:
+#             # Retrieve the next batch
+#             data, ground_truth_label = next(data_loader_iter)
             
-            # if smaller than context window, go to next song
-            if data.shape[-2] < context:
-                continue 
+#             # if smaller than context window, go to next song
+#             if data.shape[-2] < context:
+#                 continue 
 
-            # because network is made to work with batched data, we unsqueeze a dim and transpose the last two dims (usually handled by collate fn)
-            data = data.unsqueeze(0).permute(0,1,3,2)
+#             # because network is made to work with batched data, we unsqueeze a dim and transpose the last two dims (usually handled by collate fn)
+#             data = data.unsqueeze(0).permute(0,1,3,2)
 
-            # calculate the number of times a song 
-            num_times = data.shape[-1] // context
+#             # calculate the number of times a song 
+#             num_times = data.shape[-1] // context
             
-            # removing left over timebins that do not fit in context window 
-            shave_index = num_times * context
-            data = data[:,:,:,:shave_index]
+#             # removing left over timebins that do not fit in context window 
+#             shave_index = num_times * context
+#             data = data[:,:,:,:shave_index]
 
-            batch, channel, freq, time_bins = data.shape 
+#             batch, channel, freq, time_bins = data.shape 
 
-            # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches 
-            data = data.permute(0,-1, 1, 2)
-            data = data.reshape(num_times, context, channel, freq)
-            data = data.permute(0,2,3,1)
+#             # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches 
+#             data = data.permute(0,-1, 1, 2)
+#             data = data.reshape(num_times, context, channel, freq)
+#             data = data.permute(0,2,3,1)
 
-            # reshaping g truth labels to be consistent 
-            batch, time_bins, labels = ground_truth_label.shape
+#             # reshaping g truth labels to be consistent 
+#             batch, time_bins, labels = ground_truth_label.shape
 
-            # shave g truth labels 
-            ground_truth_label = ground_truth_label.permute(0,2,1)
-            ground_truth_label = ground_truth_label[:,:,:shave_index]
+#             # shave g truth labels 
+#             ground_truth_label = ground_truth_label.permute(0,2,1)
+#             ground_truth_label = ground_truth_label[:,:,:shave_index]
 
-            # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches 
-            ground_truth_label = ground_truth_label.permute(0,2,1)
-            ground_truth_label = ground_truth_label.reshape(num_times, context, labels)
+#             # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches 
+#             ground_truth_label = ground_truth_label.permute(0,2,1)
+#             ground_truth_label = ground_truth_label.reshape(num_times, context, labels)
             
-        except StopIteration:
-            # if test set is exhausted, print the number of samples collected and stop the collection process
-            print(f"samples collected {len(ground_truth_labels_arr) * context}")
-            break
+#         except StopIteration:
+#             # if test set is exhausted, print the number of samples collected and stop the collection process
+#             print(f"samples collected {len(ground_truth_labels_arr) * context}")
+#             break
 
-        if raw_spectogram == False:
-            _, layers = model.inference_forward(data.to(device))
+#         if raw_spectogram == False:
+#             _, layers = model.inference_forward(data.to(device))
 
-            layer_output_dict = layers[layer_index]
-            output = layer_output_dict.get(dict_key, None)
+#             layer_output_dict = layers[layer_index]
+#             output = layer_output_dict.get(dict_key, None)
 
-            if output is None:
-                print(f"Invalid key: {dict_key}. Skipping this batch.")
-                continue
+#             if output is None:
+#                 print(f"Invalid key: {dict_key}. Skipping this batch.")
+#                 continue
 
-            batches, time_bins, features = output.shape 
-            # data shape [0] is the number of batches, 
-            predictions = output.reshape(batches, time_bins, features)
-            # combine the batches and number of samples per context window 
-            predictions = predictions.flatten(0,1)
-            predictions_arr.append(predictions.detach().cpu().numpy())
+#             batches, time_bins, features = output.shape 
+#             # data shape [0] is the number of batches, 
+#             predictions = output.reshape(batches, time_bins, features)
+#             # combine the batches and number of samples per context window 
+#             predictions = predictions.flatten(0,1)
+#             predictions_arr.append(predictions.detach().cpu().numpy())
 
-        # remove channel dimension 
-        data = data.squeeze(1)
-        spec = data
+#         # remove channel dimension 
+#         data = data.squeeze(1)
+#         spec = data
 
-        # set the features (freq axis to be the last dimension)
-        spec = spec.permute(0, 2, 1)
-        # combine batches and timebins
-        spec = spec.flatten(0, 1)
+#         # set the features (freq axis to be the last dimension)
+#         spec = spec.permute(0, 2, 1)
+#         # combine batches and timebins
+#         spec = spec.flatten(0, 1)
 
-        ground_truth_label = ground_truth_label.flatten(0, 1)
-        ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
+#         ground_truth_label = ground_truth_label.flatten(0, 1)
+#         ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
 
-        spec_arr.append(spec.cpu().numpy())
-        ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
+#         spec_arr.append(spec.cpu().numpy())
+#         ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
         
-        total_samples += spec.shape[0]
+#         total_samples += spec.shape[0]
 
-    # convert the list of batch * samples * features to samples * features 
-    ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
-    spec_arr = np.concatenate(spec_arr, axis=0)
+#     # convert the list of batch * samples * features to samples * features 
+#     ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
+#     spec_arr = np.concatenate(spec_arr, axis=0)
 
-    if not raw_spectogram:
-        predictions = np.concatenate(predictions_arr, axis=0)
-    else:
-        predictions = spec_arr
+#     if not raw_spectogram:
+#         predictions = np.concatenate(predictions_arr, axis=0)
+#     else:
+#         predictions = spec_arr
 
-    # razor off any extra datapoints 
-    if samples > len(predictions):
-        samples = len(predictions)
-    else:
-        predictions = predictions[:samples]
-        ground_truth_labels = ground_truth_labels[:samples]
+#     # razor off any extra datapoints 
+#     if samples > len(predictions):
+#         samples = len(predictions)
+#     else:
+#         predictions = predictions[:samples]
+#         ground_truth_labels = ground_truth_labels[:samples]
 
-    print(predictions.shape)
+#     print(predictions.shape)
 
-    # Ensure predictions are in the correct shape (num_samples, features) before windowing
-    predictions = apply_windowing(predictions, window_size, stride=stride, flatten_predictions=True)
-    ground_truth_labels = apply_windowing(ground_truth_labels.reshape(-1, 1), window_size, stride=stride, flatten_predictions=False)
+#     # Ensure predictions are in the correct shape (num_samples, features) before windowing
+#     predictions = apply_windowing(predictions, window_size, stride=stride, flatten_predictions=True)
+#     ground_truth_labels = apply_windowing(ground_truth_labels.reshape(-1, 1), window_size, stride=stride, flatten_predictions=False)
 
-    ground_truth_labels = ground_truth_labels.squeeze()
+#     ground_truth_labels = ground_truth_labels.squeeze()
     
-    # Fit the UMAP reducer       
-    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
+#     # Fit the UMAP reducer       
+#     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
 
-    embedding_outputs = reducer.fit_transform(predictions)
-    hdbscan_labels = generate_hdbscan_labels(embedding_outputs)
+#     embedding_outputs = reducer.fit_transform(predictions)
+#     hdbscan_labels = generate_hdbscan_labels(embedding_outputs)
 
-    np.savez(f"save_dir", embedding_outputs=embedding_outputs, hdbscan_labels=hdbscan_labels, ground_truth_labels=ground_truth_labels, s=spec_arr)
+#     np.savez(f"save_dir", embedding_outputs=embedding_outputs, hdbscan_labels=hdbscan_labels, ground_truth_labels=ground_truth_labels, s=spec_arr)
     
-    # Assuming 'glasbey' is a predefined object with a method 'extend_palette'
-    cmap = glasbey.extend_palette(["#000000"], palette_size=30)
-    cmap = mcolors.ListedColormap(cmap)    
+#     # Assuming 'glasbey' is a predefined object with a method 'extend_palette'
+#     cmap = glasbey.extend_palette(["#000000"], palette_size=30)
+#     cmap = mcolors.ListedColormap(cmap)    
 
-    ground_truth_labels = average_colors_per_sample(ground_truth_labels, cmap)
+#     ground_truth_labels = average_colors_per_sample(ground_truth_labels, cmap)
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))  # Create a figure and a 1x2 grid of subplots
+#     fig, axes = plt.subplots(1, 2, figsize=(16, 6))  # Create a figure and a 1x2 grid of subplots
 
-    axes[0].scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=10, alpha=.1, cmap=cmap)
-    axes[0].set_title("HDBSCAN")
+#     axes[0].scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=10, alpha=.1, cmap=cmap)
+#     axes[0].set_title("HDBSCAN")
 
-    # Plot with the original color scheme
-    axes[1].scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=ground_truth_labels, s=10, alpha=.1, cmap=cmap)
-    axes[1].set_title("Original Coloring")
+#     # Plot with the original color scheme
+#     axes[1].scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=ground_truth_labels, s=10, alpha=.1, cmap=cmap)
+#     axes[1].set_title("Original Coloring")
 
-    # Adjust title based on 'raw_spectogram' flag
-    if raw_spectogram:
-        plt.title(f'UMAP of Spectogram', fontsize=14)
-    else:
-        plt.title(f'UMAP Projection of (Layer: {layer_index}, Key: {dict_key})', fontsize=14)
+#     # Adjust title based on 'raw_spectogram' flag
+#     if raw_spectogram:
+#         plt.title(f'UMAP of Spectogram', fontsize=14)
+#     else:
+#         plt.title(f'UMAP Projection of (Layer: {layer_index}, Key: {dict_key})', fontsize=14)
 
-    # Save the plot if 'save_dir' is specified, otherwise display it
-    if save_dir:
-        plt.savefig(save_dir, format='png')
-    else:
-        plt.show()
+#     # Save the plot if 'save_dir' is specified, otherwise display it
+#     if save_dir:
+#         plt.savefig(save_dir, format='png')
+#     else:
+#         plt.show()
+
+import numpy as np
+from collections import Counter
+from sklearn.metrics import homogeneity_score, completeness_score, v_measure_score
 
 class ComputerClusterPerformance():
-    def __init__(self, labels_path):
+    """
+    This class computes clustering performance metrics such as 
+    homogeneity, completeness, and V-measure using ground-truth 
+    labels and HDBSCAN cluster assignments. 
 
-        # takes a list of paths to files that contain the labels 
+    Key Modifications:
+    - Noise points (where hdbscan_labels == -1) are no longer removed. 
+      Instead, each noise point is replaced by the nearest non-noise 
+      cluster label, if one can be found by looking to the left or right. 
+      If no non-noise label can be found, it remains -1.
+    - Silence frames were originally represented as 0. Now, silence 
+      is represented as -1 to align with the concept of no assignment.
+      The `syllable_to_phrase_labels` method is called with silence=-1, 
+      ensuring phrase segmentation works with the updated silence value.
+    """
+
+    def __init__(self, labels_path):
+        """
+        Parameters:
+        - labels_path: list of str
+          List of paths to .npz files containing 
+          'hdbscan_labels' and 'ground_truth_labels' arrays.
+        """
         self.labels_paths = labels_path
             
     def syllable_to_phrase_labels(self, arr, silence=-1):
+        """
+        Convert a sequence of syllable labels into a sequence of phrase labels.
+        
+        This method groups consecutive identical non-silence labels into phrases. 
+        If the initial portion of the array is silence, it is replaced with the 
+        first non-silence syllable found. This ensures that there are no leading 
+        silence frames before the first phrase.
+
+        Parameters:
+        - arr: np.ndarray
+          Array of integer labels, where `silence` frames are indicated by `silence`.
+        - silence: int
+          The integer value representing silence. Default is -1.
+
+        Returns:
+        - new_arr: np.ndarray
+          Array of phrase-level labels (longer temporal segments representing phrases).
+        """
         new_arr = np.array(arr, dtype=int)
         current_syllable = None
         start_of_phrase_index = None
-        first_non_silence_label = None  # To track the first non-silence syllable
+        first_non_silence_label = None  # Track the first non-silence syllable
 
         for i, value in enumerate(new_arr):
             if value != silence and value != current_syllable:
                 if start_of_phrase_index is not None:
+                    # Close off the previous phrase
                     new_arr[start_of_phrase_index:i] = current_syllable
                 current_syllable = value
                 start_of_phrase_index = i
                 
-                if first_non_silence_label is None:  # Found the first non-silence label
+                if first_non_silence_label is None:
                     first_non_silence_label = value
 
         if start_of_phrase_index is not None:
+            # Close off the final phrase
             new_arr[start_of_phrase_index:] = current_syllable
 
-        # Replace the initial silence with the first non-silence syllable label
+        # If the array started with silence, replace that leading silence 
+        # with the first non-silence label encountered.
         if new_arr[0] == silence and first_non_silence_label is not None:
             for i in range(len(new_arr)):
                 if new_arr[i] != silence:
@@ -677,65 +722,117 @@ class ComputerClusterPerformance():
 
         return new_arr
 
-    def reduce_phrases(self, arr, remove_silence=True):
-        current_element = arr[0]
-        reduced_list = [] 
-
-        for i, value in enumerate(arr):
-            if value != current_element:
-                reduced_list.append(current_element)
-                current_element = value 
-
-            # append last phrase
-            if i == len(arr) - 1:
-                reduced_list.append(current_element)
-
-        if remove_silence == True:
-            reduced_list = [value for value in reduced_list if value != 0]
-
-        return np.array(reduced_list)
-
     def majority_vote(self, data, window_size=1):
         """
         Apply majority vote on the input data with a specified window size.
+        This can help smooth labels.
 
         Parameters:
-        - data: list or array-like
-          The input data to apply majority vote on.
-        - window_size: int, default=3
-          The size of the window to apply majority vote. Must be an odd number.
+        - data: array-like
+          The input data (e.g., cluster labels) to smooth.
+        - window_size: int
+          The size of the window over which to apply majority voting. 
+          If 1, no smoothing is performed (directly returns the data).
 
         Returns:
-        - output: ndarray
+        - output: np.ndarray
           The array with majority vote applied.
         """
-        # Function to find the majority element in a window
+        if window_size == 1:
+            return np.array(data)
+
         def find_majority(window):
             count = Counter(window)
             majority = max(count.values())
             for num, freq in count.items():
                 if freq == majority:
                     return num
-            return window[len(window) // 2]  # Return the middle element if no majority found
+            # If no single majority (tie), return the middle element
+            return window[len(window) // 2]
 
-        # Ensure the input data is in list form
         if isinstance(data, str):
             data = [int(x) for x in data.split(',') if x.strip().isdigit()]
 
-        # Initialize the output array with a padding at the beginning
-        output = [data[0]] * (window_size // 2)  # Pad with the first element
+        # Initialize output with padding at the start
+        output = [data[0]] * (window_size // 2)
 
-        # Apply the majority vote on each window
+        # Majority voting over windows
         for i in range(len(data) - window_size + 1):
             window = data[i:i + window_size]
             output.append(find_majority(window))
 
-        # Pad the output array at the end to match the input array size
+        # Pad the output at the end
         output.extend([data[-1]] * (window_size // 2))
 
         return np.array(output)
 
+    def _fill_noise_with_nearest_label(self, labels):
+        """
+        For each noise point (labeled -1), find the nearest non-noise 
+        label to the left or right and assign it to this point. If no 
+        non-noise label is found, it remains -1.
+        
+        Parameters:
+        - labels: np.ndarray
+          Array of cluster labels where -1 indicates noise.
+
+        Returns:
+        - labels: np.ndarray
+          Array with noise points replaced by the nearest non-noise labels, 
+          when possible.
+        """
+        noise_indices = np.where(labels == -1)[0]
+        for idx in noise_indices:
+            # Search left
+            left_idx = idx - 1
+            while left_idx >= 0 and labels[left_idx] == -1:
+                left_idx -= 1
+            
+            # Search right
+            right_idx = idx + 1
+            while right_idx < len(labels) and labels[right_idx] == -1:
+                right_idx += 1
+            
+            # Compute distances if valid
+            left_dist = (idx - left_idx) if (left_idx >= 0 and labels[left_idx] != -1) else np.inf
+            right_dist = (right_idx - idx) if (right_idx < len(labels) and labels[right_idx] != -1) else np.inf
+
+            # Assign based on nearest non-noise label
+            if left_dist == np.inf and right_dist == np.inf:
+                # No non-noise neighbors found, remain -1
+                continue
+            elif left_dist < right_dist:
+                labels[idx] = labels[left_idx]
+            elif right_dist < left_dist:
+                labels[idx] = labels[right_idx]
+            else:
+                # Equidistant, pick left arbitrarily
+                labels[idx] = labels[left_idx]
+
+        return labels
+
     def compute_vmeasure_score(self):
+        """
+        Compute the homogeneity, completeness, and V-measure metrics for all 
+        label files provided at initialization.
+
+        Steps:
+        1. Load HDBSCAN labels and ground-truth labels from npz files.
+        2. Instead of removing noise points (HDBSCAN label = -1), replace them 
+           with the nearest non-noise label if possible, or leave as -1 if not.
+        3. Convert silence from 0 to -1 in ground_truth_labels for consistency.
+        4. Convert ground_truth_labels to phrase labels using `syllable_to_phrase_labels` with silence=-1.
+        5. Compute homogeneity, completeness, and v-measure using these cleaned labels.
+        6. Return a dictionary of metrics, each containing a tuple of (mean, standard_error_of_mean).
+
+        Returns:
+        - metrics: dict
+          {
+            'Homogeneity': (mean_h, sem_h),
+            'Completeness': (mean_c, sem_c),
+            'V-measure': (mean_v, sem_v)
+          }
+        """
         homogeneity_scores = []
         completeness_scores = []
         v_measure_scores = []
@@ -745,167 +842,34 @@ class ComputerClusterPerformance():
             hdbscan_labels = f['hdbscan_labels']
             ground_truth_labels = f['ground_truth_labels']
 
-            # Remove points marked as noise
-            remove_noise_index = np.where(hdbscan_labels == -1)[0]
-            hdbscan_labels = np.delete(hdbscan_labels, remove_noise_index)
-            ground_truth_labels = np.delete(ground_truth_labels, remove_noise_index)
+            # Step 1: Identify noise points and handle them
+            # We do NOT remove noise points now. Instead, we fill them in.
+            hdbscan_labels = self._fill_noise_with_nearest_label(hdbscan_labels)
 
-            # Convert to phrase labels
-            hdbscan_labels = self.majority_vote(hdbscan_labels)
-            ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=0)
+            # Step 2: Convert silence from 0 to -1 in ground_truth_labels
+            ground_truth_labels[ground_truth_labels == 0] = -1
 
-            # Compute scores
+            # # Step 3: Apply majority voting to smooth HDBSCAN labels (optional)
+            # hdbscan_labels = self.majority_vote(hdbscan_labels)
+            
+            # Step 4: Convert ground_truth_labels to phrase-level labels with silence = -1
+            ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=-1)
+
+            # Compute metrics
             homogeneity = homogeneity_score(ground_truth_labels, hdbscan_labels)
             completeness = completeness_score(ground_truth_labels, hdbscan_labels)
             v_measure = v_measure_score(ground_truth_labels, hdbscan_labels)
 
-            # Append scores
             homogeneity_scores.append(homogeneity)
             completeness_scores.append(completeness)
             v_measure_scores.append(v_measure)
 
-        # Calculate average and standard error
+        # Calculate mean and standard error (SEM = std / sqrt(n))
+        n = len(homogeneity_scores)
         metrics = {
-            'Homogeneity': (np.mean(homogeneity_scores), np.std(homogeneity_scores, ddof=1) / np.sqrt(len(homogeneity_scores))),
-            'Completeness': (np.mean(completeness_scores), np.std(completeness_scores, ddof=1) / np.sqrt(len(completeness_scores))),
-            'V-measure': (np.mean(v_measure_scores), np.std(v_measure_scores, ddof=1) / np.sqrt(len(v_measure_scores)))
-        }
-
-        return metrics 
-                
-    def compute_adjusted_rand_index(self):
-        adjusted_rand_indices = []
-
-        for path_index, path in enumerate(self.labels_paths):
-            f = np.load(path)
-            hdbscan_labels = f['hdbscan_labels']
-            ground_truth_labels = f['ground_truth_labels']
-
-            # Remove points marked as noise
-            remove_noise_index = np.where(hdbscan_labels == -1)[0]
-            hdbscan_labels = np.delete(hdbscan_labels, remove_noise_index)
-            ground_truth_labels = np.delete(ground_truth_labels, remove_noise_index)
-
-            # Convert to phrase labels
-            hdbscan_labels = self.majority_vote(hdbscan_labels)
-            ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=0)
-
-            # Compute Adjusted Rand Index
-            ari = adjusted_rand_score(ground_truth_labels, hdbscan_labels)
-
-            # Append score
-            adjusted_rand_indices.append(ari)
-
-        # Calculate average and standard error
-        metrics = {
-            'Adjusted Rand Index': (np.mean(adjusted_rand_indices), np.std(adjusted_rand_indices, ddof=1) / np.sqrt(len(adjusted_rand_indices)))
+            'Homogeneity': (np.mean(homogeneity_scores), np.std(homogeneity_scores, ddof=1) / np.sqrt(n)),
+            'Completeness': (np.mean(completeness_scores), np.std(completeness_scores, ddof=1) / np.sqrt(n)),
+            'V-measure': (np.mean(v_measure_scores), np.std(v_measure_scores, ddof=1) / np.sqrt(n))
         }
 
         return metrics
-
-    def compute_hopkins_statistic(self, X):
-        """
-        Compute the Hopkins statistic for the dataset X.
-        
-        Parameters:
-        - X: ndarray of shape (n_samples, n_features)
-          The input data to compute the Hopkins statistic.
-
-        Returns:
-        - hopkins_stat: float
-          The Hopkins statistic value.
-        """
-
-        print(X.shape)
-        n_samples = X.shape[0]
-        n_features = X.shape[1]
-        m = int(0.1 * n_samples)  # Sample size, typically 10% of the dataset
-
-        # Randomly sample m points from the dataset
-        random_indices = np.random.choice(n_samples, m, replace=False)
-        X_m = X[random_indices]
-
-        # Generate m random points within the feature space
-        X_random = np.random.uniform(np.min(X, axis=0), np.max(sX, axis=0), (m, n_features))
-
-        # Nearest neighbors model
-        nbrs = NearestNeighbors(n_neighbors=1).fit(X)
-
-        # Compute distances from random points to the nearest neighbors in the dataset
-        u_distances, _ = nbrs.kneighbors(X_random, n_neighbors=1)
-        u_distances = u_distances.sum()
-
-        # Compute distances from sampled points to the nearest neighbors in the dataset
-        w_distances, _ = nbrs.kneighbors(X_m, n_neighbors=2)
-        w_distances = w_distances[:, 1].sum()  # Exclude the point itself
-
-        # Compute the Hopkins statistic
-        hopkins_stat = u_distances / (u_distances + w_distances)
-
-        return hopkins_stat
-
-    def compute_hopkins_statistic_from_file(self, file_path):
-        """
-        Compute the Hopkins statistic for the embedding data stored in the given file.
-
-        Parameters:
-        - file_path: str
-          Path to the .npz file containing the embedding data.
-
-        Returns:
-        - hopkins_stat: float
-          The Hopkins statistic value.
-        """
-        data = np.load(file_path)
-        embedding_outputs = data['embedding_outputs']
-        return self.compute_hopkins_statistic(embedding_outputs)
-
-
-
-def plot_metrics(metrics_list, model_names):
-    num_metrics = 3  # Homogeneity, Completeness, V-measure
-    num_models = len(metrics_list)
-    assert num_models == len(model_names), "Number of models and model names must match"
-
-    # Define a color palette with enough colors for each model
-    color_palette = plt.cm.viridis(np.linspace(0, 1, num_models))
-
-    group_width = 0.8  # Total width for a group of bars
-    bar_width = group_width / num_models  # Width of individual bar
-
-    # Positions of the groups
-    group_positions = np.arange(num_metrics)
-
-    plt.figure(figsize=(10, 6))
-
-    # Plot bars for each metric
-    for i, metric_name in enumerate(['Homogeneity', 'Completeness', 'V-measure']):
-        for j, metrics in enumerate(metrics_list):
-            mean = metrics[metric_name][0]
-            # Center bars within each group
-            position = group_positions[i] + (j - num_models / 2) * bar_width + bar_width / 2
-
-            # Use consistent colors for each model across metrics
-            plt.bar(position, mean, width=bar_width, color=color_palette[j],
-                    label=model_names[j] if i == 0 else "", align='center')
-
-    plt.xlabel('Metrics', fontsize=42)
-    plt.ylabel('Scores', fontsize=42)
-    plt.title('Comparison of Clustering Metrics Across Models', fontsize=42)
-
-    # Set the position and labels for each group
-    plt.xticks(group_positions, ['Homogeneity', 'Completeness', 'V-measure'], fontsize=36)
-    plt.yticks(fontsize=36)
-
-    plt.ylim(0, 1)  # Setting y-axis from 0 to 1
-
-    # Add grid to the plot
-    plt.grid(True, linestyle='--', which='major', color='grey', alpha=.25)
-
-    # Enlarge the labels for the legend.
-    plt.legend(loc='upper left', fontsize=36)
-    plt.tight_layout()
-    plt.show()
-
-    # plt.savefig("metrics_comparison.png", format='png')
-

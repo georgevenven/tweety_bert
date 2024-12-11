@@ -21,18 +21,11 @@ from analysis import plot_umap_projection
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-def plot_umap_for_layers(model, results_path, folder, config, category_colors_file, umap_data_dirs, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
+def plot_umap_for_layers(model, folder, config, category_colors_file, umap_data_dirs, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
     """
     This function plots UMAP projections for each target layer and saves them.
     No FER analysis is performed here.
     """
-
-    folder_path = os.path.join(results_path, 'layer_wise_analysis')
-    os.makedirs(folder_path, exist_ok=True)
-
-    experiment_path = os.path.join(folder_path, folder)
-    os.makedirs(experiment_path, exist_ok=True)
-
     # Define the specific layers we want to analyze.
     target_layers = [
         ('attention_output', 'Attention output'),
@@ -49,14 +42,8 @@ def plot_umap_for_layers(model, results_path, folder, config, category_colors_fi
     ]
 
     for layer_id, layer_num, nn_dim in tqdm(layer_output_pairs, desc=f"Plotting UMAP for Layers in {folder}", leave=False):
-        layer_results_path = os.path.join(experiment_path, f'layer_{layer_num}_{layer_id}')
-        os.makedirs(layer_results_path, exist_ok=True)
-
-        umap_save_name = os.path.join(layer_results_path, f"umap_layer_{layer_num}_{layer_id}")
-
-        if skip_existing and (os.path.exists(umap_save_name + '.png') or os.path.exists(umap_save_name + '.pdf')):
-            print(f"Skipping UMAP for already processed layer: {layer_id}, number: {layer_num}")
-            continue
+        # Simple name for saving
+        save_name = f"{folder}_layer{layer_num}_{layer_id}"
 
         print(f"Plotting UMAP for layer: {layer_id}, number: {layer_num}")
 
@@ -73,21 +60,18 @@ def plot_umap_for_layers(model, results_path, folder, config, category_colors_fi
                     context=1000,
                     raw_spectogram=False,
                     save_dict_for_analysis=True,
-                    save_name=umap_save_name,
+                    save_name=save_name,
                     min_cluster_size=min_cluster_size
                 )
         except Exception as e:
-            error_file_path = os.path.join(layer_results_path, "UMAP_Error_Log.txt")
-            with open(error_file_path, "w") as file:
-                file.write(f"UMAP plot for layer_num: {layer_num}, sub_layer: {layer_id} could not be created.\n")
-                file.write(f"Error: {e}")
+            print(f"Error processing layer {layer_id}, number {layer_num}: {str(e)}")
 
         gc.collect()
         if device.type == 'cuda':
             torch.cuda.empty_cache()
 
 
-def execute_umap_plotting(experiment_configs, results_path, category_colors_file, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
+def execute_umap_plotting(experiment_configs, category_colors_file, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
     """
     Executes UMAP plotting across multiple experiments.
     """
@@ -108,11 +92,10 @@ def execute_umap_plotting(experiment_configs, results_path, category_colors_file
 
                 plot_umap_for_layers(
                     model=model,
-                    results_path=results_path,
                     folder=dataset_name,
                     config=config,
                     category_colors_file=category_colors_file,
-                    umap_data_dirs=umap_data_dirs,  # Pass the actual directory paths
+                    umap_data_dirs=umap_data_dirs,
                     umap_samples=umap_samples,
                     min_cluster_size=min_cluster_size,
                     skip_existing=skip_existing
@@ -123,33 +106,22 @@ def execute_umap_plotting(experiment_configs, results_path, category_colors_file
             print(f"Experiment path not found: {base_path}")
 
 
-# Example experiment configuration
+# Example usage
 experiment_configs = [
     {
         "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
         "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb3_train",
         "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb3_test"
     },
-    {
-        "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
-        "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb11_train",
-        "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb11_test"
-    },
-    {
-        "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
-        "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb16_train",
-        "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb16_test"
-    }
+    # ... other configs ...
 ]
 
-results_path = "results"
 category_colors_file = "files/category_colors_llb3.pkl"
 umap_samples = 1e4
 min_cluster_size = 500
 
 execute_umap_plotting(
     experiment_configs=experiment_configs,
-    results_path=results_path,
     category_colors_file=category_colors_file,
     umap_samples=umap_samples,
     min_cluster_size=min_cluster_size,
