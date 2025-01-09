@@ -242,6 +242,29 @@ def analyze_multiple_birds(npz_files, save_dir):
         
         print(f"\nProcessing bird {bird_id} from {npz_file}")
         
+        # Add date range printing here
+        if file_map is not None:
+            file_map_dict = file_map.item()
+            print("\nDate ranges for each group:")
+            for group_idx, group_name in enumerate(['Before1', 'Before2', 'After1', 'After2']):
+                mask = dataset_indices == group_idx
+                group_file_indices = file_indices[mask]
+                dates = []
+                unique_file_indices = np.unique(group_file_indices)
+                for idx in unique_file_indices:
+                    idx = int(idx)
+                    if idx in file_map_dict:
+                        file_path = file_map_dict[idx][0]
+                        date_time, _ = parse_date_time(file_path)
+                        if date_time:
+                            dates.append(date_time)
+                if dates:
+                    min_date = min(dates)
+                    max_date = max(dates)
+                    print(f"  {group_name}: {min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}")
+                else:
+                    print(f"  {group_name}: No dates available")
+        
         # Calculate similarities and plot
         result = plot_pairwise_comparisons(embedding_outputs, dataset_indices, save_dir, bird_id, file_indices, file_map)
         result['bird_id'] = bird_id
@@ -851,5 +874,5 @@ def plot_similarity_summary(results_df, save_dir):
 if __name__ == "__main__":
     # test on two birds
     npz_files = ["/home/george-vengrovski/Downloads/USA5508_Seasonality_4_Groups.npz", "/home/george-vengrovski/Downloads/USA5494_Seasonality_4_Groups.npz"]
-    save_dir = "imgs/seasonality_analysis_results"
+    save_dir = "imgs/test"
     results_df = analyze_multiple_birds(npz_files, save_dir)

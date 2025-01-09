@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import subprocess
 from tqdm import tqdm
 from torch.nn import functional as F
 from spectogram_generator import WavtoSpec
@@ -10,6 +11,17 @@ import matplotlib.colors as mcolors
 import argparse
 import numpy as np
 from utils import load_model
+from pathlib import Path
+from datetime import datetime
+
+def get_creation_date(path):
+    stat = path.stat()
+    if hasattr(stat, 'st_birthtime'):
+        return stat.st_birthtime  # macos
+    elif os.name == 'nt':
+        return stat.st_ctime      # windows
+    else:
+        return stat.st_mtime      # linux/unix fallback
 
 def tweety_net_detector_inference(input_file, return_json=True, mode="local_file"):
    os.environ["MKL_THREADING_LAYER"] = "GNU"
@@ -114,19 +126,30 @@ class TweetyBertInference:
       return smoothed_labels
 
   def process_file(self, file_path):
+      # Print detection method being used
+      if self.song_detection_data is None:
+          print(f"Using TweetyNET detection for {os.path.basename(file_path)}")
+      else:
+          print(f"Using pre-designated JSON for {os.path.basename(file_path)}")
+
+      file_creation_timestamp = get_creation_date(Path(file_path))
+      creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
+
       spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
       if spec is None:
           return {
               "file_name": os.path.basename(file_path),
+              "creation_date": creation_date_str,
               "song_present": False,
               "syllable_onsets_offsets_ms": {},
               "syllable_onsets_offsets_timebins": {}
           }
       if self.song_detection_data is None:
           vocalization_data = tweety_net_detector_inference(input_file=file_path)
-          if vocalization_data['segments'] == []:
+          if not vocalization_data or vocalization_data.get('segments') == []:
               return {
                   "file_name": os.path.basename(file_path),
+                  "creation_date": creation_date_str,
                   "song_present": False,
                   "syllable_onsets_offsets_ms": {},
                   "syllable_onsets_offsets_timebins": {}
@@ -136,9 +159,10 @@ class TweetyBertInference:
           vocalization_data = next((item for item in self.song_detection_data if item["filename"] == file_name), None)
           if vocalization_data is None:
               vocalization_data = tweety_net_detector_inference(input_file=file_path)
-          if vocalization_data is not None and not vocalization_data["song_present"]:
+          if vocalization_data is not None and not vocalization_data.get("song_present", False):
               return {
                   "file_name": file_name,
+                  "creation_date": creation_date_str,
                   "song_present": False,
                   "syllable_onsets_offsets_ms": {},
                   "syllable_onsets_offsets_timebins": {}
@@ -162,6 +186,7 @@ class TweetyBertInference:
           self.visualize_spectrogram(spectogram.flatten(0,1)[:-pad_amount].T, post_processed_labels, os.path.basename(file_path))
       return {
           "file_name": os.path.basename(file_path),
+          "creation_date": creation_date_str,
           "song_present": song_present,
           "syllable_onsets_offsets_ms": onsets_offsets_ms,
           "syllable_onsets_offsets_timebins": onsets_offsets_timebins
