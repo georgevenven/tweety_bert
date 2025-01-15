@@ -1,8 +1,14 @@
 import os
 import sys
+
+# Add the project root directory to the Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
 import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
+from src.analysis import ComputerClusterPerformance
 
 # Adjust these paths as needed
 input_path = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"
@@ -11,9 +17,9 @@ output_dir_multiple = "imgs/umap_plots/umap_folds"  # For multiple files
 # Ensure Matplotlib does not attempt to show windows
 plt.ioff()
 
-def plot_embeddings(embeddings, labels, title, point_size, alpha, is_hdbscan, ground_truth_colors, base_name, output_directory):
+def plot_embeddings(embeddings, labels, title, point_size, alpha, is_hdbscan, ground_truth_colors, base_name, output_directory, is_phrase=False):
     """
-    Create scatter plots of embeddings colored either by ground truth or HDBSCAN labels.
+    Create scatter plots of embeddings colored by different label types.
 
     Parameters
     ----------
@@ -35,8 +41,15 @@ def plot_embeddings(embeddings, labels, title, point_size, alpha, is_hdbscan, gr
         Base name for output file naming.
     output_directory : str
         Directory to save the output plots.
+    is_phrase : bool
+        Whether the labels are phrase-level (True) or syllable-level (False).
     """
-    plt.figure(figsize=(8, 8), dpi=300)
+    fig = plt.figure(figsize=(8, 8), dpi=300)
+    ax = fig.add_subplot(111)
+    
+    # Set consistent margins
+    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    
     if is_hdbscan:
         # Filter out noise points (-1) and increment labels by 1
         mask = labels != -1
@@ -61,7 +74,7 @@ def plot_embeddings(embeddings, labels, title, point_size, alpha, is_hdbscan, gr
         label_indices = [label if label <= max_label_index else label % len(ground_truth_colors) for label in plot_labels]
 
         colors = [ground_truth_colors[label] for label in label_indices]
-        plot_type = 'ground_truth'
+        plot_type = 'phrase_labels' if is_phrase else 'ground_truth'
 
     plt.scatter(
         plot_embeddings[:, 0],
@@ -72,13 +85,11 @@ def plot_embeddings(embeddings, labels, title, point_size, alpha, is_hdbscan, gr
         edgecolors='none'
     )
 
-    plt.title(title, fontsize=16)
+    plt.title(title, fontsize=16, pad=20)
     plt.xlabel('Embedding Dimension 1', fontsize=14)
     plt.ylabel('Embedding Dimension 2', fontsize=14)
     plt.xticks([])
     plt.yticks([])
-
-    plt.tight_layout()
 
     # Create output directory if it doesn't exist
     if not os.path.exists(output_directory):
@@ -91,7 +102,7 @@ def plot_embeddings(embeddings, labels, title, point_size, alpha, is_hdbscan, gr
 
 def process_file(file_path, output_directory=None):
     """
-    Process a single NPZ file, plotting embeddings colored by both ground truth and HDBSCAN labels.
+    Process a single NPZ file, plotting embeddings with different label types.
 
     Parameters
     ----------
@@ -120,7 +131,20 @@ def process_file(file_path, output_directory=None):
     # Extract base name from file path
     base_name = os.path.splitext(os.path.basename(file_path))[0]
 
-    # Plot embeddings colored by ground truth labels
+    # Create ComputerClusterPerformance instance for label processing
+    cluster_performance = ComputerClusterPerformance([file_path])
+    
+    # Convert ground truth to phrase labels and apply majority vote
+
+    # silence is usually 0, but since we are using 1 to represent silence, we need to set silence to 1
+
+    # phrase_labels = cluster_performance.syllable_to_phrase_labels(ground_truth, silence=1)
+    hdbscan_labels = cluster_performance.fill_noise_with_nearest_label(hdbscan_labels)
+    phrase_labels = cluster_performance.syllable_to_phrase_labels(ground_truth, silence=1)
+
+    # phrase_labels = cluster_performance.majority_vote(phrase_labels, window_size=0)  # Adjust window size as needed
+
+    # Plot original ground truth labels
     plot_embeddings(
         embeddings=embeddings,
         labels=ground_truth,
@@ -133,7 +157,21 @@ def process_file(file_path, output_directory=None):
         output_directory=output_directory
     )
 
-    # Plot embeddings colored by HDBSCAN labels
+    # Plot phrase-level ground truth labels
+    plot_embeddings(
+        embeddings=embeddings,
+        labels=phrase_labels,
+        title='Embeddings Colored by Phrase Labels',
+        point_size=10,
+        alpha=0.1,
+        is_hdbscan=False,
+        ground_truth_colors=ground_truth_colors,
+        base_name=base_name,
+        output_directory=output_directory,
+        is_phrase=True
+    )
+
+    # Plot HDBSCAN labels
     plot_embeddings(
         embeddings=embeddings,
         labels=hdbscan_labels,

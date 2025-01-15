@@ -3,12 +3,13 @@ import os
 import numpy as np
 from glob import glob
 
-sys.path.append("src")
+# Update the path to include the project root directory
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from analysis import ComputerClusterPerformance
+from src.analysis import ComputerClusterPerformance
 
 # Specify the directory containing the npz files
-npz_directory = "/media/george-vengrovski/George-SSD/umaps_across_all_layers"
+npz_directory = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"
 
 # Collect all npz files in the directory
 npz_files = glob(os.path.join(npz_directory, "*.npz"))

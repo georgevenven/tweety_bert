@@ -5,7 +5,7 @@ import matplotlib.colors as mcolors
 import os
 from collections import Counter
 import umap
-from data_class import SongDataSet_Image, CollateFunction
+from src.data_class import SongDataSet_Image, CollateFunction
 from torch.utils.data import DataLoader
 import glasbey
 from sklearn.metrics.cluster import completeness_score
@@ -46,34 +46,6 @@ def average_colors_per_sample(ground_truth_labels, cmap):
 
     return averaged_colors
 
-def syllable_to_phrase_labels(arr, silence=-1):
-    new_arr = np.array(arr, dtype=int)
-    current_syllable = None
-    start_of_phrase_index = None
-    first_non_silence_label = None  # To track the first non-silence syllable
-
-    for i, value in enumerate(new_arr):
-        if value != silence and value != current_syllable:
-            if start_of_phrase_index is not None:
-                new_arr[start_of_phrase_index:i] = current_syllable
-            current_syllable = value
-            start_of_phrase_index = i
-            
-            if first_non_silence_label is None:  # Found the first non-silence label
-                first_non_silence_label = value
-
-    if start_of_phrase_index is not None:
-        new_arr[start_of_phrase_index:] = current_syllable
-
-    # Replace the initial silence with the first non-silence syllable label
-    if new_arr[0] == silence and first_non_silence_label is not None:
-        for i in range(len(new_arr)):
-            if new_arr[i] != silence:
-                break
-            new_arr[i] = first_non_silence_label
-
-    return new_arr
-
 def load_data( data_dir, context=1000):
     dataset = SongDataSet_Image(data_dir, num_classes=50, infinite_loader = False, pitch_shift= False, segment_length = None)
     # collate_fn = CollateFunction(segment_length=context)
@@ -111,85 +83,85 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
 
     return labels
 
-def plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_indices):
-    """
-    Generate comparison plots between two datasets using UMAP embeddings.
+# def plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_indices):
+#     """
+#     Generate comparison plots between two datasets using UMAP embeddings.
     
-    Parameters:
-    - data_dirs: list of data directory paths
-    - save_name: name for saving the plots
-    - embedding_outputs: UMAP embeddings array
-    - dataset_indices: array indicating which dataset each point belongs to
-    """
-    # Create experiment-specific directory
-    experiment_dir = os.path.join("imgs", "umap_plots", save_name)
-    if not os.path.exists(experiment_dir):
-        os.makedirs(experiment_dir)
+#     Parameters:
+#     - data_dirs: list of data directory paths
+#     - save_name: name for saving the plots
+#     - embedding_outputs: UMAP embeddings array
+#     - dataset_indices: array indicating which dataset each point belongs to
+#     """
+#     # Create experiment-specific directory
+#     experiment_dir = os.path.join("imgs", "umap_plots", save_name)
+#     if not os.path.exists(experiment_dir):
+#         os.makedirs(experiment_dir)
 
-    # Split data by dataset
-    dataset_1_mask = dataset_indices == 0
-    dataset_2_mask = dataset_indices == 1
+#     # Split data by dataset
+#     dataset_1_mask = dataset_indices == 0
+#     dataset_2_mask = dataset_indices == 1
     
-    data_1 = embedding_outputs[dataset_1_mask]
-    data_2 = embedding_outputs[dataset_2_mask]
+#     data_1 = embedding_outputs[dataset_1_mask]
+#     data_2 = embedding_outputs[dataset_2_mask]
 
-    # Create sample count string for title
-    sample_counts = (
-        f"Samples - {os.path.basename(data_dirs[0])}: {len(data_1):,}, "
-        f"{os.path.basename(data_dirs[1])}: {len(data_2):,}"
-    )
+#     # Create sample count string for title
+#     sample_counts = (
+#         f"Samples - {os.path.basename(data_dirs[0])}: {len(data_1):,}, "
+#         f"{os.path.basename(data_dirs[1])}: {len(data_2):,}"
+#     )
 
-    # Create 2D histograms
-    bins = 300
-    heatmap_1, xedges, yedges = np.histogram2d(data_1[:, 0], data_1[:, 1], bins=bins)
-    heatmap_2, _, _ = np.histogram2d(data_2[:, 0], data_2[:, 1], bins=[xedges, yedges])
+#     # Create 2D histograms
+#     bins = 300
+#     heatmap_1, xedges, yedges = np.histogram2d(data_1[:, 0], data_1[:, 1], bins=bins)
+#     heatmap_2, _, _ = np.histogram2d(data_2[:, 0], data_2[:, 1], bins=[xedges, yedges])
 
-    # Normalize heatmaps
-    heatmap_1 = heatmap_1 / heatmap_1.max()
-    heatmap_2 = heatmap_2 / heatmap_2.max()
+#     # Normalize heatmaps
+#     heatmap_1 = heatmap_1 / heatmap_1.max()
+#     heatmap_2 = heatmap_2 / heatmap_2.max()
 
-    # Create RGB image for overlap visualization
-    rgb_image = np.zeros((heatmap_1.shape[0], heatmap_1.shape[1], 3))
-    brightness_factor = 4
+#     # Create RGB image for overlap visualization
+#     rgb_image = np.zeros((heatmap_1.shape[0], heatmap_1.shape[1], 3))
+#     brightness_factor = 4
     
-    # Purple for dataset 1, Green for dataset 2
-    rgb_image[..., 0] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Red channel
-    rgb_image[..., 1] = np.clip(heatmap_2.T * brightness_factor, 0, 1)  # Green channel
-    rgb_image[..., 2] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Blue channel
+#     # Purple for dataset 1, Green for dataset 2
+#     rgb_image[..., 0] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Red channel
+#     rgb_image[..., 1] = np.clip(heatmap_2.T * brightness_factor, 0, 1)  # Green channel
+#     rgb_image[..., 2] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Blue channel
 
-    # Plot dataset 1
-    fig1, ax1 = plt.subplots(figsize=(6, 6))
-    ax1.imshow(heatmap_1.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-               origin='lower', cmap='Purples', vmax=0.1)
-    ax1.set_title(f"Dataset: {os.path.basename(data_dirs[0])}", fontsize=16)
-    ax1.set_xlabel('UMAP Dimension 1')
-    ax1.set_ylabel('UMAP Dimension 2')
-    fig1.tight_layout()
-    fig1.savefig(os.path.join(experiment_dir, "dataset_1.png"), dpi=300)
-    fig1.savefig(os.path.join(experiment_dir, "dataset_1.svg"))
-    plt.close(fig1)
+#     # Plot dataset 1
+#     fig1, ax1 = plt.subplots(figsize=(6, 6))
+#     ax1.imshow(heatmap_1.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+#                origin='lower', cmap='Purples', vmax=0.1)
+#     ax1.set_title(f"Dataset: {os.path.basename(data_dirs[0])}", fontsize=16)
+#     ax1.set_xlabel('UMAP Dimension 1')
+#     ax1.set_ylabel('UMAP Dimension 2')
+#     fig1.tight_layout()
+#     fig1.savefig(os.path.join(experiment_dir, "dataset_1.png"), dpi=300)
+#     fig1.savefig(os.path.join(experiment_dir, "dataset_1.svg"))
+#     plt.close(fig1)
 
-    # Plot dataset 2
-    fig2, ax2 = plt.subplots(figsize=(6, 6))
-    ax2.imshow(heatmap_2.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-               origin='lower', cmap='Greens', vmax=0.1)
-    ax2.set_title(f"Dataset: {os.path.basename(data_dirs[1])}", fontsize=16)
-    ax2.set_xlabel('UMAP Dimension 1')
-    fig2.tight_layout()
-    fig2.savefig(os.path.join(experiment_dir, "dataset_2.png"), dpi=300)
-    fig2.savefig(os.path.join(experiment_dir, "dataset_2.svg"))
-    plt.close(fig2)
+#     # Plot dataset 2
+#     fig2, ax2 = plt.subplots(figsize=(6, 6))
+#     ax2.imshow(heatmap_2.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+#                origin='lower', cmap='Greens', vmax=0.1)
+#     ax2.set_title(f"Dataset: {os.path.basename(data_dirs[1])}", fontsize=16)
+#     ax2.set_xlabel('UMAP Dimension 1')
+#     fig2.tight_layout()
+#     fig2.savefig(os.path.join(experiment_dir, "dataset_2.png"), dpi=300)
+#     fig2.savefig(os.path.join(experiment_dir, "dataset_2.svg"))
+#     plt.close(fig2)
 
-    # Plot overlap
-    fig3, ax3 = plt.subplots(figsize=(6, 6))
-    ax3.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-               origin='lower')
-    ax3.set_title("Overlapping Datasets", fontsize=16)
-    ax3.set_xlabel('UMAP Dimension 1')
-    fig3.tight_layout()
-    fig3.savefig(os.path.join(experiment_dir, "overlap.png"), dpi=300)
-    fig3.savefig(os.path.join(experiment_dir, "overlap.svg"))
-    plt.close(fig3)
+#     # Plot overlap
+#     fig3, ax3 = plt.subplots(figsize=(6, 6))
+#     ax3.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+#                origin='lower')
+#     ax3.set_title("Overlapping Datasets", fontsize=16)
+#     ax3.set_xlabel('UMAP Dimension 1')
+#     fig3.tight_layout()
+#     fig3.savefig(os.path.join(experiment_dir, "overlap.png"), dpi=300)
+#     fig3.savefig(os.path.join(experiment_dir, "overlap.svg"))
+#     plt.close(fig3)
 
     
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
@@ -673,52 +645,94 @@ class ComputerClusterPerformance():
         """
         self.labels_paths = labels_path
             
-    def syllable_to_phrase_labels(self, arr, silence=-1):
-        """
-        Convert a sequence of syllable labels into a sequence of phrase labels.
         
-        This method groups consecutive identical non-silence labels into phrases. 
-        If the initial portion of the array is silence, it is replaced with the 
-        first non-silence syllable found. This ensures that there are no leading 
-        silence frames before the first phrase.
+    @staticmethod
+    def syllable_to_phrase_labels(arr, silence=-1):
+        """
+        Convert a sequence of syllable labels into a sequence of phrase labels,
+        merging silence bins with their nearest adjacent syllables.
 
-        Parameters:
-        - arr: np.ndarray
-          Array of integer labels, where `silence` frames are indicated by `silence`.
-        - silence: int
-          The integer value representing silence. Default is -1.
+        For each contiguous block of silence:
+        - If it's bounded by the same label on both sides, assign that label to all.
+        - If it's bounded by two different labels, assign each time-bin to the closer label;
+        ties go to the left.
+        - If it's at the beginning or end (missing one side), assign to the available side.
 
-        Returns:
-        - new_arr: np.ndarray
-          Array of phrase-level labels (longer temporal segments representing phrases).
+        Parameters
+        ----------
+        arr : np.ndarray
+            Array of integer labels, where `silence` frames are indicated by `silence`.
+        silence : int, optional
+            Integer value representing silence, by default -1.
+
+        Returns
+        -------
+        np.ndarray
+            Array of phrase-level labels with silence frames appropriately merged.
         """
         new_arr = np.array(arr, dtype=int)
-        current_syllable = None
-        start_of_phrase_index = None
-        first_non_silence_label = None  # Track the first non-silence syllable
+        length = len(new_arr)
+        if length == 0:
+            return new_arr  # Edge case: empty input
 
-        for i, value in enumerate(new_arr):
-            if value != silence and value != current_syllable:
-                if start_of_phrase_index is not None:
-                    # Close off the previous phrase
-                    new_arr[start_of_phrase_index:i] = current_syllable
-                current_syllable = value
-                start_of_phrase_index = i
-                
-                if first_non_silence_label is None:
-                    first_non_silence_label = value
+        # Helper function to find contiguous regions of silence
+        def find_silence_runs(labels):
+            runs = []
+            in_silence = False
+            start = None
 
-        if start_of_phrase_index is not None:
-            # Close off the final phrase
-            new_arr[start_of_phrase_index:] = current_syllable
+            for i, val in enumerate(labels):
+                if val == silence and not in_silence:
+                    in_silence = True
+                    start = i
+                elif val != silence and in_silence:
+                    runs.append((start, i - 1))
+                    in_silence = False
+            # If ended in silence
+            if in_silence:
+                runs.append((start, length - 1))
+            return runs
 
-        # If the array started with silence, replace that leading silence 
-        # with the first non-silence label encountered.
-        if new_arr[0] == silence and first_non_silence_label is not None:
-            for i in range(len(new_arr)):
-                if new_arr[i] != silence:
-                    break
-                new_arr[i] = first_non_silence_label
+        # Identify contiguous silence regions
+        silence_runs = find_silence_runs(new_arr)
+
+        for start_idx, end_idx in silence_runs:
+            # Check left and right labels
+            left_label = new_arr[start_idx - 1] if start_idx > 0 else None
+            right_label = new_arr[end_idx + 1] if end_idx < length - 1 else None
+
+            if left_label is None and right_label is None:
+                # Entire array is silence or single region with no bounding labels
+                # Do nothing or choose some default strategy
+                continue
+            elif left_label is None:
+                # Leading silence; merge with right label
+                new_arr[start_idx:end_idx+1] = right_label
+            elif right_label is None:
+                # Trailing silence; merge with left label
+                new_arr[start_idx:end_idx+1] = left_label
+            elif left_label == right_label:
+                # Same label on both sides
+                new_arr[start_idx:end_idx+1] = left_label
+            else:
+                # Different labels on both sides
+                # Assign each bin to whichever side is closer; ties go left
+                left_distances = np.arange(start_idx, end_idx + 1) - (start_idx - 1)
+                right_distances = (end_idx + 1) - np.arange(start_idx, end_idx + 1)
+
+                for i in range(start_idx, end_idx + 1):
+                    # Distance from left non-silence is (i - (start_idx - 1))
+                    dist_left = i - (start_idx - 1)
+                    # Distance from right non-silence is ((end_idx + 1) - i)
+                    dist_right = (end_idx + 1) - i
+
+                    if dist_left < dist_right:
+                        new_arr[i] = left_label
+                    elif dist_right < dist_left:
+                        new_arr[i] = right_label
+                    else:
+                        # Tie -> go left
+                        new_arr[i] = left_label
 
         return new_arr
 
@@ -766,7 +780,7 @@ class ComputerClusterPerformance():
 
         return np.array(output)
 
-    def _fill_noise_with_nearest_label(self, labels):
+    def fill_noise_with_nearest_label(self, labels):
         """
         For each noise point (labeled -1), find the nearest non-noise 
         label to the left or right and assign it to this point. If no 
@@ -844,16 +858,16 @@ class ComputerClusterPerformance():
 
             # Step 1: Identify noise points and handle them
             # We do NOT remove noise points now. Instead, we fill them in.
-            hdbscan_labels = self._fill_noise_with_nearest_label(hdbscan_labels)
+            hdbscan_labels = self.fill_noise_with_nearest_label(hdbscan_labels)
 
-            # Step 2: Convert silence from 0 to -1 in ground_truth_labels
-            ground_truth_labels[ground_truth_labels == 0] = -1
+            # # Step 2: Convert silence from 0 to -1 in ground_truth_labels
+            # ground_truth_labels[ground_truth_labels == 0] = -1
 
             # # Step 3: Apply majority voting to smooth HDBSCAN labels (optional)
             # hdbscan_labels = self.majority_vote(hdbscan_labels)
             
             # Step 4: Convert ground_truth_labels to phrase-level labels with silence = -1
-            ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=-1)
+            ground_truth_labels = self.syllable_to_phrase_labels(arr=ground_truth_labels, silence=0)
 
             # Compute metrics
             homogeneity = homogeneity_score(ground_truth_labels, hdbscan_labels)

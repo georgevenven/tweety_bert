@@ -1,6 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import sys
+import os
+# Add the project root directory to the Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
+from src.analysis import syllable_to_phrase_labels
 
 def plot_spectrogram_with_labels(file_path, segment_length):
     # Load data from the .npz file
@@ -10,6 +17,9 @@ def plot_spectrogram_with_labels(file_path, segment_length):
     ground_truth_labels = data["ground_truth_labels"]
     embedding = data["embedding_outputs"]
     print(embedding.shape)
+
+    # Convert syllable labels to phrase labels
+    ground_truth_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
     # Increment ground truth labels by 1 to match Script 1 adjustments
     ground_truth_labels = ground_truth_labels + 1
@@ -121,6 +131,6 @@ def plot_spectrogram_with_labels(file_path, segment_length):
     plt.show()
 
 # Load the NPZ file and call the function to plot
-file_path = "/media/george-vengrovski/flash-drive/llb3_for_paper.npz"
+file_path = "files/llb3.npz"
 segment_length = 1000
 plot_spectrogram_with_labels(file_path, segment_length)
