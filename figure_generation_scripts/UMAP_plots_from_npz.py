@@ -11,8 +11,8 @@ from glob import glob
 from src.analysis import ComputerClusterPerformance
 
 # Adjust these paths as needed
-input_path = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"
-output_dir_multiple = "imgs/umap_plots/umap_folds"  # For multiple files
+input_path = "files/default_experiment_hdbscan.npz"  # Can be either a single .npz file or directory
+output_dir = "imgs/umap_plots"  # Base output directory
 
 # Ensure Matplotlib does not attempt to show windows
 plt.ioff()
@@ -185,14 +185,20 @@ def process_file(file_path, output_directory=None):
     )
 
 
-# Determine if input_path is a directory or a file
+# Modified path handling logic at the end of the file
 if os.path.isdir(input_path):
     # Process multiple files
     npz_files = glob(os.path.join(input_path, "*.npz"))
-    # Output directory for multiple mode
-    multi_output_directory = os.path.join("imgs", "umap_plots", "umap_folds")
+    output_directory = os.path.join(output_dir, "umap_folds")
     for file in npz_files:
-        process_file(file, output_directory=multi_output_directory)
+        process_file(file, output_directory=output_directory)
 else:
     # Process a single file
-    process_file(input_path, output_directory=".")
+    if not input_path.endswith('.npz'):
+        print(f"Error: Input file must be a .npz file, got {input_path}")
+        sys.exit(1)
+    
+    # Create output directory based on the file name
+    file_name = os.path.splitext(os.path.basename(input_path))[0]
+    output_directory = os.path.join(output_dir, file_name)
+    process_file(input_path, output_directory=output_directory)

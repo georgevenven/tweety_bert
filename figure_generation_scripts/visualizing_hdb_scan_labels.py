@@ -7,9 +7,13 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
-from src.analysis import syllable_to_phrase_labels
+from src.analysis import ComputerClusterPerformance
 
-def plot_spectrogram_with_labels(file_path, segment_length):
+# Create an instance of ComputerClusterPerformance
+# We can pass an empty list since we're only using the method
+cluster_performance = ComputerClusterPerformance([])
+
+def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path):
     # Load data from the .npz file
     data = np.load(file_path, allow_pickle=True)
     spec = data["s"]  # Spectrogram data
@@ -18,34 +22,35 @@ def plot_spectrogram_with_labels(file_path, segment_length):
     embedding = data["embedding_outputs"]
     print(embedding.shape)
 
-    # Convert syllable labels to phrase labels
-    ground_truth_labels = syllable_to_phrase_labels(ground_truth_labels, silence=0)
-
-    # Increment ground truth labels by 1 to match Script 1 adjustments
-    ground_truth_labels = ground_truth_labels + 1
+    # Convert syllable labels to phrase labels using the class method
+    labels = cluster_performance.majority_vote(labels, window_size=175)
+    ground_truth_labels = cluster_performance.syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
     # === HDBSCAN Labels Coloring ===
-    # Filter out noise points and increment labels by 1 (matching UMAP plot logic)
+    # Filter out noise points first, then increment (to match UMAP plot logic exactly)
     mask = labels != -1
     adjusted_labels = labels.copy()
-    adjusted_labels[mask] += 1  # Increment to avoid negative indices
+    adjusted_labels[mask] += 1  # Increment non-noise labels by 1
 
     # Create the same colormap as in UMAP plots
-    unique_labels = np.unique(adjusted_labels[adjusted_labels != -1])
-    num_labels = len(unique_labels)
-    cmap = plt.colormaps['tab20']
-    label_to_color = {label: np.array(cmap(i)) for i, label in enumerate(unique_labels)}
+    plot_labels = adjusted_labels[mask]  # Only non-noise labels
+    unique_labels = np.unique(plot_labels)
+    cmap = plt.cm.get_cmap('tab20', len(unique_labels))
+    label_to_color = {label: cmap(i) for i, label in enumerate(unique_labels)}
     
-    # Assign black color to noise points (-1)
-    label_to_color[-1] = np.array([0.0, 0.0, 0.0, 1.0])
-
-    # Map labels to colors and ensure numpy array format
-    hdbscan_label_colors_rgb_full = np.array([label_to_color[label] for label in adjusted_labels])
+    # Create color array for all points (including noise)
+    hdbscan_label_colors_rgb_full = np.zeros((len(adjusted_labels), 4))
+    hdbscan_label_colors_rgb_full[~mask] = [0.0, 0.0, 0.0, 1.0]  # Noise points in black
+    hdbscan_label_colors_rgb_full[mask] = [label_to_color[label] for label in adjusted_labels[mask]]
 
     # === Ground Truth Labels Coloring ===
-    # Load ground truth colors and ensure proper shape
-    ground_truth_colors = data["ground_truth_colors"]
-    
+    # Increment ground truth labels by 1 first (to match UMAP plots)
+    ground_truth_labels = ground_truth_labels + 1
+
+    # Process ground truth colors exactly as in UMAP plots
+    ground_truth_colors = list(data["ground_truth_colors"])
+    ground_truth_colors[1] = [0.0, 0.0, 0.0, 1.0]  # Set black color for index 1
+
     # Print debug information
     print("Original ground truth colors shapes:")
     for i, color in enumerate(ground_truth_colors):
@@ -65,9 +70,6 @@ def plot_spectrogram_with_labels(file_path, segment_length):
         else:
             raise ValueError(f"Unexpected color format: {color_array}")
         ground_truth_colors.append(color_array)
-    
-    # Set black color for index 1
-    ground_truth_colors[1] = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
     
     # Print debug information after conversion
     print("\nProcessed ground truth colors shapes:")
@@ -108,7 +110,6 @@ def plot_spectrogram_with_labels(file_path, segment_length):
     ground_truth_label_colors_rgb_array = np.array(ground_truth_label_colors_rgb_slice)[np.newaxis, :, :]
 
     # === Plotting ===
-    # Set up the figure and gridspec
     fig = plt.figure(figsize=(14, 6))
     gs = fig.add_gridspec(3, 1, height_ratios=[20, 2, 2], hspace=0.05)
 
@@ -128,9 +129,42 @@ def plot_spectrogram_with_labels(file_path, segment_length):
     ax2.axis('off')
 
     plt.tight_layout()
-    plt.show()
+    
+    # Save the figure instead of showing it
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close()
 
-# Load the NPZ file and call the function to plot
-file_path = "files/llb3.npz"
-segment_length = 1000
-plot_spectrogram_with_labels(file_path, segment_length)
+def generate_all_spectrograms(file_path, segment_length, step_size, output_dir):
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load data
+    data = np.load(file_path, allow_pickle=True)
+    spec = data["s"]
+    total_length = spec.shape[0]
+    
+    # Calculate number of segments
+    num_segments = (total_length - segment_length) // step_size + 1
+    
+    print(f"Generating {num_segments} spectrograms...")
+    
+    # Generate spectrograms for each segment
+    for i in range(num_segments):
+        start_idx = i * step_size
+        save_path = os.path.join(output_dir, f"spectrogram_{i:05d}.png")
+        print(f"Generating spectrogram {i+1}/{num_segments}", end='\r')
+        plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path)
+    
+    print("\nDone!")
+
+# Example usage
+if __name__ == "__main__":
+    file_path = "/media/george-vengrovski/George-SSD/folds_for_paper_llb/llb3_fold1.npz"
+    
+    # Hyperparameters
+    segment_length = 1000  # Length of each spectrogram window
+    step_size = 250      # How much to slide the window by (50% overlap in this case)
+    
+    output_dir = "imgs/all_spec_plus_labels"
+    
+    generate_all_spectrograms(file_path, segment_length, step_size, output_dir)
