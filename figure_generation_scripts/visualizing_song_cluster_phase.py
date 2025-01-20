@@ -85,8 +85,10 @@ class UMAPSelector:
             fig = plt.figure(figsize=(14, 8))
             gs = fig.add_gridspec(
                 2, 2,
-                width_ratios=[1.8, 6.75],
-                height_ratios=[1, 1]
+                width_ratios=[2.64, 6.75],
+                height_ratios=[1, 1],
+                hspace=0.3,
+                top=0.95
             )
 
             ax_points_gradient = fig.add_subplot(gs[0, 0])
@@ -102,9 +104,10 @@ class UMAPSelector:
             ax_points_gradient.scatter(x_norm, y_norm, s=6, c=colors, alpha=0.6)
             ax_points_gradient.set_aspect('equal')
             ax_points_gradient.set_title('Phase', fontsize=24)
-            ax_points_gradient.set_xlabel('Normalized X', fontsize=18)
-            ax_points_gradient.set_ylabel('Normalized Y', fontsize=18)
-            ax_points_gradient.tick_params(axis='both', which='major', labelsize=18)
+            ax_points_gradient.set_xticks([])
+            ax_points_gradient.set_yticks([])
+            ax_points_gradient.set_xticklabels([])
+            ax_points_gradient.set_yticklabels([])
 
             # Assign colors based on ground truth labels
             ground_truth_colors = [
@@ -114,9 +117,10 @@ class UMAPSelector:
             ax_points_groundtruth.scatter(x_norm, y_norm, s=6, c=ground_truth_colors, alpha=0.6)
             ax_points_groundtruth.set_aspect('equal')
             ax_points_groundtruth.set_title('Ground Truth', fontsize=24)
-            ax_points_groundtruth.set_xlabel('Normalized X', fontsize=18)
-            ax_points_groundtruth.set_ylabel('Normalized Y', fontsize=18)
-            ax_points_groundtruth.tick_params(axis='both', which='major', labelsize=18)
+            ax_points_groundtruth.set_xticks([])
+            ax_points_groundtruth.set_yticks([])
+            ax_points_groundtruth.set_xticklabels([])
+            ax_points_groundtruth.set_yticklabels([])
 
             # Plot the spectrogram
             ax_spec.imshow(spec_region[:, :250].T, aspect='auto', origin='lower', cmap='viridis')
@@ -124,12 +128,6 @@ class UMAPSelector:
             ax_spec.set_yticks([])
             ax_spec.set_xlabel('')
             ax_spec.set_ylabel('')
-
-            # Add red vertical lines where file indices change
-            region_file_indices = self.file_indices[region]
-            change_points = np.where(np.diff(region_file_indices) != 0)[0] + 1
-            for cp in change_points:
-                ax_spec.axvline(x=cp, color='red', linewidth=0.5)
 
             divider = make_axes_locatable(ax_spec)
             ax_gradient = divider.append_axes("bottom", size="12.5%", pad=0.525)
@@ -165,6 +163,6 @@ class UMAPSelector:
             plt.close(fig)
 
 # Usage example
-file_path = "files/llb3_predictions_for_fig2b.npz"
-selector = UMAPSelector(file_path, max_length=500)
+file_path = "/media/george-vengrovski/66AA-9C0A/yarden_umaps_for_paper/llb16_for_paper.npz"
+selector = UMAPSelector(file_path, max_length=1000)
 selector.plot_umap_with_selection()
