@@ -64,7 +64,7 @@ TweetyBERT uses a song detection file (JSON) to locate regions within each recor
 
 Below is a **simplified** example of how a single entry in the song detection JSON might look. Placeholder values are used here:
 
-'''json
+```json
 {
   "filename": "bird_XXXX_YYYY_MM_DD_HH_MM_SS.wav",
   "song_present": true,
@@ -96,7 +96,7 @@ Below is a **simplified** example of how a single entry in the song detection JS
     ]
   }
 }
-'''
+```
 
 - **filename**: The WAV file name.  
 - **song_present**: Whether any song was detected in this file.  
