@@ -96,7 +96,7 @@ Below is a **simplified** example of how a single entry in the song detection JS
     ]
   }
 }
-```
+'''
 
 - **filename**: The WAV file name.  
 - **song_present**: Whether any song was detected in this file.  
