@@ -636,7 +636,7 @@ class ComputerClusterPerformance():
       ensuring phrase segmentation works with the updated silence value.
     """
 
-    def __init__(self, labels_path):
+    def __init__(self, labels_path=None):
         """
         Parameters:
         - labels_path: list of str
@@ -736,48 +736,104 @@ class ComputerClusterPerformance():
 
         return new_arr
 
-    def majority_vote(self, data, window_size=1):
+        
+    def majority_vote(data, window_size=1):
         """
         Apply majority vote on the input data with a specified window size.
         This can help smooth labels.
 
-        Parameters:
-        - data: array-like
-          The input data (e.g., cluster labels) to smooth.
-        - window_size: int
-          The size of the window over which to apply majority voting. 
-          If 1, no smoothing is performed (directly returns the data).
+        Parameters
+        ----------
+        data : array-like
+            The input data (e.g., cluster labels) to smooth.
+        window_size : int
+            The size of the window over which to apply majority voting. 
+            If 1, no smoothing is performed (directly returns the data).
 
-        Returns:
-        - output: np.ndarray
-          The array with majority vote applied.
+        Returns
+        -------
+        output : np.ndarray
+            The array with majority vote applied.
         """
+        
+        # 1) If window_size=1, there's no smoothing to do.
+        #    So just return data as is (converted to np.array if not already).
         if window_size == 1:
             return np.array(data)
-
-        def find_majority(window):
-            count = Counter(window)
-            majority = max(count.values())
-            for num, freq in count.items():
-                if freq == majority:
-                    return num
-            # If no single majority (tie), return the middle element
-            return window[len(window) // 2]
-
+        
+        # 2) Make sure we handle the case where `data` is a string
+        #    (assuming you want to parse "1,2,3" => [1,2,3]).
         if isinstance(data, str):
             data = [int(x) for x in data.split(',') if x.strip().isdigit()]
 
-        # Initialize output with padding at the start
-        output = [data[0]] * (window_size // 2)
+        # Convert to a numpy array for consistent slicing
+        data = np.array(data, dtype=int)
 
-        # Majority voting over windows
+        # 3) Handle edge cases where data might be empty or shorter than window_size.
+        if len(data) == 0:
+            # There's nothing to smooth, return empty array
+            return data
+        if window_size > len(data):
+            # The 'window' is bigger than the entire data length => 
+            # we can either just return the original array or 
+            # do one "majority" across the entire array.
+            # For example, let's do a single global majority:
+            c = Counter(data)
+            # No need for a tie-breaker if you want a single label across all frames
+            major_label = max(c, key=c.get)
+            return np.array([major_label]*len(data))
+
+        def find_majority(window):
+            """
+            Return the majority element in 'window'. 
+            If there's a tie, we return the middle element in that window.
+
+            NOTE: We check if window is non-empty before calling this.
+            """
+            count = Counter(window)
+            if not count:
+                # If the window ended up empty (shouldn't happen if slicing is correct),
+                # default to e.g. -1 or some fallback:
+                return -1
+            
+            # The highest frequency among the labels in the window
+            majority_freq = max(count.values())  # safe because 'count' is not empty
+            # Return the first label that has that frequency
+            for num, freq in count.items():
+                if freq == majority_freq:
+                    return num
+            # If for some reason no single majority (shouldn't happen in this code),
+            # fallback to the window's middle element.
+            return window[len(window) // 2]
+
+        # 4) We'll build our output array. 
+        #    You previously padded the start and end with repeated elements.
+        #    We'll preserve that approach, but ensure window slicing never goes empty.
+
+        output = []
+        
+        # Pad start with data[0] for half-window_size
+        # e.g. if window_size=5 => half_window=2 => pad 2 elements
+        half_w = window_size // 2
+        for _ in range(half_w):
+            output.append(data[0])
+        
+        # Main loop: for each valid window in [i : i+window_size],
+        # slice out the sub-array and find the majority.
         for i in range(len(data) - window_size + 1):
-            window = data[i:i + window_size]
-            output.append(find_majority(window))
+            window = data[i : i + window_size]
+            # Now window should have length == window_size (unless near edges),
+            # but we do a sanity check anyway
+            if len(window) == 0:
+                # This means no data in slice => fallback label
+                output.append(-1)
+            else:
+                output.append(find_majority(window))
 
-        # Pad the output at the end
-        output.extend([data[-1]] * (window_size // 2))
-
+        # Pad end with data[-1] for half-window_size
+        for _ in range(half_w):
+            output.append(data[-1])
+        
         return np.array(output)
 
     def fill_noise_with_nearest_label(self, labels):
