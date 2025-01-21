@@ -1,5 +1,61 @@
 # TweetyBERT
 
+## Installation & Usage
+
+### Overview
+
+TweetyBERT combines a convolutional front-end with a transformer architecture to learn representations of bird vocalizations. The model can be used for:
+
+- Self-supervised pretraining on unlabeled bird songs  
+- Linear probing for syllable classification  
+- Generating embeddings for visualization and analysis  
+- Decoding syllable sequences  
+
+### Prerequisites
+
+- Python 3.11+  
+- PyTorch >= 2.0  
+- CUDA 12.x (for GPU acceleration)  
+- Required packages: `numpy`, `matplotlib`, `tqdm`, `umap-learn`, `hdbscan`, `scikit-learn`, `pandas`, `seaborn`, `jupyter`, `ipykernel`, `librosa`, `soundfile`, `shutil-extra`
+
+### Installation Steps
+
+Below is a sample workflow to get you started with Conda, including installing all the necessary dependencies:
+
+# 1. Create and activate a new Conda environment
+conda create -n tweetybert python=3.11
+conda activate tweetybert
+
+# 2. Install core scientific packages
+conda install -c conda-forge \
+    numpy \
+    matplotlib \
+    tqdm \
+    umap-learn \
+    hdbscan \
+    scikit-learn \
+    pandas \
+    seaborn \
+    jupyter \
+    ipykernel
+
+# 3. Install audio processing libraries
+conda install -c conda-forge \
+    librosa \
+    soundfile
+
+# 4. Install additional dependencies via pip
+pip install shutil-extra
+
+# 5. (Optional) Install PyTorch if not already installed
+#    Note: Adjust CUDA version if necessary.
+#    For more details, see https://pytorch.org/get-started/locally/
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu12
+
+# 6. Clone the TweetyBERT repository
+git clone https://github.com/yourusername/TweetyBERT.git
+cd TweetyBERT
+
 A self-supervised transformer-based model for analyzing and decoding bird vocalizations, with a focus on canary song analysis.
 
 ## Song Detection & JSON Format
@@ -8,7 +64,7 @@ TweetyBERT uses a song detection file (JSON) to locate regions within each recor
 
 Below is a **simplified** example of how a single entry in the song detection JSON might look. Placeholder values are used here:
 
-```json
+'''json
 {
   "filename": "bird_XXXX_YYYY_MM_DD_HH_MM_SS.wav",
   "song_present": true,
