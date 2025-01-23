@@ -63,7 +63,7 @@ TweetyBERT combines a convolutional front-end with a transformer architecture to
 
 ## Song Detection & JSON Format
 
-TweetyBERT uses a song detection file (JSON) to locate regions within each recording where bird song is present. A single recording file can contain multiple songs, and each song is stored in a separate list or segment. The JSON also supports **optional** syllable labels for more fine-grained annotation.
+TweetyBERT uses a song detection file (JSON) to locate regions within each recording where bird song is present. A single recording file can contain multiple songs, and each song is stored in a separate list or segment. The JSON also supports **optional** syllable labels for performance analysis / validation.
 
 Below is a **simplified** example of how a single entry in the song detection JSON might look. Placeholder values are used here:
 
@@ -105,7 +105,7 @@ Below is a **simplified** example of how a single entry in the song detection JS
 - **song_present**: Whether any song was detected in this file.  
 - **segments**: Each detected song segment with onset/offset times (in timebins and milliseconds).  
 - **spec_parameters**: Parameters (like `step_size` and `nfft`) used for spectrogram generation.  
-- **syllable_labels (optional)**: Time intervals for each labeled syllable, keyed by the label ID.
+- **syllable_labels (optional)**: Time intervals for each labeled syllable, keyed by the label ID. Used for evaluating the unsupervised analysis. 
 
 Typically, you will use a separate **Song Detection tool** to generate this JSON. TweetyBERT just needs to know **where** the songs occur (and optionally any known syllable labels).
 
