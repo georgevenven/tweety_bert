@@ -23,7 +23,7 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
     print(embedding.shape)
 
     # Convert syllable labels to phrase labels using the class method
-    labels = cluster_performance.majority_vote(labels, window_size=175)
+    labels = cluster_performance.majority_vote(labels, window_size=0)
     ground_truth_labels = cluster_performance.syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
     # === HDBSCAN Labels Coloring ===

@@ -148,7 +148,7 @@ NUM_SAMPLES=15
 
 - **BIRD_NAME**: A short descriptive name used in UMAP and output logs  
 - **MODEL_NAME**: The same model name (`EXPERIMENT_NAME`) used during pretraining  
-- **WAV_FOLDER**: Path to the bird’s WAV files  
+- **WAV_FOLDER**: Path to the bird's WAV files  
 - **SONG_DETECTION_JSON_PATH**: Path to the detection JSON  
 - **NUM_SAMPLES**: (Optional) Number of WAVs to sample for embedding or training  
 
@@ -214,6 +214,31 @@ The inference step will produce a JSON database summarizing whether each file ha
 ```
 
 The `metadata` block describes the inference configuration, while each entry in `results` provides decoding details for each WAV file.
+
+---
+
+## Project Structure
+
+```
+tweety_bert_paper/
+├── src/              # Core model implementation and primary codebase
+├── scripts/          # Helper scripts and utilities for one-off tasks
+├── results/          # Output data from model computations and analysis
+├── imgs/             # Generated images, plots, and visualizations
+├── files/            # NPZ files and JSON annotation databases
+├── figure_generation_scripts/  # Scripts for generating paper figures
+└── shell_scripts/    # Shell scripts for automation and deployment
+```
+
+### Directory Details
+
+- **src/**: Contains the core TweetyBERT model implementation, training logic, and essential components
+- **scripts/**: Helper utilities and standalone scripts for specific tasks or data processing
+- **results/**: Storage for computation outputs, evaluation metrics, and analysis results
+- **imgs/**: Generated visualizations, spectrograms, and other image outputs
+- **files/**: Storage for NPZ data files and JSON databases containing song annotations
+- **figure_generation_scripts/**: Specialized scripts for generating publication-ready figures
+- **shell_scripts/**: Automation scripts for running experiments and deployment
 
 ---
 
