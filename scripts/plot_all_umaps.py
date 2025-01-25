@@ -16,9 +16,9 @@ sys.path.append("src")
 from utils import load_model, load_config
 from data_class import determine_number_unique_classes
 from analysis import plot_umap_projection
+from utils import get_device
 
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = get_device()
 print(f"Using device: {device}")
 
 def plot_umap_for_layers(model, folder, config, category_colors_file, umap_data_dirs, umap_samples=1e6, min_cluster_size=500, skip_existing=True):

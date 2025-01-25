@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import time  # Add this import at the top of the file
+from utils import get_device
 
 # class ModifiedCrossEntropyLoss(nn.Module):
 #     def __init__(self, similarity_penalty_weight=0.1, entropy_weight=0.01, temperature=1.0):
@@ -229,8 +230,8 @@ class LinearProbeModel(nn.Module):
         return super(LinearProbeModel, self).to(device)
 
 class LinearProbeTrainer():
-    def __init__(self, model, train_loader, test_loader, device, lr=1e-2, plotting=False, batches_per_eval=200, desired_total_batches=1e4, patience=8, use_tqdm=True, moving_avg_window = 1):
-        self.device = device
+    def __init__(self, model, train_loader, test_loader, device=None, lr=1e-2, plotting=False, batches_per_eval=200, desired_total_batches=1e4, patience=8, use_tqdm=True, moving_avg_window=1):
+        self.device = device if device is not None else get_device()
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.test_loader = test_loader

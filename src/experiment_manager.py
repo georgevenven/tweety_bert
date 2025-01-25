@@ -10,11 +10,12 @@ from itertools import cycle
 from torch.utils.data import DataLoader
 
 class ExperimentRunner:
-    def __init__(self, device, base_save_dir='experiments'):
-        self.device = device
-        self.base_save_dir = base_save_dir
-        if not os.path.exists(base_save_dir):
-            os.makedirs(base_save_dir)
+    def __init__(self, device=None):
+        self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
+        self.base_save_dir = 'experiments'
+        if not os.path.exists(self.base_save_dir):
+            os.makedirs(self.base_save_dir)
 
     def archive_existing_experiments(self, experiment_name):
         archive_dir = os.path.join(self.base_save_dir, 'archive')

@@ -3,11 +3,13 @@
 import argparse
 import os
 import argparse
+import torch
 
 from experiment_manager import ExperimentRunner
 
 def main(args):
-    experiment_runner = ExperimentRunner(device="cuda")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    experiment_runner = ExperimentRunner(device=device)
     config = {
         "experiment_name": args.experiment_name,
         "continue_training": args.continue_training,
