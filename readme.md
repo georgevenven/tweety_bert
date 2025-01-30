@@ -1,6 +1,6 @@
 🐦 TWEETYBERT OVERVIEW 🐦
 -------------------------
-TweetyBERT combines a convolutional front-end with a transformer architecture to learn representations 
+TweetyBERT combines a convolutional front-end with a transformer architecture to learn representations
 of bird vocalizations. The model can be used for:
 - Automated/Unsupervised labeling of songbird syllables
 - Comparing embeddings before / after perturbation
@@ -11,13 +11,13 @@ For questions or collaboration inquiries, please email me at: georgev [at] Uoreg
 --------------------------------------------------------------------------------
 🚀 INSTALLATION & ENVIRONMENT SETUP 🚀
 --------------------------------------------------------------------------------
-Below is a sample workflow using Conda. This includes creating a dedicated environment, 
+Below is a sample workflow using Conda. This includes creating a dedicated environment,
 installing necessary packages, and cloning the TweetyBERT repository.
 
-**NOTE**: The steps below assume a CUDA-capable GPU (e.g., NVIDIA RTX 4090). Adjust as 
+**NOTE**: The steps below assume a CUDA-capable GPU (e.g., NVIDIA RTX 4090). Adjust as
 necessary for your system.
 
-\`\`\`bash
+~~~~bash
 # 1) Create and activate a new Conda environment
 conda create -n tweetybert python=3.11
 conda activate tweetybert
@@ -50,18 +50,18 @@ cd TweetyBERT
 # you must 'cd shell_scripts' before running them:
 # cd shell_scripts
 # ./train_decoder.sh
-\`\`\`
+~~~~
 
 --------------------------------------------------------------------------------
 💾 STORAGE REQUIREMENTS 💾
 --------------------------------------------------------------------------------
-Depending on the size of your audio dataset, the storage requirements can range 
+Depending on the size of your audio dataset, the storage requirements can range
 from **50 GB** to **1 TB** (or more). Ensure you have sufficient disk space available.
 
 --------------------------------------------------------------------------------
 ⚡ GPU & TRAINING TIMES ⚡
 --------------------------------------------------------------------------------
-Pretraining can take several hours (or days) on a single NVIDIA RTX 4090 GPU, 
+Pretraining can take several hours (or days) on a single NVIDIA RTX 4090 GPU,
 depending on your dataset size and chosen hyperparameters.
 
 --------------------------------------------------------------------------------
@@ -76,14 +76,14 @@ depending on your dataset size and chosen hyperparameters.
 --------------------------------------------------------------------------------
 📄 SONG DETECTION & JSON FORMAT 📄
 --------------------------------------------------------------------------------
-TweetyBERT uses a song detection file (JSON) to locate regions within each recording 
-where bird song is present. A single recording file can contain multiple songs, 
-and each song is stored in a separate list or segment. The JSON also supports optional 
+TweetyBERT uses a song detection file (JSON) to locate regions within each recording
+where bird song is present. A single recording file can contain multiple songs,
+and each song is stored in a separate list or segment. The JSON also supports optional
 syllable labels for performance analysis / validation.
 
 Below is a simplified example (placeholder values):
 
-\`\`\`json
+~~~~json
 {
   "filename": "bird_XXXX_YYYY_MM_DD_HH_MM_SS.wav",
   "song_present": true,
@@ -115,7 +115,7 @@ Below is a simplified example (placeholder values):
     ]
   }
 }
-\`\`\`
+~~~~
 
 - **filename**: The WAV file name  
 - **song_present**: Whether any song was detected in this file  
@@ -123,21 +123,21 @@ Below is a simplified example (placeholder values):
 - **spec_parameters**: Spectrogram parameters (e.g., step_size, nfft)  
 - **syllable_labels (optional)**: Time intervals for each labeled syllable, keyed by label ID  
 
-Typically, you will use a separate Song Detection tool to generate this JSON. 
+Typically, you will use a separate Song Detection tool to generate this JSON.
 TweetyBERT just needs to know where the songs occur (and optionally any known syllable labels).
 
 --------------------------------------------------------------------------------
 🏋️ PRETRAINING 🏋️
 --------------------------------------------------------------------------------
-TweetyBERT can be pretrained on any set of WAV files where the bird songs are marked 
+TweetyBERT can be pretrained on any set of WAV files where the bird songs are marked
 in a corresponding JSON. You generally only need to edit the following parameters:
 
-\`\`\`bash
+~~~~bash
 INPUT_DIR="/path/to/wav/files"
 SONG_DETECTION_JSON_PATH=None   # or "/path/to/song_detection.json"
 TEST_PERCENTAGE=20
 EXPERIMENT_NAME="TESTOSTERONE_MODEL"
-\`\`\`
+~~~~
 
 - **INPUT_DIR**: Path to the folder containing WAV files  
 - **SONG_DETECTION_JSON_PATH**: Path to the JSON file (or None if you don't have one)  
@@ -147,18 +147,18 @@ EXPERIMENT_NAME="TESTOSTERONE_MODEL"
 --------------------------------------------------------------------------------
 🤖 TRAINING A DECODER 🤖
 --------------------------------------------------------------------------------
-After pretraining, you can train a decoder (linear classifier) to label syllables 
+After pretraining, you can train a decoder (linear classifier) to label syllables
 (or cluster IDs, etc.). Use `train_decoder.sh` or `train_decoder_multiple_dir.sh`.
 
 Example of key variables:
 
-\`\`\`bash
+~~~~bash
 BIRD_NAME="example_bird_name"
 MODEL_NAME="EXAMPLE_MODEL_FOR_PAPER"
 WAV_FOLDER="/path/to/wav/files"
 SONG_DETECTION_JSON_PATH="/path/to/song_detection.json"
 NUM_SAMPLES=15
-\`\`\`
+~~~~
 
 - **BIRD_NAME**: A short descriptive name used in UMAP and output logs  
 - **MODEL_NAME**: The same model name (EXPERIMENT_NAME) used during pretraining  
@@ -166,7 +166,7 @@ NUM_SAMPLES=15
 - **SONG_DETECTION_JSON_PATH**: Path to the detection JSON  
 - **NUM_SAMPLES**: (Optional) Number of WAVs to sample for embedding or training  
 
-**NOTE**: If you are using the provided shell scripts, remember to `cd shell_scripts` 
+**NOTE**: If you are using the provided shell scripts, remember to `cd shell_scripts`
 before running them (or specify the path to the script).
 
 --------------------------------------------------------------------------------
@@ -174,22 +174,22 @@ before running them (or specify the path to the script).
 --------------------------------------------------------------------------------
 Once the decoder is trained, you can run inference on new WAV files:
 
-\`\`\`bash
+~~~~bash
 WAV_FOLDER="/path/to/wav/files"
 SONG_DETECTION_JSON_PATH="/path/to/song_detection.json"
 BIRD_NAME="example_bird"
 APPLY_POST_PROCESSING="True"
-\`\`\`
+~~~~
 
 - **WAV_FOLDER**: Directory of WAV files  
 - **SONG_DETECTION_JSON_PATH**: The detection JSON for these files  
 - **BIRD_NAME**: The bird name (for consistent logging)  
 - **APPLY_POST_PROCESSING**: If "True", merges or cleans up very short segments  
 
-During inference, TweetyBERT will produce a JSON database summarizing whether each 
+During inference, TweetyBERT will produce a JSON database summarizing whether each
 file had song, plus the detected syllables. Example:
 
-\`\`\`json
+~~~~json
 {
   "metadata": {
     "classifier_path": "experiments/EXAMPLE_MODEL_FOR_PAPER",
@@ -227,12 +227,12 @@ file had song, plus the detected syllables. Example:
     }
   ]
 }
-\`\`\`
+~~~~
 
 --------------------------------------------------------------------------------
 📂 PROJECT STRUCTURE 📂
 --------------------------------------------------------------------------------
-\`\`\`
+~~~~
 tweety_bert_paper/
 ├── src/              # Core model implementation and primary codebase
 ├── scripts/          # Helper scripts and utilities for one-off tasks
@@ -241,12 +241,12 @@ tweety_bert_paper/
 ├── files/            # NPZ files and JSON annotation databases
 ├── figure_generation_scripts/  # Scripts for generating paper figures
 └── shell_scripts/    # Shell scripts for automation and deployment
-\`\`\`
+~~~~
 
 DIRECTORY DETAILS:
-- **src/**: Core TweetyBERT model code, training logic, essential components  
+- **src/**: Core TweetyBERT model code, training logic, and essential components  
 - **scripts/**: Helper utilities and standalone scripts for specific tasks  
-- **results/**: Storage for computation outputs, evaluation metrics, analysis results  
+- **results/**: Storage for computation outputs, evaluation metrics, and analysis results  
 - **imgs/**: Generated visualizations, spectrograms, and other image outputs  
 - **files/**: NPZ data files and JSON databases containing song annotations  
 - **figure_generation_scripts/**: Scripts for generating publication-ready figures  
@@ -255,5 +255,5 @@ DIRECTORY DETAILS:
 --------------------------------------------------------------------------------
 🏆 HAPPY TWEETYBERTING! 🏆
 --------------------------------------------------------------------------------
-If you have any questions, suggestions, or would like to contribute, feel free to 
+If you have any questions, suggestions, or would like to contribute, feel free to
 open an issue or pull request on our repository. You can also email: georgev [at] Uoregon.edu
