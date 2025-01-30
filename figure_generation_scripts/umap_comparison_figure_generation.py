@@ -873,6 +873,6 @@ def plot_similarity_summary(results_df, save_dir):
 
 if __name__ == "__main__":
     # test on two birds
-    npz_files = ["/home/george-vengrovski/Downloads/USA5508_Seasonality_4_Groups.npz", "/home/george-vengrovski/Downloads/USA5494_Seasonality_4_Groups.npz"]
+    npz_files = ["/media/george-vengrovski/flash-drive/DOI_data_/USA5506_PrePostDOI.npz", "/media/george-vengrovski/flash-drive/DOI_data_/USA5508_PrePostDOI.npz"]
     save_dir = "imgs/test"
     results_df = analyze_multiple_birds(npz_files, save_dir)

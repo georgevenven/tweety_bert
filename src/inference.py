@@ -306,6 +306,7 @@ if __name__ == "__main__":
   parser.add_argument('--song_detection_json', type=str, default=None, help='Path to the song detection JSON file')
   parser.add_argument('--visualize', type=bool, default=False, help='Enable visualization')
   parser.add_argument('--apply_post_processing', type=bool, default=False, help='Apply post-processing')
+  parser.add_argument('--window_size', type=int, default=50, help='Window size for label smoothing')
   args = parser.parse_args()
   classifier_path = f"experiments/{args.bird_name}_linear_decoder"
   inference_spec_dst_folder = f"imgs/decoder_specs_inference_test"
