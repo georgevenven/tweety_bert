@@ -8,7 +8,14 @@ import torch
 from experiment_manager import ExperimentRunner
 
 def main(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Determine device priority: CUDA > MPS > CPU
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    
     experiment_runner = ExperimentRunner(device=device)
     config = {
         "experiment_name": args.experiment_name,
@@ -60,7 +67,7 @@ if __name__ == "__main__":
     parser.add_argument("--pitch_shift", type=bool, default=True)
     parser.add_argument("--learning_rate", type=float, default=3e-4)
     parser.add_argument("--max_steps", type=float, default=1e5)
-    parser.add_argument("--eval_interval", type=int, default=500)
+    parser.add_argument("--eval_interval", type=int, default=1)
     parser.add_argument("--save_interval", type=int, default=500)
     parser.add_argument("--context", type=int, default=1000)
     parser.add_argument("--weight_decay", type=float, default=0.0)
