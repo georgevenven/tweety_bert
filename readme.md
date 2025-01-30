@@ -1,4 +1,3 @@
-/*
 OVERVIEW
 --------
 TweetyBERT combines a convolutional front-end with a transformer architecture to learn representations of bird vocalizations. The model can be used for:
@@ -211,4 +210,3 @@ DIRECTORY DETAILS
 HAPPY TWEETYBERTING!
 --------------------
 If you have any questions, suggestions, or would like to contribute, feel free to open an issue or pull request on our repository.
-*/
