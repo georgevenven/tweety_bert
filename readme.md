@@ -244,4 +244,4 @@ tweety_bert_paper/
 
 ### Happy TweetyBERTing!
 
-If you have any questions, suggestions, or would like to contribute, feel free to open an issue or pull request on our [TweetyBERT repository](https://github.com/yourusername/TweetyBERT).
+If you have any questions, suggestions, or would like to contribute, feel free to open an issue or pull request on our repository.

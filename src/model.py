@@ -188,7 +188,8 @@ class TweetyBERT(nn.Module):
         self.transformer_encoder = nn.ModuleList([CustomEncoderBlock(d_model=d_transformer, num_heads=nhead_transformer, ffn_dim=dim_feedforward, dropout=dropout, pos_enc_type=pos_enc_type, length=length) for _ in range(transformer_layers)])        
         self.transformerDeProjection = nn.Linear(d_transformer, num_freq_bins)
 
-        self.device = "cuda:0"
+        # Replace the hardcoded CUDA device with automatic detection
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
 
     def get_layer_output_pairs(self):

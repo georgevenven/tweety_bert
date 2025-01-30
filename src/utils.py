@@ -100,3 +100,17 @@ def load_model(experiment_folder, random_init=False):
         print("Model initialized with random weights as requested.")
 
     return model
+
+def get_device():
+    """
+    Get the appropriate device (CUDA GPU, Apple M1/M2 GPU, or CPU) for PyTorch operations.
+    
+    Returns:
+        torch.device: The selected device
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")

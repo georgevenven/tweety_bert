@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from data_class import SongDataSet_Image, CollateFunction
-from utils import load_model
+from utils import load_model, get_device
 from linear_probe import LinearProbeModel, LinearProbeTrainer
 import argparse
 import matplotlib.pyplot as plt
@@ -22,7 +22,7 @@ def majority_vote(arr, window_size):
 
 class TweetyBertClassifier:
     def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = get_device()
         self.tweety_bert_model = self.load_tweety_bert(model_dir)
         self.linear_decoder_dir = linear_decoder_dir
         self.train_dir = os.path.join(linear_decoder_dir, "train")

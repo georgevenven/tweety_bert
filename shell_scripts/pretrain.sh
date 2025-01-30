@@ -1,13 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# Exit on errors, undefined variables, and propagate errors in pipelines
+set -euo pipefail
 
 # Navigate up one directory
 cd ..
 
 # Parameters
-INPUT_DIR="/home/george-vengrovski/Documents/testost_pretrain"
-SONG_DETECTION_JSON_PATH=None
+INPUT_DIR="/Users/georgev/Documents/data/yarden_data/llb3_data/llb3_songs"
+SONG_DETECTION_JSON_PATH="/Users/georgev/Documents/data/yarden_data/llb3_data/onset_offset_results.json"
 TEST_PERCENTAGE=20
-EXPERIMENT_NAME="TESTOSTERONE_MODEL"
+EXPERIMENT_NAME="Mac_Test"
+
 TEMP_DIR="./temp"
 TRAIN_FILE_LIST="$TEMP_DIR/train_files.txt"
 TEST_FILE_LIST="$TEMP_DIR/test_files.txt"
@@ -22,82 +26,85 @@ fi
 mkdir -p "$TEMP_DIR"
 echo "Created temporary directory: $TEMP_DIR"
 
-# Call the Python script to split files
-python3 scripts/split_files_into_train_and_test.py "$INPUT_DIR" "$TEST_PERCENTAGE" --train_output "$TRAIN_FILE_LIST" --test_output "$TEST_FILE_LIST"
+# 1. Split files into train and test (Python writes train_files.txt and test_files.txt)
+python3 scripts/split_files_into_train_and_test.py "$INPUT_DIR" "$TEST_PERCENTAGE" \
+        --train_output "$TRAIN_FILE_LIST" \
+        --test_output "$TEST_FILE_LIST"
 
-# Read the file lists into arrays
-mapfile -t train_files < "$TRAIN_FILE_LIST"
-mapfile -t test_files < "$TEST_FILE_LIST"
+# 2. Read the file lists into arrays
+train_files=()
+while IFS= read -r line; do
+  train_files+=( "$line" )
+done < "$TRAIN_FILE_LIST"
 
-# Use the files in subsequent commands
-echo "Train files:"
-printf '%s\n' "${train_files[@]}"
-echo "Test files:"
-printf '%s\n' "${test_files[@]}"
+test_files=()
+while IFS= read -r line; do
+  test_files+=( "$line" )
+done < "$TEST_FILE_LIST"
 
-# Create train_wav and test_wav directories inside TEMP_DIR
+# 3. Print only counts (not all filenames)
+echo "Found ${#train_files[@]} training files and ${#test_files[@]} testing files."
+
+# 4. Create directories for WAV files
 TRAIN_WAV_DIR="$TEMP_DIR/train_wav"
 TEST_WAV_DIR="$TEMP_DIR/test_wav"
 
 mkdir -p "$TRAIN_WAV_DIR"
-echo "Created training WAV directory: $TRAIN_WAV_DIR"
-
 mkdir -p "$TEST_WAV_DIR"
-echo "Created testing WAV directory: $TEST_WAV_DIR"
 
-# Copy train files into TRAIN_WAV_DIR, maintaining directory structure
+# 5. Copy train files into TRAIN_WAV_DIR, preserving directory structure
+#    We assume each line in train_files.txt is relative to $INPUT_DIR.
 for file in "${train_files[@]}"; do
-    # Get the relative path of the file from INPUT_DIR
-    rel_path="${file#$INPUT_DIR/}"
-    # Get the directory of the relative path
+    # We treat "$file" as a path relative to $INPUT_DIR
+    rel_path="$file"
+    # Derive the subdirectory path for nested folders
     dir_path=$(dirname "$rel_path")
-    # Create the directory in TRAIN_WAV_DIR
+    # Make sure the subdirectory exists in TRAIN_WAV_DIR
     mkdir -p "$TRAIN_WAV_DIR/$dir_path"
-    # Copy the file to TRAIN_WAV_DIR
-    cp "$file" "$TRAIN_WAV_DIR/$rel_path"
+    # Copy from $INPUT_DIR/$file into the mirrored path
+    cp "$INPUT_DIR/$file" "$TRAIN_WAV_DIR/$rel_path"
 done
 
-# Copy test files into TEST_WAV_DIR, maintaining directory structure
+# 6. Copy test files into TEST_WAV_DIR, preserving directory structure
 for file in "${test_files[@]}"; do
-    # Get the relative path of the file from INPUT_DIR
-    rel_path="${file#$INPUT_DIR/}"
-    # Get the directory of the relative path
+    rel_path="$file"
     dir_path=$(dirname "$rel_path")
-    # Create the directory in TEST_WAV_DIR
     mkdir -p "$TEST_WAV_DIR/$dir_path"
-    # Copy the file to TEST_WAV_DIR
-    cp "$file" "$TEST_WAV_DIR/$rel_path"
+    cp "$INPUT_DIR/$file" "$TEST_WAV_DIR/$rel_path"
 done
 
-# Create train_dir and test_dir for spectrograms
+# 7. Create train_dir and test_dir for spectrograms
 TRAIN_DIR="$TEMP_DIR/train_dir"
 TEST_DIR="$TEMP_DIR/test_dir"
 
 mkdir -p "$TRAIN_DIR"
-echo "Created training spectrogram directory: $TRAIN_DIR"
-
 mkdir -p "$TEST_DIR"
-echo "Created testing spectrogram directory: $TEST_DIR"
 
-# Use the same song detection JSON file for all directories
-# Process the train WAV directory and output spectrograms to TRAIN_DIR
-python3 src/spectogram_generator.py --src_dir "$TRAIN_WAV_DIR" --dst_dir "$TRAIN_DIR" --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+# 8. Generate spectrograms (train + test)
+python3 src/spectogram_generator.py \
+        --src_dir "$TRAIN_WAV_DIR" \
+        --dst_dir "$TRAIN_DIR" \
+        --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
 
-# Process the test WAV directory and output spectrograms to TEST_DIR
-python3 src/spectogram_generator.py --src_dir "$TEST_WAV_DIR" --dst_dir "$TEST_DIR" --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+python3 src/spectogram_generator.py \
+        --src_dir "$TEST_WAV_DIR" \
+        --dst_dir "$TEST_DIR" \
+        --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
 
-# Run TweetyBERT with the generated spectrogram directories
-python3 src/TweetyBERT.py --experiment_name "$EXPERIMENT_NAME" --train_dir "$TRAIN_DIR" --test_dir "$TEST_DIR"
+# 9. Run TweetyBERT
+python3 src/TweetyBERT.py \
+        --experiment_name "$EXPERIMENT_NAME" \
+        --train_dir "$TRAIN_DIR" \
+        --test_dir "$TEST_DIR"
 
-# Create experiments directory if it doesn't exist (it should exist by now, but just in case)
+# 10. Save file lists into the experiment folder
 EXPERIMENT_DIR="experiments/$EXPERIMENT_NAME"
 mkdir -p "$EXPERIMENT_DIR"
 
-# Copy train and test file lists to experiments directory
 cp "$TRAIN_FILE_LIST" "$EXPERIMENT_DIR/train_files.txt"
 cp "$TEST_FILE_LIST" "$EXPERIMENT_DIR/test_files.txt"
 echo "Copied train and test file lists to: $EXPERIMENT_DIR"
 
-# Delete the temp directory after processing is complete
+# 11. Clean up temp directory
 rm -rf "$TEMP_DIR"
 echo "Deleted temporary directory and its contents: $TEMP_DIR"
