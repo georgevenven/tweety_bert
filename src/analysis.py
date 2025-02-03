@@ -5,7 +5,7 @@ import matplotlib.colors as mcolors
 import os
 from collections import Counter
 import umap
-from src.data_class import SongDataSet_Image, CollateFunction
+from data_class import SongDataSet_Image, CollateFunction
 from torch.utils.data import DataLoader
 import glasbey
 from sklearn.metrics.cluster import completeness_score
@@ -163,13 +163,12 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
 #     fig3.savefig(os.path.join(experiment_dir, "overlap.svg"))
 #     plt.close(fig3)
 
-    
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
-                         layer_index=None, dict_key=None, 
-                         context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True, 
-                         remove_non_vocalization=True, min_cluster_size=500):
+                        layer_index=None, dict_key=None, 
+                        context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True, 
+                        remove_non_vocalization=True, min_cluster_size=500):
     """
-    Parameters:
+    parameters:
     - data_dirs: list of data directories to analyze
     """
     predictions_arr = []
@@ -177,20 +176,20 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     spec_arr = []
     vocalization_arr = []
     file_indices_arr = []
-    dataset_indices_arr = []  # Initialize this array
+    dataset_indices_arr = []  # initialize this array
     file_map = {}
     current_file_index = 0
 
-    # Reset Figure
+    # reset figure
     plt.figure(figsize=(8, 6))
 
     samples = int(samples)
     total_samples = 0
 
-    # Calculate samples per dataset
+    # calculate samples per dataset
     samples_per_dataset = samples // len(data_dirs)
     
-    # Iterate through each dataset
+    # iterate through each dataset
     for dataset_idx, data_dir in enumerate(data_dirs):
         data_loader = load_data(data_dir=data_dir, context=context)
         data_loader_iter = iter(data_loader)
@@ -198,10 +197,10 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
 
         while dataset_samples < samples_per_dataset:
             try:
-                # Retrieve the next batch
+                # retrieve the next batch
                 data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
 
-                # Temporary fix for corrupted data
+                # temporary fix for corrupted data
                 if data.shape[1] < 100:
                     continue
 
@@ -209,20 +208,20 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 original_data_length = data.shape[1]
                 original_label_length = ground_truth_label.shape[1]
 
-                # Pad data to the nearest context size in the time dimension
+                # pad data to the nearest context size in the time dimension
                 total_time = data.shape[1]
                 pad_size_time = (context - (total_time % context)) % context
                 data = F.pad(data, (0, 0, 0, pad_size_time), 'constant', 0)
 
-                # Calculate the number of context windows in the song
+                # calculate the number of context windows in the song
                 num_times = data.shape[1] // context
 
                 batch, time_bins, freq = data.shape
 
-                # Reshape data to fit into multiple context-sized batches
+                # reshape data to fit into multiple context-sized batches
                 data = data.reshape(batch * num_times, context, freq)
 
-                # Pad ground truth labels to match data padding in time dimension
+                # pad ground truth labels to match data padding in time dimension
                 total_length_labels = ground_truth_label.shape[1]
                 pad_size_labels_time = (context - (total_length_labels % context)) % context
                 ground_truth_label = F.pad(ground_truth_label, (0, 0, 0, pad_size_labels_time), 'constant', 0)
@@ -231,7 +230,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 ground_truth_label = ground_truth_label.reshape(batch * num_times, context, num_classes)
                 vocalization = vocalization.reshape(batch * num_times, context)
 
-                # Store file information
+                # store file information
                 if file_path not in file_map:
                     file_map[current_file_index] = file_path
                 else:
@@ -247,7 +246,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                     output = layer_output_dict.get(dict_key, None)
 
                     if output is None:
-                        print(f"Invalid key: {dict_key}. Skipping this batch.")
+                        print(f"invalid key: {dict_key}. skipping this batch.")
                         continue
 
                     batches, time_bins, features = output.shape
@@ -276,11 +275,11 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
 
                 ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
 
-                # Create file_indices first
+                # create file_indices first
                 file_indices = np.array(ground_truth_label.cpu().numpy())
                 file_indices[:] = current_file_index
 
-                # Now create dataset_indices using the shape of file_indices
+                # now create dataset_indices using the shape of file_indices
                 dataset_indices = np.full_like(file_indices, dataset_idx)
 
                 spec_arr.append(spec.cpu().numpy())
@@ -298,10 +297,10 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 dataset_samples += spec.shape[0]
 
             except StopIteration:
-                print(f"Dataset {data_dir} exhausted after {dataset_samples} samples")
+                print(f"dataset {data_dir} exhausted after {dataset_samples} samples")
                 break
 
-    # Convert the list of batch * samples * features to samples * features
+    # convert the list of batch * samples * features to samples * features
     ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
     spec_arr = np.concatenate(spec_arr, axis=0)
     file_indices = np.concatenate(file_indices_arr, axis=0)
@@ -315,7 +314,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     else:
         predictions = spec_arr
 
-    # Filter for vocalization before any processing or visualization
+    # filter for vocalization before any processing or visualization
     if remove_non_vocalization:
         print(f"vocalization arr shape {vocalization_arr.shape}")
         print(f"predictions arr shape {predictions.shape}")
@@ -327,72 +326,79 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         ground_truth_labels = ground_truth_labels[vocalization_indices]
         spec_arr = spec_arr[vocalization_indices]
         file_indices = file_indices[vocalization_indices]
-        dataset_indices = dataset_indices[vocalization_indices]  # Add this line
+        dataset_indices = dataset_indices[vocalization_indices]
 
-    # Limit to the specified number of samples
-    if samples > len(predictions):
-        samples = len(predictions)
-    else:
-        predictions = predictions[:samples]
-        ground_truth_labels = ground_truth_labels[:samples]
-        spec_arr = spec_arr[:samples]
-        file_indices = file_indices[:samples]
-        dataset_indices = dataset_indices[:samples]  # Add this line
-        vocalization_arr = vocalization_arr[:samples]
+    # group samples by song and truncate each group to a fixed size
+    unique_files = np.unique(file_indices)
+    desired_per_file = samples // len(unique_files)
+    selected_indices = []
+    for f in unique_files:
+        inds = np.where(file_indices == f)[0]
+        if len(inds) > desired_per_file:
+            inds = inds[:desired_per_file]
+        selected_indices.append(inds)
+    selected_indices = np.concatenate(selected_indices)
 
-    # Fit the UMAP reducer       
-    print("Initializing UMAP reducer...")
+    predictions = predictions[selected_indices]
+    ground_truth_labels = ground_truth_labels[selected_indices]
+    spec_arr = spec_arr[selected_indices]
+    file_indices = file_indices[selected_indices]
+    dataset_indices = dataset_indices[selected_indices]
+    vocalization_arr = vocalization_arr[selected_indices]
+
+    # fit the umap reducer       
+    print("initializing umap reducer...")
     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
-    print("UMAP reducer initialized.")
+    print("umap reducer initialized.")
 
     embedding_outputs = reducer.fit_transform(predictions)
-    print("UMAP fitting complete. Shape of embedding outputs:", embedding_outputs.shape)
+    print("umap fitting complete. shape of embedding outputs:", embedding_outputs.shape)
 
-    print("Generating HDBSCAN labels...")
+    print("generating hdbscan labels...")
     hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
-    print("HDBSCAN labels generated. Unique labels found:", np.unique(hdbscan_labels))
+    print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
 
-    # Get unique labels and create color palettes
+    # get unique labels and create color palettes
     unique_clusters = np.unique(hdbscan_labels)
     unique_ground_truth_labels = np.unique(ground_truth_labels)
     
     def create_color_palette(n_colors):
-        """Create a color palette with the specified number of colors"""
+        """create a color palette with the specified number of colors"""
         colors = glasbey.create_palette(palette_size=n_colors)
         
         def hex_to_rgb(hex_str):
-            # Remove '#' if present
+            # remove '#' if present
             hex_str = hex_str.lstrip('#')
-            # Convert hex to RGB
+            # convert hex to rgb
             return tuple(int(hex_str[i:i+2], 16)/255.0 for i in (0, 2, 4))
         
-        # Convert hex colors to RGB tuples
+        # convert hex colors to rgb tuples
         rgb_colors = [hex_to_rgb(color) for color in colors]
         return rgb_colors
 
-    # Create color palettes
+    # create color palettes
     n_ground_truth_labels = len(unique_ground_truth_labels)
     n_hdbscan_clusters = len(unique_clusters)
     ground_truth_colors = create_color_palette(n_ground_truth_labels)
     hdbscan_colors = create_color_palette(n_hdbscan_clusters)
     
-    # Make the first color in the HDBSCAN palette black
+    # make the first color in the hdbscan palette black
     hdbscan_colors[0] = (0, 0, 0)
 
-    # Create experiment-specific directory for images
+    # create experiment-specific directory for images
     experiment_dir = os.path.join("imgs", "umap_plots", save_name)
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
 
-    # Plot HDBSCAN labels
+    # plot hdbscan labels
     fig1, ax1 = plt.subplots(figsize=(16, 16), facecolor='white')
     ax1.set_facecolor('white')
     ax1.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
                c=hdbscan_labels, s=10, alpha=0.1, 
                cmap=mcolors.ListedColormap(hdbscan_colors))
-    ax1.set_title("HDBSCAN Discovered Labels", fontsize=48)
-    ax1.set_xlabel('UMAP Dimension 1', fontsize=48)
-    ax1.set_ylabel('UMAP Dimension 2', fontsize=48)
+    ax1.set_title("hdbscan discovered labels", fontsize=48)
+    ax1.set_xlabel("umap dimension 1", fontsize=48)
+    ax1.set_ylabel("umap dimension 2", fontsize=48)
     ax1.tick_params(axis='both', which='both', bottom=False, left=False,
                    labelbottom=False, labelleft=False)
     plt.tight_layout()
@@ -400,15 +406,15 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 facecolor=fig1.get_facecolor(), edgecolor='none')
     plt.close(fig1)
 
-    # Plot Ground Truth labels
+    # plot ground truth labels
     fig2, ax2 = plt.subplots(figsize=(16, 16), facecolor='white')
     ax2.set_facecolor('white')
     ax2.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
                c=ground_truth_labels, s=10, alpha=0.1,
                cmap=mcolors.ListedColormap(ground_truth_colors))
-    ax2.set_title("Ground Truth Labels", fontsize=48)
-    ax2.set_xlabel('UMAP Dimension 1', fontsize=48)
-    ax2.set_ylabel('UMAP Dimension 2', fontsize=48)
+    ax2.set_title("ground truth labels", fontsize=48)
+    ax2.set_xlabel("umap dimension 1", fontsize=48)
+    ax2.set_ylabel("umap dimension 2", fontsize=48)
     ax2.tick_params(axis='both', which='both', bottom=False, left=False,
                    labelbottom=False, labelleft=False)
     plt.tight_layout()
@@ -416,7 +422,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 facecolor=fig2.get_facecolor(), edgecolor='none')
     plt.close(fig2)
 
-    # Save the data
+    # save the data
     np.savez(
         f"files/{save_name}",
         embedding_outputs=embedding_outputs,
@@ -432,6 +438,8 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         dataset_indices=dataset_indices,
         file_map=file_map
     )
+
+
 
 # def apply_windowing(arr, window_size, stride, flatten_predictions=False):
 #     """

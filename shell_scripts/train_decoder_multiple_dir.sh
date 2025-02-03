@@ -1,22 +1,22 @@
 #!/bin/bash
 
-# Navigate up one directory
-cd ..
-
-# Variables for model and bird names
-BIRD_NAME="LLb3_test_with_modification_toscrtipt"
+# =====================
+# Parameters
+# =====================
+BIRD_NAME="llb3"
 MODEL_NAME="LLB_Model_For_Paper"
+NUM_SAMPLES="1e5"  # Number of samples for UMAP
 
-# Specify the WAV folder and song detection JSON path
-WAV_FOLDER="/media/george-vengrovski/George-SSD/llb_stuff/llb_birds/yarden_data/llb3_songs"
-SONG_DETECTION_JSON_PATH="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/onset_offset_results.json"
-
-# Number of samples to select (optional)
-NUM_SAMPLES=15
+# Data paths
+WAV_FOLDER="/media/george-vengrovski/disk1/canary/canary_recordings/USA5347"
+SONG_DETECTION_JSON_PATH="/media/george-vengrovski/flash-drive/jsons/merged_output.json"
 
 # Temporary directory paths
 TEMP_DIR="./temp"
 OUTPUT_PATH="$TEMP_DIR"
+
+# Navigate up one directory
+cd ..
 
 # Create temporary directories if they don't exist
 mkdir -p "$TEMP_DIR"
@@ -26,8 +26,7 @@ echo "Created temporary directories"
 python scripts/copy_files_from_wavdir_to_multiple_event_dirs.py \
     "$WAV_FOLDER" \
     "$SONG_DETECTION_JSON_PATH" \
-    "$OUTPUT_PATH" \
-    --num_samples $NUM_SAMPLES
+    "$OUTPUT_PATH"
 
 # Initialize an array to store spectrogram directories
 DATA_DIRS=()
@@ -54,7 +53,7 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "${DATA_DIRS[@]}" \
     --save_name "$BIRD_NAME" \
-    --samples 1e4
+    --samples $NUM_SAMPLES
 
 # Train and save Decoder
 python src/decoder.py --experiment_name "$MODEL_NAME" --bird_name "$BIRD_NAME"
