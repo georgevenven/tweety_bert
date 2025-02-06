@@ -8,8 +8,12 @@ from tqdm import tqdm
 import os
 import re
 from sklearn.metrics import v_measure_score
+import sys
+# Add both parent and src directories to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+sys.path.append(os.path.join(project_root, 'src'))
 
-# If needed: from src.analysis import ComputerClusterPerformance
 from src.analysis import ComputerClusterPerformance
 
 ##############################################################################
@@ -232,11 +236,14 @@ def plot_matrix(
     cmap='viridis'
 ):
     """
-    Basic matrix plot with no reordering.
+    Matrix plot with square cells but allowing rectangular overall shape.
     """
-    fig, ax = plt.subplots(figsize=(9,9))
-    ax.set_aspect('equal', adjustable='box')
+    row_count, col_count = matrix.shape
+    base_scale = 0.3  # Adjust this to control overall size
+    fig_width  = col_count * base_scale
+    fig_height = row_count * base_scale
     
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     cax = ax.imshow(matrix, cmap=cmap, aspect='equal', origin='upper')
     fig.colorbar(cax, ax=ax, label='Value')
     
@@ -271,8 +278,7 @@ def diagonalize_and_plot_matrix(
     output_path: str
 ):
     """
-    Reorder the matrix using Hungarian LSA on (-matrix.T) => maximizing sum of matrix,
-    so matched row/col appear along the diagonal. We keep -1 in the row/col if present.
+    Reorder matrix using Hungarian LSA, with square cells.
     """
     gt_labels   = np.array(gt_labels, dtype=int)
     pred_labels = np.array(pred_labels, dtype=int)
@@ -282,8 +288,13 @@ def diagonalize_and_plot_matrix(
     
     diag_mat = matrix[np.ix_(col_ind, row_ind)]
     
-    fig, ax = plt.subplots(figsize=(9,9))
-    ax.set_aspect('equal', adjustable='box')
+    # Set figure size based on matrix shape
+    row_count, col_count = diag_mat.shape
+    base_scale = 0.3  # Adjust this to control overall size
+    fig_width  = col_count * base_scale
+    fig_height = row_count * base_scale
+    
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     cax = ax.imshow(diag_mat, cmap='viridis', aspect='equal')
     fig.colorbar(cax, ax=ax, label='Value')
     
@@ -315,7 +326,7 @@ def diagonalize_and_plot_matrix_full(
     title: str,
     output_path: str
 ):
-    """Full reorder: matched pairs first, unmatched last."""
+    """Full reorder with square cells: matched pairs first, unmatched last."""
     cost_mat = -matrix.T
     row_idx, col_idx = linear_sum_assignment(cost_mat)
     
@@ -332,9 +343,13 @@ def diagonalize_and_plot_matrix_full(
     new_cols = matched_cols + leftover_cols
     M_full = matrix[np.ix_(new_rows, new_cols)]
     
-    # Plot
-    fig, ax = plt.subplots(figsize=(9,9))
-    ax.set_aspect('equal', adjustable='box')
+    # Set figure size based on matrix shape
+    row_count, col_count = M_full.shape
+    base_scale = 0.3  # Adjust this to control overall size
+    fig_width  = col_count * base_scale
+    fig_height = row_count * base_scale
+    
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     cax = ax.imshow(M_full, cmap='viridis', aspect='equal')
     fig.colorbar(cax, ax=ax, label='Value')
     ax.set_title(title + " (Full Reorder)", fontsize=14)
@@ -373,7 +388,8 @@ def process_all_folds(files: List[str],
                          List[str],   List[str],    # phrase-level bird/fold IDs
                          List[int],                 # phrase-level counts
                          float, float,              # overall FER (mapped-only), overall FER (-1=error)
-                         Dict[Tuple[str,int], float]# (bird, gt_label): FER (mapped-only)
+                         Dict[Tuple[str,int], float], # (bird, gt_label): FER (mapped-only)
+                         Counter                    # predicted label frequencies
                      ]:
     """
     For each fold:
@@ -383,12 +399,17 @@ def process_all_folds(files: List[str],
       4) Compute mismatch in two ways
       5) Compute phrase-level stats (entropy, length)
       6) Possibly produce step-by-step outputs (plots + text logs).
+      7) Track predicted label frequencies
 
     Returns:
       - phrase-level stats for correlation
       - two overall FER
-      - a dict of per-bird/per-label mismatch% (mapped-only).
+      - a dict of per-bird/per-label mismatch% (mapped-only)
+      - Counter of predicted label frequencies
     """
+    # Create an aggregate counter for all predicted labels after smoothing
+    pred_label_freq = Counter()
+
     ground_truth_entropies = []
     hdbscan_entropies      = []
     ground_truth_lengths   = []
@@ -448,6 +469,9 @@ def process_all_folds(files: List[str],
         pred_filled = computer_cluster.fill_noise_with_nearest_label(hdbscan_labels)
         pred_smooth = smooth_per_song(pred_filled, dataset_indices, smoothing_window, computer_cluster)
         
+        # Update overall frequency counter
+        pred_label_freq.update(pred_smooth.tolist())
+
         if len(pred_smooth)==0 or np.all(pred_smooth==-1):
             continue
         
@@ -619,7 +643,8 @@ def process_all_folds(files: List[str],
     return (ground_truth_entropies, hdbscan_entropies,
             ground_truth_lengths, hdbscan_lengths,
             bird_ids, fold_ids, phrase_counts,
-            overall_fer_mapped, overall_fer_any, per_bird_phrase_fer)
+            overall_fer_mapped, overall_fer_any, per_bird_phrase_fer,
+            pred_label_freq)
 
 
 def calculate_max_values_for_folder(files: List[str], labels_path: str) -> Tuple[float,float]:
@@ -833,32 +858,46 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
     re = [x[1] for x in entropy_results]
     rl = [x[1] for x in length_results]
     
-    fig, ax1 = plt.subplots(figsize=(10,6))
+    # Increase figure size
+    fig = plt.figure(figsize=(15, 16.5))
     
-    # Create second y-axis sharing same x-axis
+    # Create two gridspec areas - one for text, one for plot
+    gs = plt.GridSpec(2, 1, height_ratios=[1, 6])
+    
+    # Text axis (top 1/7 of figure)
+    ax_text = fig.add_subplot(gs[0])
+    ax_text.axis('off')
+    
+    # Plot axes (bottom 6/7 of figure)
+    ax1 = fig.add_subplot(gs[1])
     ax2 = ax1.twinx()
     
-    # Plot correlations on left axis
-    l1 = ax1.plot(ws, re, 's-', color='#2ecc71', linewidth=2, markersize=8, label='Entropy r')
-    l2 = ax1.plot(ws, rl, '^-', color='#3498db', linewidth=2, markersize=8, label='Duration r')
+    # Make the plot region square by setting aspect ratio
+    ax1.set_aspect('auto')
+    
+    # Increase font sizes
+    FONT_SIZE = 24
+    MARKER_SIZE = 16
+    LINE_WIDTH = 4
+    
+    # Plot correlations on left axis with larger markers and lines
+    ax1.plot(ws, re, 's-', color='#2ecc71', linewidth=LINE_WIDTH, markersize=MARKER_SIZE)
+    ax1.plot(ws, rl, '^-', color='#3498db', linewidth=LINE_WIDTH, markersize=MARKER_SIZE)
     
     # Plot V-measure on right axis
-    l3 = ax2.plot(ws, vs, 'o-', color='#e74c3c', linewidth=2, markersize=8, label='V-measure')
+    ax2.plot(ws, vs, 'o-', color='#e74c3c', linewidth=LINE_WIDTH, markersize=MARKER_SIZE)
     
-    # Set labels
-    ax1.set_xlabel("Smoothing Window Size")
-    ax1.set_ylabel("Correlation (r)")
-    ax2.set_ylabel("V-measure")
+    # Set labels with larger font
+    ax1.set_xlabel("Smoothing Window Size", fontsize=FONT_SIZE)
+    ax1.set_ylabel("Correlation (r)", fontsize=FONT_SIZE)
+    ax2.set_ylabel("V-measure", fontsize=FONT_SIZE)
     
-    plt.title("Evaluation Metrics vs Window Size")
+    # Increase tick label sizes
+    ax1.tick_params(axis='both', which='major', labelsize=FONT_SIZE-2)
+    ax2.tick_params(axis='both', which='major', labelsize=FONT_SIZE-2)
     
-    # Add grid but only for left axis
-    ax1.grid(True, alpha=0.3)
-    
-    # Combine legends
-    lns = l1 + l2 + l3
-    labs = [l.get_label() for l in lns]
-    ax1.legend(lns, labs, loc='center right')
+    # Add title with larger font
+    plt.title("Evaluation Metrics vs Window Size", fontsize=FONT_SIZE+2, pad=20)
     
     # Calculate means for text box
     mean_v = np.nanmean(vs) if len(vs)>0 else 0.0
@@ -869,19 +908,21 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
                 f'Mean Entropy r: {mean_re:.3f}\n'
                 f'Mean Duration r: {mean_rl:.3f}')
     
-    # Position text box
-    ax1.text(0.02, 0.98, text_str,
-            transform=ax1.transAxes,
-            verticalalignment='top',
-            bbox=dict(facecolor='white', alpha=0.9))
+    # Add text to the top axis with larger font
+    ax_text.text(0.02, 0.5, text_str,
+                transform=ax_text.transAxes,
+                verticalalignment='center',
+                fontsize=FONT_SIZE-4)
     
+    # Adjust layout
     plt.tight_layout()
+    
     if output_dir:
-        plt.savefig(os.path.join(output_dir, 'metrics_by_window.png'), dpi=300)
-        plt.savefig(os.path.join(output_dir, 'metrics_by_window.svg'), format='svg')
+        plt.savefig(os.path.join(output_dir, 'metrics_by_window.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(output_dir, 'metrics_by_window.svg'), format='svg', bbox_inches='tight')
     else:
-        plt.savefig('metrics_by_window.png', dpi=300)
-        plt.savefig('metrics_by_window.svg', format='svg')
+        plt.savefig('metrics_by_window.png', dpi=300, bbox_inches='tight')
+        plt.savefig('metrics_by_window.svg', format='svg', bbox_inches='tight')
     plt.close()
 
 
@@ -889,7 +930,7 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
 #                               MAIN SCRIPT
 ##############################################################################
 if __name__ == "__main__":
-    folder_path = "/media/george-vengrovski/66AA-9C0A/temp"
+    folder_path = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"
     output_dir  = "results/proxy_metrics"
     os.makedirs(output_dir, exist_ok=True)
     
@@ -898,7 +939,7 @@ if __name__ == "__main__":
     
     # Smoothing windows to test
     # (Example range: 0, 252, 504, etc.)
-    window_sizes = list(range(0, 501, 50))
+    window_sizes = list(range(0, 26, 25))
     
     for wsize in window_sizes:
         window_dirs[wsize] = os.path.join(output_dir, f'window_{wsize}')
@@ -918,11 +959,11 @@ if __name__ == "__main__":
     v_measure_results = []
     entropy_results = []
     length_results = []
-    
+    label_frequencies_by_window = {}
+
     best_wsize = None
-    best_v_score = -999
+    best_fer = None
     
-    ###########################################################################
     # Run each window, store intermediate data
     ###########################################################################
     for wsize in tqdm(window_sizes, desc="Testing smoothing windows"):
@@ -933,18 +974,20 @@ if __name__ == "__main__":
         
         (gt_e, hd_e, gt_l, hd_l, 
          birds, folds, counts,
-         overall_fer_mapped, overall_fer_any, bird_phrase_fer) = process_all_folds(
+         overall_fer_mapped, overall_fer_any, bird_phrase_fer,
+         pred_label_freq) = process_all_folds(
              all_npz_files, wsize, labels_path=folder_path,
              output_dir=current_window_dir,
              do_step_plots=do_plots
         )
+        
+        label_frequencies_by_window[wsize] = pred_label_freq
         
         # Weighted correlations
         r_e = calculate_weighted_pearson(np.array(gt_e), np.array(hd_e), np.array(counts))
         r_l = calculate_weighted_pearson(np.array(gt_l), np.array(hd_l), np.array(counts))
         
         # For demonstration, let's do a v_measure with just the first file
-        # If you want a global v_measure, you'd do a more careful approach
         if len(all_npz_files) > 0:
             data = np.load(all_npz_files[0])
             comp_cluster = ComputerClusterPerformance(labels_path=folder_path)
@@ -961,8 +1004,9 @@ if __name__ == "__main__":
         entropy_results.append((wsize, r_e))
         length_results.append((wsize, r_l))
         
-        if v_score > best_v_score:
-            best_v_score = v_score
+        # Change best window selection to use FER instead of v_score
+        if best_wsize is None or overall_fer_mapped < best_fer:
+            best_fer = overall_fer_mapped
             best_wsize = wsize
     
     ###########################################################################
@@ -971,7 +1015,8 @@ if __name__ == "__main__":
     best_window_corr_dir = window_dirs[best_wsize]
     (gt_e_best, hd_e_best, gt_l_best, hd_l_best,
      birds_best, folds_best, counts_best,
-     overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best) = \
+     overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
+     best_window_pred_label_freq) = \
          process_all_folds(
              all_npz_files, best_wsize, labels_path=folder_path,
              output_dir=best_window_corr_dir,
@@ -1005,24 +1050,13 @@ if __name__ == "__main__":
             )
         
         f.write("\n\n--- BEST WINDOW SELECTION ---\n\n")
-        f.write(f"  * The best window by V-measure is: {best_wsize}  (v_score={best_v_score:.3f})\n\n")
+        f.write(f"  * The best window by Frame Error Rate is: {best_wsize}  (FER={best_fer:.3f}%)\n\n")
         
         f.write("=== FINAL RESULTS for BEST WINDOW ===\n")
         f.write(f"Window = {best_wsize}\n")
         f.write(f"Overall FER (mapped only) : {overall_fer_mapped_best:.2f}%\n")
         f.write(f"Overall FER (with -1 err) : {overall_fer_any_best:.2f}%\n\n")
-        
-        f.write("Per-Bird, Per-Label FER (mapped only):\n")
-        f.write("--------------------------------------\n")
-        birds_in_dict = sorted({k[0] for k in bird_phrase_fer_best.keys()})
-        for b in birds_in_dict:
-            f.write(f"  Bird '{b}':\n")
-            labels_for_b = sorted(lbl for (bb,lbl) in bird_phrase_fer_best.keys() if bb==b)
-            for lbl in labels_for_b:
-                ferval = bird_phrase_fer_best[(b,lbl)]
-                f.write(f"    Label {lbl:2d} => mismatch: {ferval:.2f}%\n")
-            f.write("\n")
-    
+
     ###########################################################################
     # Also produce correlation plots for the best window
     ###########################################################################
@@ -1034,6 +1068,24 @@ if __name__ == "__main__":
         output_dir=best_window_corr_dir
     )
     
+    # Add frequency reports for each window
+    for wsize in window_sizes:
+        freq_dict = label_frequencies_by_window[wsize]
+        f.write(f"\n=== Predicted Label Frequency for Window {wsize} ===\n")
+        c_total = sum(freq_dict.values())
+        for lbl, ct in sorted(freq_dict.items()):
+            if lbl != -1:
+                freq = 100.0 * ct / c_total if c_total > 0 else 0.0
+                f.write(f"   Label {lbl:3d}: count={ct:8d}, freq={freq:6.2f}%\n")
+    
+    # Add frequency report for best window
+    f.write("\n=== Predicted Label Frequency for Best Window ===\n")
+    c_total_best = sum(best_window_pred_label_freq.values())
+    for lbl, ct in sorted(best_window_pred_label_freq.items()):
+        if lbl != -1:
+            freq = 100.0 * ct / c_total_best if c_total_best > 0 else 0.0
+            f.write(f"   Label {lbl:3d}: count={ct:8d}, freq={freq:6.2f}%\n")
+
     print("\nALL DONE!")
     print(" * Detailed per-window summaries are in each window_{N} folder.")
     print(" * A consolidated 'all_windows_summary.txt' is in:", output_dir)
