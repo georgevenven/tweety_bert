@@ -159,7 +159,7 @@ def generate_all_spectrograms(file_path, segment_length, step_size, output_dir):
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "/media/george-vengrovski/66AA-9C0A/temp/llb11_for_paper.npz"
+    file_path = "/media/george-vengrovski/66AA-9C0A/yarden_umaps_for_paper/llb3_for_paper.npz"
     
     # Hyperparameters
     segment_length = 1000  # Length of each spectrogram window

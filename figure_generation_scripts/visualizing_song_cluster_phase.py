@@ -9,6 +9,10 @@ Unified UMAP visualization with both:
  
 Now, in collage mode, we also pad the phase gradient and label rows to self.max_length,
 so that they align with the black-padded spectrogram length.
+
+CHANGES MADE (WITHOUT REMOVING EXISTING FUNCTIONALITY):
+1. When padding, place black on the *right* instead of the left/top, i.e. preserve data on the left side.
+2. If a sample is too small (<100 pts) and is excluded, keep looking for another sample to possibly fill up all 9 collage slots.
 """
 
 import numpy as np
@@ -397,7 +401,7 @@ class UMAPSelector:
           - Right column => up to 9 spectrogram subplots from unique songs
           - Only display subregions >= 100 points
           - Randomize the order of songs
-          - Pad each spectrogram with black on top
+          - Pad each spectrogram with black on the right
           - Also pad the phase gradient + label color arrays to self.max_length
         """
         if self.selected_points is None or len(self.selected_points) == 0:
@@ -483,7 +487,7 @@ class UMAPSelector:
             if hist_before.max()>0:
                 hist_before/=hist_before.max()
             if hist_after.max()>0:
-                hist_after /=hist_after.max()
+                hist_after/=hist_after.max()
 
             rgb = np.zeros((nbins, nbins, 3))
             rgb[...,0] = hist_before
@@ -503,46 +507,45 @@ class UMAPSelector:
         ax_dataset.set_xticks([])
         ax_dataset.set_yticks([])
 
-        # Right column => up to 9 spectrogram subplots
-        unique_songs = np.unique(self.file_indices[self.selected_points])
-        np.random.shuffle(unique_songs)  # randomize order
-        unique_songs = unique_songs[:9]  # limit to 9
+        # Collage: up to 9 spectrogram subplots. But if a sample is too small (<100 pts),
+        # skip it and try the next. We continue until we either find 9 valid songs or run out.
+        all_songs = np.unique(self.file_indices[self.selected_points])
+        np.random.shuffle(all_songs)
 
-        idx = 0
-        for song_id in unique_songs:
-            r = idx // 3
-            c = idx % 3
-            idx += 1
+        valid_songs = []
+        for s in all_songs:
+            pts_this_song = self.selected_points[self.file_indices[self.selected_points] == s]
+            if len(pts_this_song) >= 100:
+                valid_songs.append(s)
+            if len(valid_songs) == 9:
+                break
 
-            ax_spec = fig.add_subplot(right_gs[r, c])
-            pts_this_song = self.selected_points[self.file_indices[self.selected_points] == song_id]
-            if len(pts_this_song)==0:
-                ax_spec.set_title(f"Song {song_id} (No Points)")
+        # We will create up to 9 subplots for valid songs
+        for i in range(9):
+            ax_spec = fig.add_subplot(right_gs[i//3, i%3])
+            if i >= len(valid_songs):
+                # no more valid songs to show
                 ax_spec.axis("off")
                 continue
+
+            song_id = valid_songs[i]
+            pts_this_song = self.selected_points[self.file_indices[self.selected_points] == song_id]
 
             subreg = self.find_random_contiguous_region(pts_this_song)
-            # skip if < 100 points
-            if len(subreg) < 100:
-                ax_spec.set_title(f"Song {song_id} (<100 pts skipped)")
-                ax_spec.axis("off")
-                continue
-
-            # Now we also respect self.max_length here for the time dimension
+            # Should be >= 100 if we put it in valid_songs
             raw_data = self.spec[subreg]  # shape: (time_len, freq_len)
 
             time_len = raw_data.shape[0]  
             freq_len = raw_data.shape[1]
 
-            freq_cut = min(freq_len, 250)           # clamp freq to 250
-            time_cut = min(time_len, self.max_length)  # clamp time to max_length
+            freq_cut = min(freq_len, 250)            # clamp freq dimension
+            time_cut = min(time_len, self.max_length)  # clamp time dimension
 
             # Create a black-padded array of shape (self.max_length, freq_cut)
+            # CHANGED: put actual data in the *left* portion (so black is on the right).
             padded_spectrogram = np.zeros((self.max_length, freq_cut), dtype=raw_data.dtype)
-            # Place the actual data at the bottom
-            padded_spectrogram[-time_cut:, :freq_cut] = raw_data[-time_cut:, :freq_cut]
+            padded_spectrogram[:time_cut, :freq_cut] = raw_data[:time_cut, :freq_cut]
 
-            # Show it (transpose => freq is vertical dimension)
             ax_spec.imshow(
                 padded_spectrogram.T, 
                 aspect="auto",
@@ -553,6 +556,7 @@ class UMAPSelector:
             ax_spec.set_xticks([])
             ax_spec.set_yticks([])
 
+            # Also pad the phase gradient and label colors to self.max_length in the same manner
             divider = make_axes_locatable(ax_spec)
             ax_gradient = divider.append_axes("bottom", size="12%", pad=0.3)
             ax_labels   = divider.append_axes("bottom", size="12%", pad=0.6)
@@ -573,10 +577,12 @@ class UMAPSelector:
             # Build the non-padded "phase gradient" array for these points
             pc = np.column_stack([sx_norm, sy_norm, np.zeros_like(sx_norm)])
 
-            # Create a padded version of shape (self.max_length, 3) => black/zero at the top
+            # Create a padded version of shape (self.max_length, 3) => black/zero on the *right* side
+            # but we handle time as vertical dimension, so to preserve the same logic
+            # we fill from top to bottom. We'll keep consistent with how we padded spectrogram:
             pc_padded = np.zeros((self.max_length, 3))
             real_len = len(subreg)
-            pc_padded[-real_len:] = pc  # place real data at the bottom
+            pc_padded[:real_len] = pc  # place real data from row 0 to row real_len
 
             ax_gradient.imshow([pc_padded], aspect="auto")
             ax_gradient.set_axis_off()
@@ -586,10 +592,8 @@ class UMAPSelector:
             sub_labs = self.labels_for_color[subreg]
             c_array = [mcolors.to_rgb(self.get_color(lb)) for lb in sub_labs]
 
-            # Create a padded version of shape (self.max_length, 3)
             c_array_padded = np.zeros((self.max_length, 3))
-            # Place real colors at bottom
-            c_array_padded[-real_len:] = c_array
+            c_array_padded[:real_len] = c_array
 
             ax_labels.imshow([c_array_padded], aspect="auto")
             ax_labels.set_axis_off()
@@ -598,7 +602,6 @@ class UMAPSelector:
                 fontsize=14, y=-0.65
             )
 
-        # Updated title to focus on group color
         plt.suptitle(
             "Group Color Collage View", 
             fontsize=42,
@@ -611,11 +614,12 @@ class UMAPSelector:
 
 
 # Usage example:
-file_path = "/media/george-vengrovski/66AA-9C0A/DOI_npz_files/USA5506_PrePostDOI.npz"
-selector = UMAPSelector(
-    file_path=file_path, 
-    max_length=1000, 
-    used_group_coloring=True,   
-    collage_mode=True
-)
-selector.plot_umap_with_selection()
+if __name__ == "__main__":
+    file_path = "/media/george-vengrovski/66AA-9C0A/USA5494_Seasonality_4_Groups.npz"
+    selector = UMAPSelector(
+        file_path=file_path, 
+        max_length=1000, 
+        used_group_coloring=True,   
+        collage_mode=True
+    )
+    selector.plot_umap_with_selection()

@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.analysis import ComputerClusterPerformance
 
 # Specify the directory containing the npz files
-npz_directory = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"
+npz_directory = "/media/george-vengrovski/George-SSD/umaps_across_all_layers"
 
 # Collect all npz files in the directory
 npz_files = glob(os.path.join(npz_directory, "*.npz"))
@@ -25,6 +25,7 @@ for npz_file in npz_files:
     
     # Extract the filename and parse layer and sublayer
     filename = os.path.basename(npz_file)
+    
     parts = filename.split('_')
     layer = parts[1]  # e.g., 'layer3'
     sublayer = '_'.join(parts[2:])  # e.g., 'feed_forward_output.npz'
