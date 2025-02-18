@@ -188,10 +188,25 @@ class InteractiveDateSelector:
         self.ax.set_title('select date ranges\n(click-drag to select, enter to finish, backspace to undo, r to reset)')
         self.ax.set_xlabel('date')
         self.ax.set_ylabel('songs per day')
-        self.span = matplotlib.widgets.SpanSelector(
-            self.ax, self.on_select, 'horizontal', useblit=True,
-            interactive=True, drag_from_anywhere=True, onmove_callback=self.on_move
+        
+        # Set fixed x-limits based on data range
+        self.ax.set_xlim(
+            matplotlib.dates.date2num(self.min_date),
+            matplotlib.dates.date2num(self.max_date)
         )
+        
+        # Create span selector with more stable settings
+        self.span = matplotlib.widgets.SpanSelector(
+            self.ax, self.on_select, 'horizontal', 
+            useblit=False,  # Disable blitting
+            drag_from_anywhere=False,  # More stable dragging
+            interactive=True,
+            onmove_callback=self.on_move
+        )
+        
+        # Disable the navigation toolbar
+        self.fig.canvas.manager.toolbar.remove()
+        
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         print("plot up rn – select ranges, press enter when done, backspace to undo, r to reset")
         plt.show(block=True)
