@@ -55,12 +55,15 @@ def find_file_in_directory(filename, search_dir):
 class InteractiveDateSelector:
     def __init__(self, time_data):
         self.time_data = sorted(time_data)
-        self.selections = []  # list of dicts: {start, end, patch, label}
+        self.selections = []
         self.info_text = None
         self.dashboard_text = None
         self.fig = None
         self.ax = None
         self.span = None
+        # Store min/max dates for bounds checking
+        self.min_date = min(self.time_data)
+        self.max_date = max(self.time_data)
 
     def count_files_in_range(self, start_date, end_date):
         left = bisect_left(self.time_data, start_date)
@@ -85,7 +88,18 @@ class InteractiveDateSelector:
                                                  bbox=dict(facecolor='white', alpha=0.5))
         self.fig.canvas.draw_idle()
 
+    def clamp_dates(self, xmin, xmax):
+        """Clamp the date range to valid bounds"""
+        xmin, xmax = sorted([xmin, xmax])
+        min_bound = matplotlib.dates.date2num(self.min_date)
+        max_bound = matplotlib.dates.date2num(self.max_date)
+        xmin = max(xmin, min_bound)
+        xmax = min(xmax, max_bound)
+        return xmin, xmax
+
     def on_move(self, xmin, xmax):
+        # Clamp dates to valid range
+        xmin, xmax = self.clamp_dates(xmin, xmax)
         start_date = matplotlib.dates.num2date(xmin).replace(tzinfo=None)
         end_date = matplotlib.dates.num2date(xmax).replace(tzinfo=None)
         cnt = self.count_files_in_range(start_date, end_date)
@@ -99,6 +113,8 @@ class InteractiveDateSelector:
         self.fig.canvas.draw_idle()
 
     def on_select(self, xmin, xmax):
+        # Clamp dates to valid range
+        xmin, xmax = self.clamp_dates(xmin, xmax)
         start_date = matplotlib.dates.num2date(xmin).replace(tzinfo=None)
         end_date = matplotlib.dates.num2date(xmax).replace(tzinfo=None)
         cnt = self.count_files_in_range(start_date, end_date)

@@ -18,7 +18,7 @@ from multiprocessing import Pool, TimeoutError
 import logging
 
 class WavtoSpec:
-    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=None):
+    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=None, single_threaded=False):
         self.src_dir = src_dir
         self.dst_dir = dst_dir
         self.song_detection_json_path = None if song_detection_json_path == "None" else song_detection_json_path
@@ -26,6 +26,7 @@ class WavtoSpec:
         self.step_size = step_size
         self.nfft = nfft
         self.generate_random_files_number = generate_random_files_number
+        self.single_threaded = single_threaded
         self.setup_logging()
 
     def setup_logging(self):
@@ -37,7 +38,6 @@ class WavtoSpec:
 
     def process_directory(self):
         print("Starting process_directory")
-
         print(self.src_dir)
 
         audio_files = [os.path.join(root, file)
@@ -55,72 +55,90 @@ class WavtoSpec:
             audio_files = np.random.choice(audio_files, self.generate_random_files_number, replace=False)
             print(f"{len(audio_files)} random files selected")
 
+        if self.single_threaded:
+            print("Running in single-threaded mode")
+            pbar = tqdm(total=len(audio_files), desc="Processing files")
+            failed_files = []
+            skipped_files_count = 0
 
-        max_processes = multiprocessing.cpu_count()
-        print(f"Using {max_processes} processes")
-
-        manager = multiprocessing.Manager()
-        skipped_files_count = manager.Value('i', 0)
-        failed_files = manager.list()
-
-        pbar = tqdm(total=len(audio_files), desc="Processing files")
-
-        def update_progress_bar(_):
-            pbar.update()
-
-        def error_callback(e):
-            logging.error(f"Error: {e}")
-            skipped_files_count.value += 1
-            pbar.update()
-
-        def file_failed_callback(file_path):
-            logging.error(f"File failed: {file_path}")
-            failed_files.append(file_path)
-            pbar.update()
-
-        with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
             for file_path in audio_files:
-                while True:
-                    available_memory = psutil.virtual_memory().available
-                    current_memory_usage = psutil.Process(os.getpid()).memory_info().rss
-                    if available_memory > current_memory_usage:
-                        break
-                    print("Not enough memory to spawn new process, waiting...")
-                    time.sleep(1)
-                
-                print(f"Processing file: {file_path}")
-                pool.apply_async(
-                    WavtoSpec.safe_process_file,
-                    args=(self, file_path),
-                    callback=update_progress_bar,
-                    error_callback=lambda e, fp=file_path: file_failed_callback(fp)
-                )
+                try:
+                    result = self.safe_process_file(self, file_path)
+                    if result is None:
+                        skipped_files_count += 1
+                except Exception as e:
+                    logging.error(f"Error processing {file_path}: {e}")
+                    failed_files.append(file_path)
+                pbar.update(1)
 
-            pool.close()
-            pool.join()
+            pbar.close()
+        else:
+            print(f"Running in multi-threaded mode using {multiprocessing.cpu_count()} processes")
+            max_processes = multiprocessing.cpu_count()
+            print(f"Using {max_processes} processes")
 
-        pbar.close()
+            manager = multiprocessing.Manager()
+            skipped_files_count = manager.Value('i', 0)
+            failed_files = manager.list()
 
-        print(f"Total files processed: {len(audio_files) - len(failed_files)}")
-        print(f"Total files skipped due to errors or no vocalization data: {skipped_files_count.value}")
+            pbar = tqdm(total=len(audio_files), desc="Processing files")
 
-        # Retry failed files
-        if failed_files:
-            print(f"Retrying {len(failed_files)} failed files...")
-            pbar = tqdm(total=len(failed_files), desc="Retrying failed files")
+            def update_progress_bar(_):
+                pbar.update()
+
+            def error_callback(e):
+                logging.error(f"Error: {e}")
+                skipped_files_count.value += 1
+                pbar.update()
+
+            def file_failed_callback(file_path):
+                logging.error(f"File failed: {file_path}")
+                failed_files.append(file_path)
+                pbar.update()
+
             with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
-                for file_path in failed_files: 
-                    print(f"Retrying file: {file_path}")
+                for file_path in audio_files:
+                    while True:
+                        available_memory = psutil.virtual_memory().available
+                        current_memory_usage = psutil.Process(os.getpid()).memory_info().rss
+                        if available_memory > current_memory_usage:
+                            break
+                        print("Not enough memory to spawn new process, waiting...")
+                        time.sleep(1)
+                    
+                    print(f"Processing file: {file_path}")
                     pool.apply_async(
                         WavtoSpec.safe_process_file,
                         args=(self, file_path),
                         callback=update_progress_bar,
-                        error_callback=error_callback
+                        error_callback=lambda e, fp=file_path: file_failed_callback(fp)
                     )
 
                 pool.close()
                 pool.join()
+
             pbar.close()
+
+            print(f"Total files processed: {len(audio_files) - len(failed_files)}")
+            print(f"Total files skipped due to errors or no vocalization data: {skipped_files_count.value}")
+
+            # Retry failed files
+            if failed_files:
+                print(f"Retrying {len(failed_files)} failed files...")
+                pbar = tqdm(total=len(failed_files), desc="Retrying failed files")
+                with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
+                    for file_path in failed_files: 
+                        print(f"Retrying file: {file_path}")
+                        pool.apply_async(
+                            WavtoSpec.safe_process_file,
+                            args=(self, file_path),
+                            callback=update_progress_bar,
+                            error_callback=error_callback
+                        )
+
+                    pool.close()
+                    pool.join()
+                pbar.close()
 
     def has_vocalization(self, file_path):
         file_name = os.path.basename(file_path)
@@ -162,7 +180,7 @@ class WavtoSpec:
     def process_file(instance, file_path):
         return instance.convert_to_spectrogram(file_path, song_detection_json_path=None, save_npz=False)
         
-    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=1000, save_npz=True):
+    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=500, save_npz=True):
         try:
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate
@@ -209,26 +227,40 @@ class WavtoSpec:
                     labels[start_bin:end_bin] = int(label)
 
             if Sxx.shape[1] >= min_timebins:
+                segments_saved = 0  # Track how many segments we actually save
                 for i, (start_sec, end_sec) in enumerate(vocalization_data):
                     start_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, start_sec)
                     end_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, end_sec)
 
                     segment_Sxx_log = Sxx_log[:, start_bin:end_bin]
                     segment_labels = labels[start_bin:end_bin]
-                    segment_vocalization = np.ones(end_bin - start_bin, dtype=int)  # All 1s since this is a vocalization segment
+                    segment_vocalization = np.ones(end_bin - start_bin, dtype=int)
+
+                    # Skip sub-segments if they are too small
+                    if segment_Sxx_log.shape[1] < min_timebins:
+                        logging.info(f"Skipping small sub-segment in {file_path} "
+                                  f"(length={segment_Sxx_log.shape[1]} < min_timebins={min_timebins}).")
+                        continue
 
                     if save_npz:
                         spec_filename = os.path.splitext(os.path.basename(file_path))[0]
-                        segment_spec_file_path = os.path.join(self.dst_dir, f"{spec_filename}_segment_{i}.npz")
+                        segment_spec_file_path = os.path.join(self.dst_dir, f"{spec_filename}_segment_{segments_saved}.npz")
                         np.savez(segment_spec_file_path, 
-                                         s=segment_Sxx_log, 
-                                         vocalization=segment_vocalization, 
-                                         labels=segment_labels)
-                        print(f"Segment {i} spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+                                s=segment_Sxx_log, 
+                                vocalization=segment_vocalization, 
+                                labels=segment_labels)
+                        logging.info(f"Segment {segments_saved} spectrogram saved to {segment_spec_file_path} "
+                                  f"(length={segment_Sxx_log.shape[1]} timebins)")
+                        segments_saved += 1
+
+                if segments_saved == 0:
+                    logging.warning(f"No segments from {file_path} met the minimum timebin requirement of {min_timebins}")
+                else:
+                    logging.info(f"Saved {segments_saved} segments from {file_path}")
 
                 return Sxx_log, vocalization_data, labels
             else:
-                print(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
+                logging.info(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
                 return None, None, None
 
         except Exception as e:
@@ -275,10 +307,19 @@ def main():
     parser.add_argument('--step_size', type=int, default=119, help='Step size for the spectrogram.')
     parser.add_argument('--nfft', type=int, default=1024, help='Number of FFT points for the spectrogram.')
     parser.add_argument('--generate_random_files_number', type=int, default=None, help='Number of random files to process.')
+    parser.add_argument('--single_threaded', action='store_true', help='Run in single-threaded mode')
 
     args = parser.parse_args()
 
-    wav_to_spec = WavtoSpec(args.src_dir, args.dst_dir, args.song_detection_json_path, args.step_size, args.nfft, args.generate_random_files_number)
+    wav_to_spec = WavtoSpec(
+        args.src_dir, 
+        args.dst_dir, 
+        args.song_detection_json_path, 
+        args.step_size, 
+        args.nfft, 
+        args.generate_random_files_number,
+        args.single_threaded
+    )
     wav_to_spec.process_directory()
 
 if __name__ == "__main__":
@@ -296,15 +337,15 @@ Handling of Long and Short Recordings
 Due to memory and computational constraints, recordings were segmented into manageable lengths. If a continuous WAV file exceeded a certain duration threshold (find exact ms threshold), it was split into multiple shorter files. Conversely, recordings shorter than find exact ms threshold were discarded to maintain consistent quality and uniformity in the dataset. This segmentation step ensured that no single file would overwhelm system memory during the STFT and embedding processes, thereby improving the robustness and scalability of the pipeline.
 
 Vocalization-Based Filtering and JSON Metadata
-To avoid processing large amounts of non-vocal segments (silence or environmental noise), a supervised “song detection” JSON file was employed (if available). For each WAV file, the system checked a corresponding JSON entry containing segment onsets, offsets, and syllable-level annotations. Only time intervals marked as containing vocalizations were retained, and non-vocal segments were omitted. If no vocalizations were present, the file was skipped altogether. This approach minimized unnecessary computation and focused the analysis on behaviorally relevant acoustic signals.
+To avoid processing large amounts of non-vocal segments (silence or environmental noise), a supervised "song detection" JSON file was employed (if available). For each WAV file, the system checked a corresponding JSON entry containing segment onsets, offsets, and syllable-level annotations. Only time intervals marked as containing vocalizations were retained, and non-vocal segments were omitted. If no vocalizations were present, the file was skipped altogether. This approach minimized unnecessary computation and focused the analysis on behaviorally relevant acoustic signals.
 
 Segmenting Spectrograms and Removing Small Spectrograms
 After applying the STFT, the resulting spectrogram was evaluated for minimal time dimension requirements. Segments of the time-frequency representation with fewer than 1000 time bins (~2.7 seconds, given the 119-sample hop length) were discarded to ensure sufficient contextual information for downstream analyses. This threshold prevented the inclusion of overly short, fragmented spectrograms that might hinder stable embedding and interpretation.
 
-For segments meeting the minimum length criteria, the pipeline generated one or more smaller spectrogram excerpts corresponding to vocalization intervals. Each excerpt was saved as a compressed NumPy archive (.npz) for storage efficiency and faster downstream loading. These per-segment files contained three arrays: (1) the log-amplitude spectrogram, (2) a binary “vocalization” array indicating that the entire segment contains song, and (3) syllable-level label arrays if available from the JSON annotations. Segment-level saving further reduced memory overhead by distributing computations across multiple smaller files and preventing the accumulation of large, unwieldy in-memory arrays.
+For segments meeting the minimum length criteria, the pipeline generated one or more smaller spectrogram excerpts corresponding to vocalization intervals. Each excerpt was saved as a compressed NumPy archive (.npz) for storage efficiency and faster downstream loading. These per-segment files contained three arrays: (1) the log-amplitude spectrogram, (2) a binary "vocalization" array indicating that the entire segment contains song, and (3) syllable-level label arrays if available from the JSON annotations. Segment-level saving further reduced memory overhead by distributing computations across multiple smaller files and preventing the accumulation of large, unwieldy in-memory arrays.
 
 Labeling and Integration
-When syllable-level labels were provided, the pipeline aligned these annotations with the spectrogram’s time bins. Time bins were converted to seconds using the known sampling rate and hop length, allowing the assignment of correct syllable or silence labels to each time bin. This integration of annotations facilitated subsequent evaluations of model performance, including comparisons to ground truth labels and alignment with biologically meaningful vocal units (e.g., syllables, phrases).
+When syllable-level labels were provided, the pipeline aligned these annotations with the spectrogram's time bins. Time bins were converted to seconds using the known sampling rate and hop length, allowing the assignment of correct syllable or silence labels to each time bin. This integration of annotations facilitated subsequent evaluations of model performance, including comparisons to ground truth labels and alignment with biologically meaningful vocal units (e.g., syllables, phrases).
 
 Parallelization and Memory Management
 To accelerate spectrogram generation and preprocessing, the code leveraged multiprocessing capabilities, distributing file processing tasks across all available CPU cores. Memory checks ensured that new processes were spawned only when sufficient system memory was available. In cases of transient memory pressure, the code waited before processing additional files, thereby maintaining stability and preventing system slowdowns or crashes.

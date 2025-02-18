@@ -6,11 +6,18 @@ set -euo pipefail
 # Navigate up one directory
 cd ..
 
-# Parameters
+# Required Parameters
 INPUT_DIR="/media/george-vengrovski/Desk SSD/TweetyBERT/songs"
 SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Desk SSD/TweetyBERT/song_detecton_database.json"
 TEST_PERCENTAGE=20
 EXPERIMENT_NAME="TweetyBERT_Paper_Yarden_Model"
+
+# Change Default Parameters (if needed)
+BATCH_SIZE=42                    # Training batch size
+LEARNING_RATE=3e-4              # Learning rate for training
+MULTI_THREAD=true               # Set to false for single-thread spectrogram generation
+STEP_SIZE=119                   # Step size for spectrogram generation
+NFFT=1024                       # Number of FFT points for spectrogram
 
 # Don't Change
 TEMP_DIR="./temp"
@@ -81,22 +88,36 @@ TEST_DIR="$TEMP_DIR/test_dir"
 mkdir -p "$TRAIN_DIR"
 mkdir -p "$TEST_DIR"
 
-# 8. Generate spectrograms (train + test)
+# Determine number of processes for spectrogram generation
+PROCESS_COUNT=1
+if [ "$MULTI_THREAD" = true ]; then
+    PROCESS_COUNT=$(nproc)
+fi
+
+# Generate spectrograms (train + test)
 python3 src/spectogram_generator.py \
         --src_dir "$TRAIN_WAV_DIR" \
         --dst_dir "$TRAIN_DIR" \
-        --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+        --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
+        --step_size "$STEP_SIZE" \
+        --nfft "$NFFT" \
+        $([ "$MULTI_THREAD" = false ] && echo "--single_threaded")
 
 python3 src/spectogram_generator.py \
         --src_dir "$TEST_WAV_DIR" \
         --dst_dir "$TEST_DIR" \
-        --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+        --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
+        --step_size "$STEP_SIZE" \
+        --nfft "$NFFT" \
+        $([ "$MULTI_THREAD" = false ] && echo "--single_threaded")
 
-# 9. Run TweetyBERT
+# Run TweetyBERT
 python3 src/TweetyBERT.py \
         --experiment_name "$EXPERIMENT_NAME" \
         --train_dir "$TRAIN_DIR" \
-        --test_dir "$TEST_DIR"
+        --test_dir "$TEST_DIR" \
+        --batch_size "$BATCH_SIZE" \
+        --learning_rate "$LEARNING_RATE"
 
 # 10. Save file lists into the experiment folder
 EXPERIMENT_DIR="experiments/$EXPERIMENT_NAME"
