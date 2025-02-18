@@ -7,11 +7,12 @@ set -euo pipefail
 cd ..
 
 # Parameters
-INPUT_DIR="/Users/georgev/Documents/data/yarden_data/llb3_data/llb3_songs"
-SONG_DETECTION_JSON_PATH="/Users/georgev/Documents/data/yarden_data/llb3_data/onset_offset_results.json"
+INPUT_DIR="/media/george-vengrovski/Desk SSD/TweetyBERT/songs"
+SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Desk SSD/TweetyBERT/song_detecton_database.json"
 TEST_PERCENTAGE=20
-EXPERIMENT_NAME="Mac_Test"
+EXPERIMENT_NAME="TweetyBERT_Paper_Yarden_Model"
 
+# Don't Change
 TEMP_DIR="./temp"
 TRAIN_FILE_LIST="$TEMP_DIR/train_files.txt"
 TEST_FILE_LIST="$TEMP_DIR/test_files.txt"
