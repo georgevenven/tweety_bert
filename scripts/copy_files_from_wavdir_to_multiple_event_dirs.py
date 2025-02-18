@@ -38,11 +38,14 @@ from bisect import bisect_left, bisect_right
 def get_creation_date(path):
     stat = path.stat()
     if hasattr(stat, 'st_birthtime'):
-        return stat.st_birthtime  # macos
+        # macOS
+        return stat.st_birthtime
     elif os.name == 'nt':
-        return stat.st_ctime  # windows
+        # Windows
+        return stat.st_ctime
     else:
-        return stat.st_mtime  # linux/unix approximation using modification time
+        # Linux/Unix approximation using mtime
+        return stat.st_mtime
 
 # helper: find a file in the directory tree and return its full path.
 def find_file_in_directory(filename, search_dir):
@@ -61,7 +64,7 @@ class InteractiveDateSelector:
         self.fig = None
         self.ax = None
         self.span = None
-        # Store min/max dates for bounds checking
+        # store min/max dates for bounds checking
         self.min_date = min(self.time_data)
         self.max_date = max(self.time_data)
 
@@ -76,7 +79,10 @@ class InteractiveDateSelector:
         lines = []
         for i, sel in enumerate(self.selections, start=1):
             cnt = self.count_files_in_range(sel['start'], sel['end'])
-            lines.append(f"group {i}: {sel['start'].strftime('%y-%m-%d')} to {sel['end'].strftime('%y-%m-%d')} - {cnt} songs")
+            lines.append(
+                f"group {i}: {sel['start'].strftime('%y-%m-%d')} "
+                f"to {sel['end'].strftime('%y-%m-%d')} - {cnt} songs"
+            )
             if sel.get('label'):
                 sel['label'].set_text(f"grp {i}")
         dash_txt = "\n".join(lines)
@@ -105,7 +111,10 @@ class InteractiveDateSelector:
         start_date = matplotlib.dates.num2date(xmin).replace(tzinfo=None)
         end_date = matplotlib.dates.num2date(xmax).replace(tzinfo=None)
         cnt = self.count_files_in_range(start_date, end_date)
-        msg = f"current: {start_date.strftime('%y-%m-%d')} to {end_date.strftime('%y-%m-%d')} - {cnt} songs"
+        msg = (
+            f"current: {start_date.strftime('%y-%m-%d')} "
+            f"to {end_date.strftime('%y-%m-%d')} - {cnt} songs"
+        )
         if self.info_text:
             self.info_text.set_text(msg)
         else:
@@ -145,9 +154,13 @@ class InteractiveDateSelector:
             if sel.get('label'):
                 sel['label'].remove()
         self.selections = []
-        # reinitialize the span selector to clear any lingering selection rectangle
+
+        # clear and disconnect old span
         if self.span:
+            self.span.clear()  # ensures leftover rectangle is removed
             self.span.disconnect_events()
+
+        # reinitialize the span selector
         self.span = matplotlib.widgets.SpanSelector(
             self.ax, self.on_select, 'horizontal',
             useblit=False,
@@ -157,6 +170,9 @@ class InteractiveDateSelector:
         )
         print("reset all selections")
         self.update_dashboard()
+
+        # force an immediate redraw to remove any stale artifact
+        self.fig.canvas.draw()
 
     def undo(self):
         if self.selections:
@@ -181,8 +197,6 @@ class InteractiveDateSelector:
     def hide_toolbar_if_possible(self):
         """Attempt to hide the toolbar in TkAgg if it exists; otherwise ignore."""
         manager = plt.get_current_fig_manager()
-        # in tkagg, the toolbar is a tk Frame with 'pack()'
-        # you can hide it by calling pack_forget()
         if hasattr(manager, 'toolbar') and manager.toolbar is not None:
             try:
                 manager.toolbar.pack_forget()
@@ -191,12 +205,12 @@ class InteractiveDateSelector:
 
     def create_selection_plot(self):
         self.fig, self.ax = plt.subplots(figsize=(15, 6))
-        
+
         # create a line plot showing songs per day
         timestamps = matplotlib.dates.date2num(self.time_data)
         min_date = self.min_date
         max_date = self.max_date
-        
+
         # generate bins per day
         bins = matplotlib.dates.drange(min_date, max_date + timedelta(days=1), timedelta(days=1))
         counts, bin_edges = np.histogram(timestamps, bins=bins)
@@ -226,13 +240,14 @@ class InteractiveDateSelector:
             drag_from_anywhere=False,
             onmove_callback=self.on_move
         )
-        
+
         # try to hide the navigation toolbar if possible
         self.hide_toolbar_if_possible()
-        
+
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         print("plot up rn – select ranges, press enter when done, backspace to undo, r to reset")
         plt.show(block=True)
+
         self.selections.sort(key=lambda s: s['start'])
         return [(sel['start'], sel['end']) for sel in self.selections]
 
@@ -241,7 +256,10 @@ def create_random_folds(file_list, songs_per_fold=100):
     num_files = len(file_list)
     num_complete_folds = num_files // songs_per_fold
     remaining_files = num_files % songs_per_fold
-    folds = [file_list[i:i + songs_per_fold] for i in range(0, num_complete_folds * songs_per_fold, songs_per_fold)]
+    folds = [
+        file_list[i : i + songs_per_fold]
+        for i in range(0, num_complete_folds * songs_per_fold, songs_per_fold)
+    ]
     if remaining_files > 0:
         remainder = file_list[num_complete_folds * songs_per_fold:]
         for i, file in enumerate(remainder):
@@ -259,9 +277,11 @@ def main():
     parser.add_argument('--songs_per_fold', type=int, default=100, help='number of songs per fold when using test set')
     args = parser.parse_args()
 
+    # load the song detection data
     with open(args.json_file, 'r') as f:
         song_data = json.load(f)
 
+    # prepare output directory
     output_path = Path(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -279,6 +299,7 @@ def main():
         for entry in song_data:
             if entry.get('song_present', False):
                 filename = Path(entry['filename']).name
+                # check if any line in the test file is contained in entry['filename']
                 if any(test_file in entry['filename'] for test_file in test_files):
                     if filename in available_wav_files:
                         song_files[entry['filename']] = entry
@@ -306,7 +327,11 @@ def main():
             print(f"  - files copied: {files_copied}")
     else:
         print("operating in temporal selection mode...")
-        song_files = {entry['filename']: entry for entry in song_data if entry.get('song_present', False)}
+        song_files = {
+            entry['filename']: entry
+            for entry in song_data
+            if entry.get('song_present', False)
+        }
         print("creating time-based line plot data...")
         time_data = []
         base_dir = Path(args.directory_path)
@@ -330,13 +355,16 @@ def main():
             print("no valid files found! check your directory path and json file.")
             sys.exit(1)
         print(f"found {len(time_data)} valid files. opening selection plot...")
+
         selector = InteractiveDateSelector(time_data)
         print("please select date ranges in the popup window. press enter when finished.")
         date_ranges = selector.create_selection_plot()
+
         if not date_ranges:
             print("no date ranges were selected. exiting...")
             sys.exit(1)
         print(f"selected {len(date_ranges)} date ranges. processing files...")
+
         for range_idx, (start_date, end_date) in enumerate(date_ranges):
             group_files = []
             for file in base_dir.rglob('*.wav'):
