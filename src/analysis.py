@@ -46,385 +46,401 @@ def average_colors_per_sample(ground_truth_labels, cmap):
 
     return averaged_colors
 
-def load_data( data_dir, context=1000):
-    dataset = SongDataSet_Image(data_dir, num_classes=50, infinite_loader = False, pitch_shift= False, segment_length = None)
-    # collate_fn = CollateFunction(segment_length=context)
+def load_data(data_dir, context=1000):
+    """
+    Create a DataLoader from your custom dataset.
+    """
+    dataset = SongDataSet_Image(
+        data_dir, num_classes=50, infinite_loader=False,
+        pitch_shift=False, segment_length=None
+    )
     loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=16)
-    return loader 
+    return loader
 
 def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
     """
-    Generate labels for data points using the HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise) clustering algorithm.
-
-    Parameters:
-    - array: ndarray of shape (n_samples, n_features)
-      The input data to cluster.
-
-    - min_samples: int, default=5
-      The number of samples in a neighborhood for a point to be considered as a core point.
-
-    - min_cluster_size: int, default=5
-      The minimum number of points required to form a cluster.
-
-    Returns:
-    - labels: ndarray of shape (n_samples)
-      Cluster labels for each point in the dataset. Noisy samples are given the label -1.
+    Generate labels for data points using HDBSCAN.
     """
-
     import hdbscan
 
-    # Create an HDBSCAN object with the specified parameters.
-    hdbscan_model = hdbscan.HDBSCAN(min_samples=min_samples, min_cluster_size=min_cluster_size)
-
-    # Fit the model to the data and extract the labels.
+    hdbscan_model = hdbscan.HDBSCAN(
+        min_samples=min_samples, min_cluster_size=min_cluster_size
+    )
     labels = hdbscan_model.fit_predict(array)
-
     print(f"discovered labels {np.unique(labels)}")
-
     return labels
 
-# def plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_indices):
-#     """
-#     Generate comparison plots between two datasets using UMAP embeddings.
-    
-#     Parameters:
-#     - data_dirs: list of data directory paths
-#     - save_name: name for saving the plots
-#     - embedding_outputs: UMAP embeddings array
-#     - dataset_indices: array indicating which dataset each point belongs to
-#     """
-#     # Create experiment-specific directory
-#     experiment_dir = os.path.join("imgs", "umap_plots", save_name)
-#     if not os.path.exists(experiment_dir):
-#         os.makedirs(experiment_dir)
-
-#     # Split data by dataset
-#     dataset_1_mask = dataset_indices == 0
-#     dataset_2_mask = dataset_indices == 1
-    
-#     data_1 = embedding_outputs[dataset_1_mask]
-#     data_2 = embedding_outputs[dataset_2_mask]
-
-#     # Create sample count string for title
-#     sample_counts = (
-#         f"Samples - {os.path.basename(data_dirs[0])}: {len(data_1):,}, "
-#         f"{os.path.basename(data_dirs[1])}: {len(data_2):,}"
-#     )
-
-#     # Create 2D histograms
-#     bins = 300
-#     heatmap_1, xedges, yedges = np.histogram2d(data_1[:, 0], data_1[:, 1], bins=bins)
-#     heatmap_2, _, _ = np.histogram2d(data_2[:, 0], data_2[:, 1], bins=[xedges, yedges])
-
-#     # Normalize heatmaps
-#     heatmap_1 = heatmap_1 / heatmap_1.max()
-#     heatmap_2 = heatmap_2 / heatmap_2.max()
-
-#     # Create RGB image for overlap visualization
-#     rgb_image = np.zeros((heatmap_1.shape[0], heatmap_1.shape[1], 3))
-#     brightness_factor = 4
-    
-#     # Purple for dataset 1, Green for dataset 2
-#     rgb_image[..., 0] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Red channel
-#     rgb_image[..., 1] = np.clip(heatmap_2.T * brightness_factor, 0, 1)  # Green channel
-#     rgb_image[..., 2] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Blue channel
-
-#     # Plot dataset 1
-#     fig1, ax1 = plt.subplots(figsize=(6, 6))
-#     ax1.imshow(heatmap_1.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-#                origin='lower', cmap='Purples', vmax=0.1)
-#     ax1.set_title(f"Dataset: {os.path.basename(data_dirs[0])}", fontsize=16)
-#     ax1.set_xlabel('UMAP Dimension 1')
-#     ax1.set_ylabel('UMAP Dimension 2')
-#     fig1.tight_layout()
-#     fig1.savefig(os.path.join(experiment_dir, "dataset_1.png"), dpi=300)
-#     fig1.savefig(os.path.join(experiment_dir, "dataset_1.svg"))
-#     plt.close(fig1)
-
-#     # Plot dataset 2
-#     fig2, ax2 = plt.subplots(figsize=(6, 6))
-#     ax2.imshow(heatmap_2.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-#                origin='lower', cmap='Greens', vmax=0.1)
-#     ax2.set_title(f"Dataset: {os.path.basename(data_dirs[1])}", fontsize=16)
-#     ax2.set_xlabel('UMAP Dimension 1')
-#     fig2.tight_layout()
-#     fig2.savefig(os.path.join(experiment_dir, "dataset_2.png"), dpi=300)
-#     fig2.savefig(os.path.join(experiment_dir, "dataset_2.svg"))
-#     plt.close(fig2)
-
-#     # Plot overlap
-#     fig3, ax3 = plt.subplots(figsize=(6, 6))
-#     ax3.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-#                origin='lower')
-#     ax3.set_title("Overlapping Datasets", fontsize=16)
-#     ax3.set_xlabel('UMAP Dimension 1')
-#     fig3.tight_layout()
-#     fig3.savefig(os.path.join(experiment_dir, "overlap.png"), dpi=300)
-#     fig3.savefig(os.path.join(experiment_dir, "overlap.svg"))
-#     plt.close(fig3)
-
-def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
-                        layer_index=None, dict_key=None, 
-                        context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True, 
-                        remove_non_vocalization=True, min_cluster_size=500):
+def plot_umap_projection(
+    model,
+    device,
+    data_dirs,
+    category_colors_file="test_llb16",
+    samples=1e6,
+    file_path='category_colors.pkl',
+    layer_index=None,
+    dict_key=None,
+    context=1000,
+    save_name=None,
+    raw_spectogram=False,
+    save_dict_for_analysis=True,
+    remove_non_vocalization=True,
+    min_cluster_size=500
+):
     """
-    parameters:
-    - data_dirs: list of data directories to analyze
+    This function:
+    1) Iterates over multiple data directories.
+    2) Extracts data in context-sized chunks, runs inference if needed.
+    3) Optionally filters non-vocal segments.
+    4) If the total data collected goes beyond 'samples', it truncates the
+       final batch (i.e., the last song) so that we don't exceed the budget.
+    5) Runs UMAP dimensionality reduction.
+    6) Clusters via HDBSCAN.
+    7) Plots results and saves arrays.
+
+    Key difference from the random-subsample version:
+    - We never pick random frames to reach the 'samples' limit. Instead, as soon
+      as we exceed 'samples' in the last song, we slice only the portion of that
+      last batch needed and then stop collecting further data.
     """
+
+    # 1. Convert 'samples' to an integer, if float was given.
+    samples = int(samples)
+
+    # 2. Prepare lists that hold aggregated data across all directories
     predictions_arr = []
     ground_truth_labels_arr = []
     spec_arr = []
     vocalization_arr = []
     file_indices_arr = []
-    dataset_indices_arr = []  # initialize this array
+    dataset_indices_arr = []
+
+    # 3. For storing which file index maps to which path
     file_map = {}
     current_file_index = 0
 
-    # reset figure
+    # 4. Make a directory for saving images
+    if save_name is None:
+        save_name = "umap_projection"
+    experiment_dir = os.path.join("imgs", "umap_plots", save_name)
+    os.makedirs(experiment_dir, exist_ok=True)
+
+    # 5. Prepare a figure space (though real plotting happens after UMAP)
     plt.figure(figsize=(8, 6))
 
-    samples = int(samples)
-    total_samples = 0
+    # 6. If no data directories, bail
+    if len(data_dirs) < 1:
+        print("No data directories provided. Exiting.")
+        return
 
-    # calculate samples per dataset
-    samples_per_dataset = samples // len(data_dirs)
-    
-    # iterate through each dataset
+    total_samples_collected = 0
+    num_datasets = len(data_dirs)
+
+    # if you still want some nominal logic about "samples per dataset," keep it:
+    samples_per_dataset = samples // num_datasets
+
+    # ------------------------------------------------
+    # 7) LOAD EACH DATASET, BATCH BY BATCH
+    # ------------------------------------------------
     for dataset_idx, data_dir in enumerate(data_dirs):
+        print(f"Loading dataset {dataset_idx + 1}/{num_datasets} from {data_dir}")
         data_loader = load_data(data_dir=data_dir, context=context)
         data_loader_iter = iter(data_loader)
-        dataset_samples = 0
 
-        while dataset_samples < samples_per_dataset:
+        dataset_samples_collected = 0
+
+        # We'll keep iterating until we collect enough from this dataset,
+        # or exhaust it, or hit the global limit
+        while dataset_samples_collected < samples_per_dataset:
             try:
-                # retrieve the next batch
-                data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
+                data, ground_truth_label, vocalization, this_file_path = next(data_loader_iter)
 
-                # temporary fix for corrupted data
+                # skip if shape is suspicious
                 if data.shape[1] < 100:
+                    print("Skipping batch because data.shape[1] < 100")
                     continue
 
+                # skip if we've already handled this file
+                if this_file_path in file_map.values():
+                    print(f"Skipping file {this_file_path}, already in file_map.")
+                    continue
+
+                # record this new file
+                file_map[current_file_index] = this_file_path
+
+                # number of classes
                 num_classes = ground_truth_label.shape[-1]
                 original_data_length = data.shape[1]
                 original_label_length = ground_truth_label.shape[1]
 
-                # pad data to the nearest context size in the time dimension
+                # pad to multiple of context
+                pad_size_time = (context - (original_data_length % context)) % context
+                if pad_size_time > 0:
+                    data = F.pad(data, (0, 0, 0, pad_size_time), 'constant', 0)
+                    vocalization = F.pad(vocalization, (0, pad_size_time), 'constant', 0)
+                    ground_truth_label = F.pad(
+                        ground_truth_label, (0, 0, 0, pad_size_time), 'constant', 0
+                    )
+
                 total_time = data.shape[1]
-                pad_size_time = (context - (total_time % context)) % context
-                data = F.pad(data, (0, 0, 0, pad_size_time), 'constant', 0)
+                num_times = total_time // context
 
-                # calculate the number of context windows in the song
-                num_times = data.shape[1] // context
+                # reshape
+                data = data.reshape(num_times, context, data.shape[-1])
+                ground_truth_label = ground_truth_label.reshape(num_times, context, num_classes)
+                vocalization = vocalization.reshape(num_times, context)
 
-                batch, time_bins, freq = data.shape
-
-                # reshape data to fit into multiple context-sized batches
-                data = data.reshape(batch * num_times, context, freq)
-
-                # pad ground truth labels to match data padding in time dimension
-                total_length_labels = ground_truth_label.shape[1]
-                pad_size_labels_time = (context - (total_length_labels % context)) % context
-                ground_truth_label = F.pad(ground_truth_label, (0, 0, 0, pad_size_labels_time), 'constant', 0)
-                vocalization = F.pad(vocalization, (0, pad_size_labels_time), 'constant', 0)
-
-                ground_truth_label = ground_truth_label.reshape(batch * num_times, context, num_classes)
-                vocalization = vocalization.reshape(batch * num_times, context)
-
-                # store file information
-                if file_path not in file_map:
-                    file_map[current_file_index] = file_path
-                else:
-                    continue
-
+                # run inference if not raw
                 if not raw_spectogram:
-                    data = data.unsqueeze(1)
-                    data = data.permute(0, 1, 3, 2)
-
-                    _, layers = model.inference_forward(data.to(device))
+                    data_for_model = data.unsqueeze(1).permute(0, 1, 3, 2)
+                    with torch.no_grad():
+                        _, layers = model.inference_forward(data_for_model.to(device))
 
                     layer_output_dict = layers[layer_index]
                     output = layer_output_dict.get(dict_key, None)
-
                     if output is None:
-                        print(f"invalid key: {dict_key}. skipping this batch.")
+                        print(f"Warning: invalid dict_key='{dict_key}' for this batch. Skipping.")
                         continue
 
-                    batches, time_bins, features = output.shape
-                    predictions = output.reshape(batches, time_bins, features)
-                    predictions = predictions.flatten(0, 1)
-                    predictions = predictions[:original_data_length]
+                    b, t, f = output.shape
+                    if b != num_times or t != context:
+                        print("Warning: mismatch in model output shape. Skipping batch.")
+                        continue
 
-                    predictions_arr.append(predictions.detach().cpu().numpy())
-
+                    predictions_this_batch = output.reshape(b * t, f)
+                    predictions_this_batch = predictions_this_batch[:original_data_length]
                 else:
-                    data = data.unsqueeze(1)
-                    data = data.permute(0, 1, 3, 2)
+                    # raw spec
+                    predictions_this_batch = data.reshape(num_times * context, data.shape[-1])
+                    predictions_this_batch = predictions_this_batch[:original_data_length]
 
-                data = data.squeeze(1)
-                spec = data
-                spec = spec.permute(0, 2, 1)
+                # flatten labels, voc, etc.
+                ground_truth_label_flat = ground_truth_label.reshape(
+                    num_times * context, num_classes
+                )[:original_label_length]
+                vocalization_flat = vocalization.reshape(num_times * context)[:original_data_length]
+                ground_truth_label_int = torch.argmax(
+                    ground_truth_label_flat, dim=-1
+                ).cpu().numpy()
 
-                spec = spec.flatten(0, 1)
-                spec = spec[:original_data_length]
+                spec_this_batch = data.reshape(num_times * context, data.shape[-1])
+                spec_this_batch = spec_this_batch[:original_data_length]
 
-                ground_truth_label = ground_truth_label.flatten(0, 1)
-                vocalization = vocalization.flatten(0, 1)
+                # shape checks
+                n_pred = len(predictions_this_batch)
+                n_label = len(ground_truth_label_int)
+                n_voc = len(vocalization_flat)
+                n_spec = len(spec_this_batch)
+                if not (n_pred == n_label == n_voc == n_spec):
+                    print(
+                        f"Shape mismatch: predictions={n_pred}, "
+                        f"labels={n_label}, voc={n_voc}, spec={n_spec}. Skipping batch."
+                    )
+                    continue
 
-                ground_truth_label = ground_truth_label[:original_label_length]
-                vocalization = vocalization[:original_data_length]
-
-                ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
-
-                # create file_indices first
-                file_indices = np.array(ground_truth_label.cpu().numpy())
-                file_indices[:] = current_file_index
-
-                # now create dataset_indices using the shape of file_indices
-                dataset_indices = np.full_like(file_indices, dataset_idx)
-
-                spec_arr.append(spec.cpu().numpy())
-                ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
-                vocalization_arr.append(vocalization.cpu().numpy())
-                file_indices_arr.append(file_indices)
-                dataset_indices_arr.append(dataset_indices)
-
-                total_samples += spec.shape[0]
-                current_file_index += 1
-
-                if np.sum(np.concatenate(vocalization_arr, axis=0)) > samples:
+                # now see if appending these frames will exceed our global sample limit
+                # if so, we only keep the portion needed to reach 'samples'
+                space_left = samples - total_samples_collected
+                if space_left <= 0:
+                    # we've already reached the global limit, just stop entirely
                     break
 
-                dataset_samples += spec.shape[0]
+                if n_pred > space_left:
+                    # we only want the first `space_left` frames from this last batch
+                    predictions_this_batch = predictions_this_batch[:space_left]
+                    ground_truth_label_int = ground_truth_label_int[:space_left]
+                    spec_this_batch = spec_this_batch[:space_left]
+                    vocalization_flat = vocalization_flat[:space_left]
+                    n_pred = space_left  # now we truncated to exactly space_left
+
+                # create file/dataset indices arrays for these frames
+                file_indices_this_batch = np.full(
+                    n_pred, current_file_index, dtype=np.int64
+                )
+                dataset_indices_this_batch = np.full_like(
+                    file_indices_this_batch, dataset_idx, dtype=np.int64
+                )
+
+                # everything is consistent, append
+                predictions_arr.append(predictions_this_batch)
+                ground_truth_labels_arr.append(ground_truth_label_int)
+                vocalization_arr.append(vocalization_flat.cpu().numpy())
+                spec_arr.append(spec_this_batch)
+                file_indices_arr.append(file_indices_this_batch)
+                dataset_indices_arr.append(dataset_indices_this_batch)
+
+                # increment counters
+                current_file_index += 1
+                dataset_samples_collected += n_pred
+                total_samples_collected += n_pred
+
+                # stop if we are at or past either the dataset or global limit
+                if dataset_samples_collected >= samples_per_dataset:
+                    break
+                if total_samples_collected >= samples:
+                    break
 
             except StopIteration:
-                print(f"dataset {data_dir} exhausted after {dataset_samples} samples")
+                print(f"Exhausted dataset {data_dir} after {dataset_samples_collected} samples.")
                 break
 
-    # convert the list of batch * samples * features to samples * features
+        # if the global limit is reached, stop reading new datasets
+        if total_samples_collected >= samples:
+            break
+
+    # -------------------------
+    # CONCATENATE RESULTS
+    # -------------------------
+    if len(predictions_arr) == 0:
+        print("No data was collected at all. Exiting.")
+        return
+
+    predictions = np.concatenate(predictions_arr, axis=0)
     ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
+    vocalization_arr = np.concatenate(vocalization_arr, axis=0)
     spec_arr = np.concatenate(spec_arr, axis=0)
     file_indices = np.concatenate(file_indices_arr, axis=0)
     dataset_indices = np.concatenate(dataset_indices_arr, axis=0)
-    vocalization_arr = np.concatenate(vocalization_arr, axis=0)
 
-    original_spec_arr = spec_arr
+    print(f"Collected shapes:\n"
+          f"  predictions: {predictions.shape}\n"
+          f"  ground_truth_labels: {ground_truth_labels.shape}\n"
+          f"  vocalization_arr: {vocalization_arr.shape}\n"
+          f"  spec_arr: {spec_arr.shape}")
 
-    if not raw_spectogram:
-        predictions = np.concatenate(predictions_arr, axis=0)
-    else:
-        predictions = spec_arr
+    if not (len(predictions) == len(ground_truth_labels) == len(vocalization_arr) == len(spec_arr)):
+        print("Final shape mismatch detected. Not proceeding to UMAP.")
+        return
 
-    # filter for vocalization before any processing or visualization
+    # ------------------------
+    # OPTIONAL VOCAL FILTER
+    # ------------------------
     if remove_non_vocalization:
-        print(f"vocalization arr shape {vocalization_arr.shape}")
-        print(f"predictions arr shape {predictions.shape}")
-        print(f"ground truth labels arr shape {ground_truth_labels.shape}")
-        print(f"spec arr shape {spec_arr.shape}")
+        idx_vocal = np.where(vocalization_arr == 1)[0]
+        print(f"Filtering by vocalization == 1, from {len(predictions)} to {len(idx_vocal)} samples.")
+        predictions = predictions[idx_vocal]
+        ground_truth_labels = ground_truth_labels[idx_vocal]
+        spec_arr = spec_arr[idx_vocal]
+        file_indices = file_indices[idx_vocal]
+        dataset_indices = dataset_indices[idx_vocal]
+        vocalization_arr = vocalization_arr[idx_vocal]
 
-        vocalization_indices = np.where(vocalization_arr == 1)[0]
-        predictions = predictions[vocalization_indices]
-        ground_truth_labels = ground_truth_labels[vocalization_indices]
-        spec_arr = spec_arr[vocalization_indices]
-        file_indices = file_indices[vocalization_indices]
-        dataset_indices = dataset_indices[vocalization_indices]
+    if len(predictions) < 2:
+        print("Insufficient data after vocalization filtering. Exiting.")
+        return
 
-    # group samples by song and truncate each group to a fixed size
-    unique_files = np.unique(file_indices)
-    desired_per_file = samples // len(unique_files)
-    selected_indices = []
-    for f in unique_files:
-        inds = np.where(file_indices == f)[0]
-        if len(inds) > desired_per_file:
-            inds = inds[:desired_per_file]
-        selected_indices.append(inds)
-    selected_indices = np.concatenate(selected_indices)
+    # final shape check
+    n_final = len(predictions)
+    print(f"Final data shape: {predictions.shape} samples by {predictions.shape[1]} features")
 
-    predictions = predictions[selected_indices]
-    ground_truth_labels = ground_truth_labels[selected_indices]
-    spec_arr = spec_arr[selected_indices]
-    file_indices = file_indices[selected_indices]
-    dataset_indices = dataset_indices[selected_indices]
-    vocalization_arr = vocalization_arr[selected_indices]
+    # -----------------------------
+    # RUN UMAP
+    # -----------------------------
+    if n_final <= 200:
+        neighbor_count = max(2, n_final // 2)
+        print(f"Warning: reducing n_neighbors to {neighbor_count} due to small dataset.")
+    else:
+        neighbor_count = 200
 
-    # fit the umap reducer       
-    print("initializing umap reducer...")
-    reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
-    print("umap reducer initialized.")
-
+    print("Initializing UMAP reducer...")
+    reducer = umap.UMAP(
+        n_neighbors=neighbor_count,
+        min_dist=0,
+        n_components=2,
+        metric='cosine'
+    )
+    print("Fitting UMAP...")
     embedding_outputs = reducer.fit_transform(predictions)
-    print("umap fitting complete. shape of embedding outputs:", embedding_outputs.shape)
+    print("UMAP fitting complete. Shape of embedding:", embedding_outputs.shape)
 
-    print("generating hdbscan labels...")
-    hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
-    print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
+    # -----------------------------
+    # HDBSCAN CLUSTERING
+    # -----------------------------
+    print("Generating HDBSCAN labels...")
+    hdbscan_labels = generate_hdbscan_labels(
+        embedding_outputs,
+        min_samples=1,
+        min_cluster_size=min_cluster_size
+    )
+    print("HDBSCAN done. Unique labels:", np.unique(hdbscan_labels))
 
-    # get unique labels and create color palettes
+    # -----------------------------
+    # COLOR & PLOT
+    # -----------------------------
     unique_clusters = np.unique(hdbscan_labels)
     unique_ground_truth_labels = np.unique(ground_truth_labels)
-    
+
     def create_color_palette(n_colors):
-        """create a color palette with the specified number of colors"""
+        """
+        Create an RGB color palette of size n_colors 
+        using glasbey's distinct color approach.
+        """
         colors = glasbey.create_palette(palette_size=n_colors)
-        
+
         def hex_to_rgb(hex_str):
-            # remove '#' if present
             hex_str = hex_str.lstrip('#')
-            # convert hex to rgb
             return tuple(int(hex_str[i:i+2], 16)/255.0 for i in (0, 2, 4))
-        
-        # convert hex colors to rgb tuples
-        rgb_colors = [hex_to_rgb(color) for color in colors]
-        return rgb_colors
 
-    # create color palettes
-    n_ground_truth_labels = len(unique_ground_truth_labels)
-    n_hdbscan_clusters = len(unique_clusters)
-    ground_truth_colors = create_color_palette(n_ground_truth_labels)
-    hdbscan_colors = create_color_palette(n_hdbscan_clusters)
-    
-    # make the first color in the hdbscan palette black
-    hdbscan_colors[0] = (0, 0, 0)
+        return [hex_to_rgb(color) for color in colors]
 
-    # create experiment-specific directory for images
-    experiment_dir = os.path.join("imgs", "umap_plots", save_name)
-    if not os.path.exists(experiment_dir):
-        os.makedirs(experiment_dir)
+    n_ground_truth = len(unique_ground_truth_labels)
+    n_clusters = len(unique_clusters)
+    ground_truth_colors = create_color_palette(n_ground_truth)
+    hdbscan_colors = create_color_palette(n_clusters)
 
-    # plot hdbscan labels
+    # if -1 in cluster labels, color it black
+    if -1 in unique_clusters:
+        i_neg1 = np.where(unique_clusters == -1)[0][0]
+        hdbscan_colors[i_neg1] = (0, 0, 0)
+
+    # plot hdbscan
     fig1, ax1 = plt.subplots(figsize=(16, 16), facecolor='white')
     ax1.set_facecolor('white')
-    ax1.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
-               c=hdbscan_labels, s=10, alpha=0.1, 
-               cmap=mcolors.ListedColormap(hdbscan_colors))
-    ax1.set_title("hdbscan discovered labels", fontsize=48)
-    ax1.set_xlabel("umap dimension 1", fontsize=48)
-    ax1.set_ylabel("umap dimension 2", fontsize=48)
-    ax1.tick_params(axis='both', which='both', bottom=False, left=False,
-                   labelbottom=False, labelleft=False)
+    sc1 = ax1.scatter(
+        embedding_outputs[:, 0],
+        embedding_outputs[:, 1],
+        c=hdbscan_labels,
+        s=10,
+        alpha=0.1,
+        cmap=mcolors.ListedColormap(hdbscan_colors)
+    )
+    ax1.set_title("HDBSCAN Discovered Labels", fontsize=48)
+    ax1.set_xlabel("UMAP Dimension 1", fontsize=48)
+    ax1.set_ylabel("UMAP Dimension 2", fontsize=48)
+    ax1.tick_params(axis='both', which='both', bottom=False, left=False, 
+                    labelbottom=False, labelleft=False)
     plt.tight_layout()
-    plt.savefig(os.path.join(experiment_dir, "hdbscan_labels.png"),
-                facecolor=fig1.get_facecolor(), edgecolor='none')
+    hdbscan_figpath = os.path.join(experiment_dir, "hdbscan_labels.png")
+    plt.savefig(hdbscan_figpath, facecolor=fig1.get_facecolor(), edgecolor='none')
     plt.close(fig1)
 
-    # plot ground truth labels
+    # plot ground truth
     fig2, ax2 = plt.subplots(figsize=(16, 16), facecolor='white')
     ax2.set_facecolor('white')
-    ax2.scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], 
-               c=ground_truth_labels, s=10, alpha=0.1,
-               cmap=mcolors.ListedColormap(ground_truth_colors))
-    ax2.set_title("ground truth labels", fontsize=48)
-    ax2.set_xlabel("umap dimension 1", fontsize=48)
-    ax2.set_ylabel("umap dimension 2", fontsize=48)
-    ax2.tick_params(axis='both', which='both', bottom=False, left=False,
-                   labelbottom=False, labelleft=False)
+    sc2 = ax2.scatter(
+        embedding_outputs[:, 0],
+        embedding_outputs[:, 1],
+        c=ground_truth_labels,
+        s=10,
+        alpha=0.1,
+        cmap=mcolors.ListedColormap(ground_truth_colors)
+    )
+    ax2.set_title("Ground Truth Labels", fontsize=48)
+    ax2.set_xlabel("UMAP Dimension 1", fontsize=48)
+    ax2.set_ylabel("UMAP Dimension 2", fontsize=48)
+    ax2.tick_params(axis='both', which='both', bottom=False, left=False, 
+                    labelbottom=False, labelleft=False)
     plt.tight_layout()
-    plt.savefig(os.path.join(experiment_dir, "ground_truth_labels.png"),
-                facecolor=fig2.get_facecolor(), edgecolor='none')
+    gt_figpath = os.path.join(experiment_dir, "ground_truth_labels.png")
+    plt.savefig(gt_figpath, facecolor=fig2.get_facecolor(), edgecolor='none')
     plt.close(fig2)
 
-    # save the data
+    # ---------------------
+    # SAVE THE DATA
+    # ---------------------
+    save_path = os.path.join("files", f"{save_name}.npz")
+    print(f"Saving arrays to {save_path} ...")
     np.savez(
-        f"files/{save_name}",
+        save_path,
         embedding_outputs=embedding_outputs,
         hdbscan_labels=hdbscan_labels,
         ground_truth_labels=ground_truth_labels,
@@ -432,12 +448,12 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         s=spec_arr,
         hdbscan_colors=hdbscan_colors,
         ground_truth_colors=ground_truth_colors,
-        original_spectogram=original_spec_arr,
         vocalization=vocalization_arr,
         file_indices=file_indices,
         dataset_indices=dataset_indices,
         file_map=file_map
     )
+    print("Done!")
 
 
 

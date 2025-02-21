@@ -363,8 +363,6 @@ class TweetyBERT(nn.Module):
         x = self.transformerDeProjection(x)
         return x, all_outputs
 
-
-
     def mse_loss(self, predictions, mask, spec, intermediate_layers, vocalization):
         epsilon = 1e-6
         alpha = self.alpha
