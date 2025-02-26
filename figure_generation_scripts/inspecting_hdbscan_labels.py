@@ -55,7 +55,7 @@ def plot_longest_segments_by_label(file_path, output_file_path):
     plt.show()
 
 # File paths
-file_path = "/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/labels_5377_quick_test.npz"
+file_path = "temp/UMAP_FILES/llb3_3440_2018_05_01_10_43_15_segment_0.npz"
 output_file_path = "spectrogram_segments.png"
 
 # Call the function

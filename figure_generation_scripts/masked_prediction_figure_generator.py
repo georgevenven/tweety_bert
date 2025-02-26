@@ -130,62 +130,55 @@ class MaskedPredictionVisualizer:
         mask_np = mask.squeeze().cpu().numpy()
         output_np = output.squeeze().cpu().numpy()  # Shape: (1000, 196)
         
-        # Print shapes for debugging
-        print(f"Segment shape: {segment_np.shape}")
-        print(f"Output shape: {output_np.shape}")
-        print(f"Mask shape: {mask_np.shape}")
+        # Create a figure with 2 subplots with more space between them
+        fig = plt.figure(figsize=(20, 18))  # Increased figure height
         
-        # Create a figure with 2 subplots (original with mask and prediction with mask)
-        fig, axs = plt.subplots(2, 1, figsize=(20, 16))
+        # Create two axes with more space between them
+        ax1 = fig.add_axes([0.1, 0.55, 0.8, 0.35])  # Original spectrogram
+        ax2 = fig.add_axes([0.1, 0.1, 0.8, 0.35])   # Reconstruction
         
         # Plot original spectrogram
-        axs[0].imshow(segment_np, aspect='auto', origin='lower', cmap='viridis')
-        axs[0].set_title('Original Spectrogram with Mask', fontsize=28)
-        axs[0].set_xlabel('Time Bins', fontsize=22)
-        axs[0].set_ylabel('Frequency Bins', fontsize=22)
-        axs[0].tick_params(axis='both', which='major', labelsize=16)
+        ax1.imshow(segment_np, aspect='auto', origin='lower', cmap='viridis')
+        # Remove x-axis label and ticks from top spectrogram
+        ax1.set_xlabel('')
+        ax1.set_xticks([])
+        ax1.set_ylabel('Frequency Bins', fontsize=44)  # 2x bigger
+        ax1.tick_params(axis='y', which='major', labelsize=32)  # 2x bigger
         
         # Plot full model reconstruction
-        axs[1].imshow(output_np.T, aspect='auto', origin='lower', cmap='viridis')
-        axs[1].set_title('Full Model Reconstruction', fontsize=28)
-        axs[1].set_xlabel('Time Bins', fontsize=22)
-        axs[1].set_ylabel('Frequency Bins', fontsize=22)
-        axs[1].tick_params(axis='both', which='major', labelsize=16)
+        ax2.imshow(output_np.T, aspect='auto', origin='lower', cmap='viridis')
+        ax2.set_xlabel('Time Bins', fontsize=44)  # 2x bigger
+        ax2.set_ylabel('Frequency Bins', fontsize=44)  # 2x bigger
+        ax2.tick_params(axis='both', which='major', labelsize=32)  # 2x bigger
         
-        # Add mask indicators as solid red bars above both spectrograms
-        # Find the y-limits of the plots
-        y_min0, y_max0 = axs[0].get_ylim()
-        y_min1, y_max1 = axs[1].get_ylim()
-        height0 = 0.05 * (y_max0 - y_min0)
-        height1 = 0.05 * (y_max1 - y_min1)
-        
-        # Create a separate figure to visualize the mask for debugging
-        plt.figure(figsize=(20, 5))
-        plt.imshow(mask_np, aspect='auto', cmap='Reds')
-        plt.title('Mask Visualization (Red = Masked)', fontsize=24)
-        plt.colorbar(label='Mask Value')
-        plt.savefig(f"{self.output_dir}/mask_debug_{index}_{os.path.splitext(file_name)[0]}.png", dpi=300)
-        plt.close()
-        
-        # Add mask indicators to both plots
-        # The mask shape might be different from the spectrogram shape due to model architecture
-        # We need to ensure we're mapping the mask correctly to the spectrogram time bins
-        
-        # For each time bin in the mask
-        for i in range(mask_np.shape[1]):  # Assuming mask_np shape is [freq, time]
-            # Check if any frequency bin at this time position is masked
+        # Create mask indicator arrays (1 for masked, 0 for unmasked)
+        mask_indicator = np.zeros((1, mask_np.shape[1]))
+        for i in range(mask_np.shape[1]):
             if np.any(mask_np[:, i] > 0.5):
-                # Add red bar above the original spectrogram
-                axs[0].add_patch(plt.Rectangle((i, y_max0), 1, height0, color='red', alpha=1.0, clip_on=False))
-                # Add red bar above the reconstruction
-                axs[1].add_patch(plt.Rectangle((i, y_max1), 1, height1, color='red', alpha=1.0, clip_on=False))
+                mask_indicator[0, i] = 1
         
-        # Adjust the y-limits to make room for the mask indicators
-        axs[0].set_ylim(y_min0, y_max0 + height0)
-        axs[1].set_ylim(y_min1, y_max1 + height1)
+        # Create a custom colormap with pure white for unmasked and bright red for masked regions
+        cmap = plt.cm.colors.ListedColormap(['#FFFFFF', '#990000'])
         
-        plt.tight_layout()
-        plt.subplots_adjust(hspace=0.3)  # Add some space between subplots
+        # Add mask indicators completely outside the spectrograms
+        # For the first spectrogram
+        mask_ax1 = fig.add_axes([0.1, 0.91, 0.8, 0.03])  # Above the first spectrogram
+        mask_ax1.imshow(mask_indicator, aspect='auto', cmap=cmap, vmin=0, vmax=1)
+        mask_ax1.set_xticks([])
+        mask_ax1.set_yticks([])
+        mask_ax1.axis('off')  # Remove the box outline
+        
+        # For the second spectrogram
+        mask_ax2 = fig.add_axes([0.1, 0.46, 0.8, 0.03])  # Above the second spectrogram
+        mask_ax2.imshow(mask_indicator, aspect='auto', cmap=cmap, vmin=0, vmax=1)
+        mask_ax2.set_xticks([])
+        mask_ax2.set_yticks([])
+        mask_ax2.axis('off')  # Remove the box outline
+        
+        # Add titles above the mask indicators
+        fig.text(0.5, 0.96, 'Original Spectrogram with Mask', ha='center', fontsize=42)
+        fig.text(0.5, 0.51, 'Full Model Reconstruction', ha='center', fontsize=42)
+        
         plt.savefig(f"{self.output_dir}/masked_pred_{index}_{os.path.splitext(file_name)[0]}.png", dpi=300)
         plt.close()
 
