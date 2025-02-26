@@ -18,7 +18,28 @@ from multiprocessing import Pool, TimeoutError
 import logging
 
 class WavtoSpec:
-    def __init__(self, src_dir, dst_dir, song_detection_json_path=None, step_size=119, nfft=1024, generate_random_files_number=None, single_threaded=False):
+    def __init__(
+        self,
+        src_dir,
+        dst_dir,
+        song_detection_json_path=None,
+        step_size=119,
+        nfft=1024,
+        generate_random_files_number=None,
+        single_threaded=True
+    ):
+        """
+        Constructor for the WavtoSpec class.
+
+        Args:
+            src_dir (str): Source directory containing .wav files.
+            dst_dir (str): Destination directory to save spectrograms.
+            song_detection_json_path (str or None): Path to JSON with song detection data.
+            step_size (int): Hop length for the STFT.
+            nfft (int): FFT size for the STFT.
+            generate_random_files_number (int or None): If set, processes only N random files.
+            single_threaded (bool): Whether to run single-threaded (True) or multi-threaded (False).
+        """
         self.src_dir = src_dir
         self.dst_dir = dst_dir
         self.song_detection_json_path = None if song_detection_json_path == "None" else song_detection_json_path
@@ -27,6 +48,11 @@ class WavtoSpec:
         self.nfft = nfft
         self.generate_random_files_number = generate_random_files_number
         self.single_threaded = single_threaded
+        
+        # Initialize the shared counter
+        manager = multiprocessing.Manager()
+        self.skipped_files_count = manager.Value('i', 0)
+
         self.setup_logging()
 
     def setup_logging(self):
@@ -38,16 +64,20 @@ class WavtoSpec:
 
     def process_directory(self):
         print("Starting process_directory")
-        print(self.src_dir)
+        print(f"Source directory: {self.src_dir}")
 
-        audio_files = [os.path.join(root, file)
-                    for root, dirs, files in os.walk(self.src_dir)
-                    for file in files if file.lower().endswith('.wav')]
+        # Gather .wav files
+        audio_files = [
+            os.path.join(root, file)
+            for root, dirs, files in os.walk(self.src_dir)
+            for file in files if file.lower().endswith('.wav')
+        ]
 
-        
-        # If more random files are requested than available, process all files
-        if self.generate_random_files_number is not None and self.generate_random_files_number > len(audio_files):
-            print(f"Requested {self.generate_random_files_number} random files, but only {len(audio_files)} available. Processing all files.")
+        # Handle random file selection if user requested
+        if (self.generate_random_files_number is not None 
+                and self.generate_random_files_number > len(audio_files)):
+            print(f"Requested {self.generate_random_files_number} random files, but only {len(audio_files)} available. "
+                  "Processing all files.")
             self.generate_random_files_number = None
 
         if self.generate_random_files_number is not None:
@@ -55,40 +85,67 @@ class WavtoSpec:
             audio_files = np.random.choice(audio_files, self.generate_random_files_number, replace=False)
             print(f"{len(audio_files)} random files selected")
 
-        if self.single_threaded:
-            print("Running in single-threaded mode")
-            pbar = tqdm(total=len(audio_files), desc="Processing files")
-            failed_files = []
-            skipped_files_count = 0
+        manager = multiprocessing.Manager()
+        failed_files = manager.list()  # shared list for failed files
 
+        pbar = tqdm(total=len(audio_files), desc="Processing files")
+
+        # ------------------------------------
+        # SINGLE-THREADED MODE
+        # ------------------------------------
+        if self.single_threaded:
+            print("Running in single-threaded mode.")
             for file_path in audio_files:
                 try:
-                    result = self.safe_process_file(self, file_path)
-                    if result is None:
-                        skipped_files_count += 1
+                    print(f"[Single-thread] Processing file: {file_path}")
+                    if self.song_detection_json_path is not None:
+                        if self.has_vocalization(file_path):
+                            self.multiprocess_process_file(file_path, self.song_detection_json_path)
+                        else:
+                            print(f"File {file_path} skipped due to no vocalization")
+                    else:
+                        self.multiprocess_process_file(file_path, None)
+
                 except Exception as e:
                     logging.error(f"Error processing {file_path}: {e}")
+                    self.skipped_files_count.value += 1
                     failed_files.append(file_path)
-                pbar.update(1)
 
-            pbar.close()
+                pbar.update()
+
+            # Retry failed files (still single-threaded)
+            if failed_files:
+                print(f"Retrying {len(failed_files)} failed files (single-threaded)...")
+                pbar_failed = tqdm(total=len(failed_files), desc="Retrying failed files")
+                for file_path in failed_files:
+                    try:
+                        print(f"[Single-thread retry] Processing file: {file_path}")
+                        if self.song_detection_json_path is not None:
+                            if self.has_vocalization(file_path):
+                                self.multiprocess_process_file(file_path, self.song_detection_json_path)
+                            else:
+                                print(f"File {file_path} skipped due to no vocalization")
+                        else:
+                            self.multiprocess_process_file(file_path, None)
+                    except Exception as e:
+                        logging.error(f"Error re-processing {file_path}: {e}")
+                        self.skipped_files_count.value += 1
+                    pbar_failed.update()
+                pbar_failed.close()
+
+        # ------------------------------------
+        # MULTI-THREADED MODE
+        # ------------------------------------
         else:
-            print(f"Running in multi-threaded mode using {multiprocessing.cpu_count()} processes")
             max_processes = multiprocessing.cpu_count()
-            print(f"Using {max_processes} processes")
-
-            manager = multiprocessing.Manager()
-            skipped_files_count = manager.Value('i', 0)
-            failed_files = manager.list()
-
-            pbar = tqdm(total=len(audio_files), desc="Processing files")
+            print(f"Running in multi-threaded mode with {max_processes} workers.")
 
             def update_progress_bar(_):
                 pbar.update()
 
             def error_callback(e):
                 logging.error(f"Error: {e}")
-                skipped_files_count.value += 1
+                self.skipped_files_count.value += 1
                 pbar.update()
 
             def file_failed_callback(file_path):
@@ -96,8 +153,9 @@ class WavtoSpec:
                 failed_files.append(file_path)
                 pbar.update()
 
-            with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
+            with Pool(processes=max_processes, maxtasksperchild=100) as pool:
                 for file_path in audio_files:
+                    # Simple memory check loop
                     while True:
                         available_memory = psutil.virtual_memory().available
                         current_memory_usage = psutil.Process(os.getpid()).memory_info().rss
@@ -105,8 +163,8 @@ class WavtoSpec:
                             break
                         print("Not enough memory to spawn new process, waiting...")
                         time.sleep(1)
-                    
-                    print(f"Processing file: {file_path}")
+
+                    print(f"[Multi-thread] Processing file: {file_path}")
                     pool.apply_async(
                         WavtoSpec.safe_process_file,
                         args=(self, file_path),
@@ -117,28 +175,28 @@ class WavtoSpec:
                 pool.close()
                 pool.join()
 
-            pbar.close()
-
-            print(f"Total files processed: {len(audio_files) - len(failed_files)}")
-            print(f"Total files skipped due to errors or no vocalization data: {skipped_files_count.value}")
-
-            # Retry failed files
+            # Retry failed files in multi-threaded mode
             if failed_files:
-                print(f"Retrying {len(failed_files)} failed files...")
-                pbar = tqdm(total=len(failed_files), desc="Retrying failed files")
-                with Pool(processes=max_processes, maxtasksperchild=100) as pool:  # Adjust maxtasksperchild as needed
-                    for file_path in failed_files: 
-                        print(f"Retrying file: {file_path}")
+                print(f"Retrying {len(failed_files)} failed files in multi-threaded mode...")
+                pbar_failed = tqdm(total=len(failed_files), desc="Retrying failed files")
+                with Pool(processes=max_processes, maxtasksperchild=100) as pool:
+                    for file_path in failed_files:
+                        print(f"[Multi-thread retry] Processing file: {file_path}")
                         pool.apply_async(
                             WavtoSpec.safe_process_file,
                             args=(self, file_path),
-                            callback=update_progress_bar,
+                            callback=lambda _: pbar_failed.update(),
                             error_callback=error_callback
                         )
-
                     pool.close()
                     pool.join()
-                pbar.close()
+                pbar_failed.close()
+
+        pbar.close()
+
+        total_processed = len(audio_files) - len(failed_files)
+        print(f"Total files processed: {total_processed}")
+        print(f"Total files skipped due to errors or no vocalization data: {self.skipped_files_count.value}")
 
     def has_vocalization(self, file_path):
         file_name = os.path.basename(file_path)
@@ -148,24 +206,29 @@ class WavtoSpec:
             samplerate=None,
             song_detection_json_path=self.song_detection_json_path
         )
-
         if vocalization_data is None:
+            self.increment_skip_counter()
             return False
         return True
 
     @staticmethod
     def safe_process_file(instance, file_path):
+        """
+        Thin wrapper for multiprocess calls. 
+        Logs errors instead of letting them bubble up.
+        """
         try:
             if instance.song_detection_json_path is not None:
                 if instance.has_vocalization(file_path):
                     instance.multiprocess_process_file(file_path, instance.song_detection_json_path)
                 else:
-                    print(f"File {file_path} skipped due to no vocalization")
+                    logging.info(f"File {file_path} skipped due to no vocalization")
                     return None
             else:
-                instance.multiprocess_process_file(file_path, instance.song_detection_json_path)
+                instance.multiprocess_process_file(file_path, None)
         except Exception as e:
             logging.error(f"Error processing {file_path}: {e}")
+            instance.increment_skip_counter()
             return None
         return file_path
 
@@ -176,11 +239,13 @@ class WavtoSpec:
             save_npz=True
         )
 
-    @staticmethod
-    def process_file(instance, file_path):
-        return instance.convert_to_spectrogram(file_path, song_detection_json_path=None, save_npz=False)
-        
-    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500, min_timebins=500, save_npz=True):
+    def increment_skip_counter(self):
+        """Helper method to increment the skip counter in a thread-safe way"""
+        if hasattr(self, 'skipped_files_count'):
+            self.skipped_files_count.value += 1
+
+    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500,
+                               min_timebins=1000, save_npz=True):
         try:
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate
@@ -190,78 +255,73 @@ class WavtoSpec:
 
             length_in_ms = (len(data) / samplerate) * 1000
             if length_in_ms < min_length_ms:
-                print(f"File {file_path} is below the length threshold and will be skipped.")
-                return None, None 
-
-            file_name = os.path.basename(file_path)
+                logging.info(f"File {file_path} skipped: below length threshold ({length_in_ms}ms < {min_length_ms}ms)")
+                self.increment_skip_counter()
+                return None, None
 
             if song_detection_json_path is not None:
                 vocalization_data, syllable_labels = self.check_vocalization(
-                    file_name=file_name,
+                    file_name=os.path.basename(file_path),
                     data=data,
                     samplerate=samplerate,
                     song_detection_json_path=song_detection_json_path
                 )
                 if not vocalization_data:
-                    print(f"File {file_path} skipped due to no vocalization")
-                    return None, None 
+                    logging.info(f"File {file_path} skipped: no vocalization data found")
+                    self.increment_skip_counter()
+                    return None, None
             else:
-                vocalization_data = [(0, len(data)/samplerate)]  # Assume entire file is vocalization
-                syllable_labels = {}  # Empty dict if not using JSON
+                # Assume entire file is a vocalization if no JSON is given
+                vocalization_data = [(0, len(data)/samplerate)]
+                syllable_labels = {}
 
+            # High-pass filter
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
-            data = filtfilt(b, a, data)  # Apply high-pass filter
+            data = filtfilt(b, a, data)
 
-            hop_length = self.step_size
-            window = 'hann'
-            n_fft = self.nfft
-            Sxx = librosa.stft(data.astype(float), n_fft=n_fft, hop_length=hop_length, window=window)
+            # Compute STFT
+            Sxx = librosa.stft(data.astype(float), n_fft=self.nfft, hop_length=self.step_size, window='hann')
             Sxx_log = librosa.amplitude_to_db(np.abs(Sxx), ref=np.max)
 
+            # Prepare label array
             labels = np.zeros(Sxx.shape[1], dtype=int)
 
+            # Mark labeled segments if provided
             for label, intervals in syllable_labels.items():
                 for start_sec, end_sec in intervals:
-                    start_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, start_sec)
-                    end_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, end_sec)
+                    start_bin = np.searchsorted(np.arange(Sxx.shape[1]) * self.step_size / samplerate, start_sec)
+                    end_bin = np.searchsorted(np.arange(Sxx.shape[1]) * self.step_size / samplerate, end_sec)
                     labels[start_bin:end_bin] = int(label)
 
-            if Sxx.shape[1] >= min_timebins:
-                segments_saved = 0  # Track how many segments we actually save
-                for i, (start_sec, end_sec) in enumerate(vocalization_data):
-                    start_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, start_sec)
-                    end_bin = np.searchsorted(np.arange(Sxx.shape[1]) * hop_length / samplerate, end_sec)
+            # Process each vocalization segment
+            for i, (start_sec, end_sec) in enumerate(vocalization_data):
+                start_bin = np.searchsorted(
+                    np.arange(Sxx.shape[1]) * self.step_size / samplerate, start_sec)
+                end_bin = np.searchsorted(
+                    np.arange(Sxx.shape[1]) * self.step_size / samplerate, end_sec)
 
-                    segment_Sxx_log = Sxx_log[:, start_bin:end_bin]
-                    segment_labels = labels[start_bin:end_bin]
-                    segment_vocalization = np.ones(end_bin - start_bin, dtype=int)
+                # Only process segments that are at least 500 time bins long
+                if (end_bin - start_bin) < min_timebins:
+                    print(f"Segment {i} has fewer than {min_timebins} time bins and will be skipped.")
+                    continue
 
-                    # Skip sub-segments if they are too small
-                    if segment_Sxx_log.shape[1] < min_timebins:
-                        logging.info(f"Skipping small sub-segment in {file_path} "
-                                  f"(length={segment_Sxx_log.shape[1]} < min_timebins={min_timebins}).")
-                        continue
+                segment_Sxx_log = Sxx_log[:, start_bin:end_bin]
+                segment_labels = labels[start_bin:end_bin]
+                segment_vocalization = np.ones(end_bin - start_bin, dtype=int)
 
-                    if save_npz:
-                        spec_filename = os.path.splitext(os.path.basename(file_path))[0]
-                        segment_spec_file_path = os.path.join(self.dst_dir, f"{spec_filename}_segment_{segments_saved}.npz")
-                        np.savez(segment_spec_file_path, 
-                                s=segment_Sxx_log, 
-                                vocalization=segment_vocalization, 
-                                labels=segment_labels)
-                        logging.info(f"Segment {segments_saved} spectrogram saved to {segment_spec_file_path} "
-                                  f"(length={segment_Sxx_log.shape[1]} timebins)")
-                        segments_saved += 1
-
-                if segments_saved == 0:
-                    logging.warning(f"No segments from {file_path} met the minimum timebin requirement of {min_timebins}")
-                else:
-                    logging.info(f"Saved {segments_saved} segments from {file_path}")
-
-                return Sxx_log, vocalization_data, labels
-            else:
-                logging.info(f"Spectrogram for {file_path} has less than {min_timebins} timebins and will not be saved.")
-                return None, None, None
+                if save_npz:
+                    spec_filename = os.path.splitext(os.path.basename(file_path))[0]
+                    segment_spec_file_path = os.path.join(
+                        self.dst_dir, f"{spec_filename}_segment_{i}.npz"
+                    )
+                    np.savez(
+                        segment_spec_file_path,
+                        s=segment_Sxx_log,
+                        vocalization=segment_vocalization,
+                        labels=segment_labels
+                    )
+                    print(f"Segment {i} spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+            return Sxx_log, vocalization_data, labels
 
         except Exception as e:
             logging.error(f"Error processing {file_path}: {e}")
@@ -269,11 +329,10 @@ class WavtoSpec:
 
     def check_vocalization(self, file_name, data, samplerate, song_detection_json_path):
         if not self.use_json:
-            return [(0, len(data)/samplerate)], {}  # Assume entire file is vocalization if not using JSON
+            return [(0, len(data)/samplerate)], {}
 
-        # Open JSON file
         if not os.path.exists(song_detection_json_path):
-            logging.error(f"JSON file {song_detection_json_path} does not exist.")
+            logging.error(f"JSON file {song_detection_json_path} does not exist")
             return None, None
 
         try:
@@ -281,50 +340,58 @@ class WavtoSpec:
                 json_data = json.load(json_file)
                 for entry in json_data:
                     if entry['filename'] == file_name:
-                        if not entry['song_present']:
+                        if not entry.get('song_present', False):
+                            logging.info(f"File {file_name} skipped: no song present according to JSON")
                             return None, None
                         
-                        onsets_offsets = [(seg['onset_ms'] / 1000, seg['offset_ms'] / 1000) for seg in entry['segments']]
-
-                        # Process syllable labels
-                        syllable_labels = {}
-                        if 'syllable_labels' in entry and entry['syllable_labels']:
-                            syllable_labels = entry['syllable_labels']
-
+                        onsets_offsets = [
+                            (seg['onset_ms'] / 1000, seg['offset_ms'] / 1000)
+                            for seg in entry.get('segments', [])
+                        ]
+                        syllable_labels = entry.get('syllable_labels', {})
                         return onsets_offsets, syllable_labels
         except Exception as e:
             logging.error(f"Error reading JSON file {song_detection_json_path}: {e}")
             return None, None
 
-        logging.error(f"No matching entry found for {file_name} in {song_detection_json_path}.")
+        logging.info(f"File {file_name} skipped: no matching entry found in {song_detection_json_path}")
         return None, None
 
 def main():
     parser = argparse.ArgumentParser(description="Convert WAV files to spectrograms.")
-    parser.add_argument('--src_dir', type=str, help='Source directory containing WAV files.')
-    parser.add_argument('--dst_dir', type=str, help='Destination directory to save spectrograms.')
-    parser.add_argument('--song_detection_json_path', type=str, default=None, help='Path to the JSON file with song detection data.')
-    parser.add_argument('--step_size', type=int, default=119, help='Step size for the spectrogram.')
-    parser.add_argument('--nfft', type=int, default=1024, help='Number of FFT points for the spectrogram.')
-    parser.add_argument('--generate_random_files_number', type=int, default=None, help='Number of random files to process.')
-    parser.add_argument('--single_threaded', action='store_true', help='Run in single-threaded mode')
+    parser.add_argument('--src_dir', type=str, required=True, help='Source directory containing WAV files.')
+    parser.add_argument('--dst_dir', type=str, required=True, help='Destination directory to save spectrograms.')
+    parser.add_argument('--song_detection_json_path', type=str, default=None,
+                        help='Path to the JSON file with song detection data.')
+    parser.add_argument('--step_size', type=int, default=119, help='Hop length for the spectrogram.')
+    parser.add_argument('--nfft', type=int, default=1024, help='FFT size for the spectrogram.')
+    parser.add_argument('--generate_random_files_number', type=int, default=None,
+                        help='Number of random files to process.')
+    parser.add_argument('--single_threaded', 
+                        type=str,
+                        default='true',
+                        choices=['true', 'false', '1', '0', 'yes', 'no'],
+                        help='Whether to run single-threaded (True) or multi-threaded (False). '
+                             'Default is True. Example usage: --single_threaded false')
 
     args = parser.parse_args()
-
+    
+    # Convert the string to boolean after parsing
+    single_threaded = args.single_threaded.lower() in ['true', '1', 'yes']
+    
     wav_to_spec = WavtoSpec(
-        args.src_dir, 
-        args.dst_dir, 
-        args.song_detection_json_path, 
-        args.step_size, 
-        args.nfft, 
-        args.generate_random_files_number,
-        args.single_threaded
+        src_dir=args.src_dir,
+        dst_dir=args.dst_dir,
+        song_detection_json_path=args.song_detection_json_path,
+        step_size=args.step_size,
+        nfft=args.nfft,
+        generate_random_files_number=args.generate_random_files_number,
+        single_threaded=single_threaded
     )
     wav_to_spec.process_directory()
 
 if __name__ == "__main__":
     main()
-
 
 
 '''

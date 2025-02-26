@@ -3,13 +3,18 @@ import os
 import numpy as np
 from glob import glob
 
-# Update the path to include the project root directory
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Get the absolute path to the project root directory
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Add both the project root and src directories to the Python path
+sys.path.append(project_root)
+sys.path.append(os.path.join(project_root, 'src'))
+
+# This makes both 'src.analysis' and 'data_class' available
 from src.analysis import ComputerClusterPerformance
 
 # Specify the directory containing the npz files
-npz_directory = "/media/george-vengrovski/George-SSD/umaps_across_all_layers"
+npz_directory = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"
 
 # Collect all npz files in the directory
 npz_files = glob(os.path.join(npz_directory, "*.npz"))
@@ -45,9 +50,11 @@ best_sublayer_avg = -1
 
 layer_averages = {}
 sublayer_averages = {}
+all_measures = []  # Store all V-measures for overall average
 
 for (layer, sublayer), measures in layer_sublayer_measures.items():
     avg_measure = np.mean(measures)
+    all_measures.extend(measures)  # Add measures to the overall list
     
     # Update best layer+sublayer
     if avg_measure > best_layer_sublayer_avg:
@@ -77,6 +84,10 @@ for sublayer, measures in sublayer_averages.items():
         best_sublayer_avg = avg_measure
         best_sublayer = sublayer
 
+# Calculate overall average and standard deviation
+overall_average = np.mean(all_measures)
+overall_std = np.std(all_measures)
+
 # Sort and print results in rank order
 sorted_layer_sublayer = sorted(layer_sublayer_measures.items(), key=lambda x: np.mean(x[1]), reverse=True)
 sorted_layers = sorted(layer_averages.items(), key=lambda x: np.mean(x[1]), reverse=True)
@@ -95,6 +106,7 @@ for sublayer, measures in sorted_sublayers:
     print(f"{sublayer}: {np.mean(measures):.4f}")
 
 # Print best results
-print(f"\nBest Layer+Sublayer: {best_layer_sublayer} with average V-measure: {best_layer_sublayer_avg}")
-print(f"Best Layer: {best_layer} with average V-measure: {best_layer_avg}")
-print(f"Best Sublayer: {best_sublayer} with average V-measure: {best_sublayer_avg}")
+print(f"\nBest Layer+Sublayer: {best_layer_sublayer} with average V-measure: {best_layer_sublayer_avg:.2f} ± {np.std(layer_sublayer_measures[best_layer_sublayer]):.2f}")
+print(f"Best Layer: {best_layer} with average V-measure: {best_layer_avg:.2f} ± {np.std(np.concatenate([layer_sublayer_measures[k] for k in layer_sublayer_measures.keys() if k[0] == best_layer])):.2f}")
+print(f"Best Sublayer: {best_sublayer} with average V-measure: {best_sublayer_avg:.2f} ± {np.std(np.concatenate([layer_sublayer_measures[k] for k in layer_sublayer_measures.keys() if k[1] == best_sublayer])):.2f}")
+print(f"Overall Average V-measure: {overall_average:.2f} ± {overall_std:.2f}")

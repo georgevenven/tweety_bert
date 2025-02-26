@@ -6,11 +6,11 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="llb3"
-MODEL_NAME="LLB_Model_For_Paper"
-WAV_FOLDER="/media/george-vengrovski/George-SSD/llb_stuff/llb_birds/yarden_data/llb3_songs"
-SONG_DETECTION_JSON_PATH="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/onset_offset_results.json"
-TEST_SET_FILE="experiments/LLB_Model_For_Paper/test_files.txt"  # Add your test set file path here
+BIRD_NAME="raw_llb16"
+MODEL_NAME="TweetyBERT_Paper_Yarden_Model"
+WAV_FOLDER="/media/george-vengrovski/Desk SSD/TweetyBERT/embedding_songs/llb16_songs"
+SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/merged_output.json"
+TEST_SET_FILE="experiments/TweetyBERT_Paper_Yarden_Model/test_files.txt"  # Add your test set file path here
 
 # Create temp directory
 TEMP_DIR="./temp"
@@ -45,7 +45,8 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
         python src/spectogram_generator.py \
             --src_dir "$fold_dir" \
             --dst_dir "$spec_dir" \
-            --song_detection_json_path "$SONG_DETECTION_JSON_PATH" 
+            --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
+            --single_threaded false
         
         # Add removal of empty Yarden data files
         echo "Removing empty Yarden data files from fold $fold_number..."
@@ -57,7 +58,8 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --experiment_folder "experiments/$MODEL_NAME" \
             --data_dir "$spec_dir" \
             --save_name "$save_name" \
-            --samples 1e6
+            --samples 1e6 \
+            --raw_spectogram true
     fi
 done
 

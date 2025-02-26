@@ -89,7 +89,7 @@ os.makedirs(out_dir, exist_ok=True)
 print(f"Found {len(npz_files)} total files")
 print(f"Processing {num_samples} sample files")
 
-for file in tqdm(sample_files, desc="processing files"):
+for file in tqdm(sample_files, desc="Processing files"):
     file_path = os.path.join(data_folder, file)
     # Debug: Print file being processed
     print(f"\nProcessing: {file}")
@@ -105,39 +105,43 @@ for file in tqdm(sample_files, desc="processing files"):
     cmap = plt.get_cmap('tab10')
     colors = [cmap(i) for i in range(len(all_labels))]
     label_color_map = {label: color for label, color in zip(all_labels, colors)}
+    
+    # Make silences black (label 0)
+    label_color_map[0] = (0, 0, 0, 1)  # Black color for silence
 
     # create color arrays for both label versions
     orig_colors = [label_color_map[label] for label in labels]
     phrase_colors = [label_color_map[label] for label in phrase_labels]
 
     # create a figure with three vertically stacked subplots using gridspec for custom heights
-    fig = plt.figure(figsize=(12, 10))
+    # Make 1 inch wider
+    fig = plt.figure(figsize=(17, 12))  # Increased width from 16 to 17
     gs = fig.add_gridspec(3, 1, height_ratios=[8, 1, 1])
     axes = [fig.add_subplot(gs[i]) for i in range(3)]
 
     # spectrogram
     axes[0].imshow(spectrogram, aspect='auto', origin='lower', cmap='viridis')
-    axes[0].set_ylabel("Frequency (Hz)", fontsize=12)
-    axes[0].set_title(f"Spectrogram - {file}", fontsize=14, pad=10)
+    axes[0].set_ylabel("Frequency (bins)", fontsize=24)
+    axes[0].set_title(f"Spectrogram - {file}", fontsize=28, pad=10)
 
-    # original labels row - set height to 1/8 of spectrogram
+    # original labels row
     axes[1].imshow([orig_colors], aspect='auto')
     axes[1].set_yticks([])
-    axes[1].set_title("Original Syllable Labels", fontsize=12)
+    axes[1].set_title("Original Syllable Labels", fontsize=24)
 
-    # phrase labels row - set height to 1/8 of spectrogram
+    # phrase labels row
     axes[2].imshow([phrase_colors], aspect='auto')
     axes[2].set_yticks([])
-    axes[2].set_xlabel("Time (Frames)", fontsize=12)
-    axes[2].set_title("Converted Phrase Labels", fontsize=12)
+    axes[2].set_xlabel("Time (Bins)", fontsize=24)
+    axes[2].set_title("Converted Phrase Labels", fontsize=24)
 
     # Increase tick label sizes
     for ax in axes:
-        ax.tick_params(axis='both', which='major', labelsize=10)
+        ax.tick_params(axis='both', which='major', labelsize=20)
 
     plt.tight_layout()
 
-    # save the figure (filename based on original file, with .png extension)
+    # save the figure
     base_name = os.path.splitext(file)[0]
     out_path = os.path.join(out_dir, f"{base_name}.png")
     print(f"Saving figure to: {os.path.abspath(out_path)}")

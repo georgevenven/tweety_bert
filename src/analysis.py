@@ -101,96 +101,6 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
 
    return labels
 
-
-# def plot_dataset_comparison(data_dirs, save_name, embedding_outputs, dataset_indices):
-#     """
-#     Generate comparison plots between two datasets using UMAP embeddings.
-  
-#     Parameters:
-#     - data_dirs: list of data directory paths
-#     - save_name: name for saving the plots
-#     - embedding_outputs: UMAP embeddings array
-#     - dataset_indices: array indicating which dataset each point belongs to
-#     """
-#     # Create experiment-specific directory
-#     experiment_dir = os.path.join("imgs", "umap_plots", save_name)
-#     if not os.path.exists(experiment_dir):
-#         os.makedirs(experiment_dir)
-
-
-#     # Split data by dataset
-#     dataset_1_mask = dataset_indices == 0
-#     dataset_2_mask = dataset_indices == 1
-  
-#     data_1 = embedding_outputs[dataset_1_mask]
-#     data_2 = embedding_outputs[dataset_2_mask]
-
-
-#     # Create sample count string for title
-#     sample_counts = (
-#         f"Samples - {os.path.basename(data_dirs[0])}: {len(data_1):,}, "
-#         f"{os.path.basename(data_dirs[1])}: {len(data_2):,}"
-#     )
-
-
-#     # Create 2D histograms
-#     bins = 300
-#     heatmap_1, xedges, yedges = np.histogram2d(data_1[:, 0], data_1[:, 1], bins=bins)
-#     heatmap_2, _, _ = np.histogram2d(data_2[:, 0], data_2[:, 1], bins=[xedges, yedges])
-
-
-#     # Normalize heatmaps
-#     heatmap_1 = heatmap_1 / heatmap_1.max()
-#     heatmap_2 = heatmap_2 / heatmap_2.max()
-
-
-#     # Create RGB image for overlap visualization
-#     rgb_image = np.zeros((heatmap_1.shape[0], heatmap_1.shape[1], 3))
-#     brightness_factor = 4
-  
-#     # Purple for dataset 1, Green for dataset 2
-#     rgb_image[..., 0] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Red channel
-#     rgb_image[..., 1] = np.clip(heatmap_2.T * brightness_factor, 0, 1)  # Green channel
-#     rgb_image[..., 2] = np.clip(heatmap_1.T * brightness_factor, 0, 1)  # Blue channel
-
-
-#     # Plot dataset 1
-#     fig1, ax1 = plt.subplots(figsize=(6, 6))
-#     ax1.imshow(heatmap_1.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-#                origin='lower', cmap='Purples', vmax=0.1)
-#     ax1.set_title(f"Dataset: {os.path.basename(data_dirs[0])}", fontsize=16)
-#     ax1.set_xlabel('UMAP Dimension 1')
-#     ax1.set_ylabel('UMAP Dimension 2')
-#     fig1.tight_layout()
-#     fig1.savefig(os.path.join(experiment_dir, "dataset_1.png"), dpi=300)
-#     fig1.savefig(os.path.join(experiment_dir, "dataset_1.svg"))
-#     plt.close(fig1)
-
-
-#     # Plot dataset 2
-#     fig2, ax2 = plt.subplots(figsize=(6, 6))
-#     ax2.imshow(heatmap_2.T, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-#                origin='lower', cmap='Greens', vmax=0.1)
-#     ax2.set_title(f"Dataset: {os.path.basename(data_dirs[1])}", fontsize=16)
-#     ax2.set_xlabel('UMAP Dimension 1')
-#     fig2.tight_layout()
-#     fig2.savefig(os.path.join(experiment_dir, "dataset_2.png"), dpi=300)
-#     fig2.savefig(os.path.join(experiment_dir, "dataset_2.svg"))
-#     plt.close(fig2)
-
-
-#     # Plot overlap
-#     fig3, ax3 = plt.subplots(figsize=(6, 6))
-#     ax3.imshow(rgb_image, extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-#                origin='lower')
-#     ax3.set_title("Overlapping Datasets", fontsize=16)
-#     ax3.set_xlabel('UMAP Dimension 1')
-#     fig3.tight_layout()
-#     fig3.savefig(os.path.join(experiment_dir, "overlap.png"), dpi=300)
-#     fig3.savefig(os.path.join(experiment_dir, "overlap.svg"))
-#     plt.close(fig3)
-
-
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                        layer_index=None, dict_key=None,
                        context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True,
@@ -208,17 +118,15 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
    file_map = {}
    current_file_index = 0
 
-
    # reset figure
    plt.figure(figsize=(8, 6))
-
 
    samples = int(samples)
    total_samples = 0
 
-
    # calculate samples per dataset
    samples_per_dataset = samples // len(data_dirs)
+   print(f"samples per dataset: {samples_per_dataset}")
   
    # iterate through each dataset
    for dataset_idx, data_dir in enumerate(data_dirs):
@@ -360,23 +268,18 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                print(f"dataset {data_dir} exhausted after {dataset_samples} samples")
                break
 
-
    # convert the list of batch * samples * features to samples * features
    ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
    spec_arr = np.concatenate(spec_arr, axis=0)
    file_indices = np.concatenate(file_indices_arr, axis=0)
    dataset_indices = np.concatenate(dataset_indices_arr, axis=0)
    vocalization_arr = np.concatenate(vocalization_arr, axis=0)
-
-
    original_spec_arr = spec_arr
-
 
    if not raw_spectogram:
        predictions = np.concatenate(predictions_arr, axis=0)
    else:
        predictions = spec_arr
-
 
    # filter for vocalization before any processing or visualization
    if remove_non_vocalization:
@@ -392,27 +295,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
        spec_arr = spec_arr[vocalization_indices]
        file_indices = file_indices[vocalization_indices]
        dataset_indices = dataset_indices[vocalization_indices]
-
-
-   # group samples by song and truncate each group to a fixed size
-   unique_files = np.unique(file_indices)
-   desired_per_file = samples // len(unique_files)
-   selected_indices = []
-   for f in unique_files:
-       inds = np.where(file_indices == f)[0]
-       if len(inds) > desired_per_file:
-           inds = inds[:desired_per_file]
-       selected_indices.append(inds)
-   selected_indices = np.concatenate(selected_indices)
-
-
-   predictions = predictions[selected_indices]
-   ground_truth_labels = ground_truth_labels[selected_indices]
-   spec_arr = spec_arr[selected_indices]
-   file_indices = file_indices[selected_indices]
-   dataset_indices = dataset_indices[selected_indices]
-   vocalization_arr = vocalization_arr[selected_indices]
-
 
    # fit the umap reducer      
    print("initializing umap reducer...")
@@ -497,7 +379,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                facecolor=fig2.get_facecolor(), edgecolor='none')
    plt.close(fig2)
 
-
    # save the data
    np.savez(
        f"files/{save_name}",
@@ -514,11 +395,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
        dataset_indices=dataset_indices,
        file_map=file_map
    )
-
-
-
-
-
 
 # def apply_windowing(arr, window_size, stride, flatten_predictions=False):
 #     """
