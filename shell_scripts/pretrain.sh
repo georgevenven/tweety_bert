@@ -102,15 +102,14 @@ python3 src/spectogram_generator.py \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
-        $([ "$MULTI_THREAD" = true ] && echo "--single_threaded")
-
+        --single_threaded False 
 python3 src/spectogram_generator.py \
         --src_dir "$TEST_WAV_DIR" \
         --dst_dir "$TEST_DIR" \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
-        $([ "$MULTI_THREAD" = true ] && echo "--single_threaded")
+        --single_threaded False 
 
 # run tweetybert
 python3 src/TweetyBERT.py \
