@@ -35,9 +35,11 @@ mkdir -p "$TEMP_DIR"
 echo "Created temporary directory: $TEMP_DIR"
 
 # 1. Split files into train and test (Python writes train_files.txt and test_files.txt)
+# Use --full_paths to ensure we get complete paths relative to INPUT_DIR
 python3 scripts/split_files_into_train_and_test.py "$INPUT_DIR" "$TEST_PERCENTAGE" \
         --train_output "$TRAIN_FILE_LIST" \
-        --test_output "$TEST_FILE_LIST"
+        --test_output "$TEST_FILE_LIST" \
+        --full_paths
 
 # 2. Read the file lists into arrays
 train_files=()
@@ -61,24 +63,25 @@ mkdir -p "$TRAIN_WAV_DIR"
 mkdir -p "$TEST_WAV_DIR"
 
 # 5. Copy train files into TRAIN_WAV_DIR, preserving directory structure
-#    We assume each line in train_files.txt is relative to $INPUT_DIR.
 for file in "${train_files[@]}"; do
-    # We treat "$file" as a path relative to $INPUT_DIR
-    rel_path="$file"
-    # Derive the subdirectory path for nested folders
-    dir_path=$(dirname "$rel_path")
-    # Make sure the subdirectory exists in TRAIN_WAV_DIR
-    mkdir -p "$TRAIN_WAV_DIR/$dir_path"
-    # Copy from $INPUT_DIR/$file into the mirrored path
-    cp "$INPUT_DIR/$file" "$TRAIN_WAV_DIR/$rel_path"
+    # Get the full source path
+    src_path="$INPUT_DIR/$file"
+    # Create the destination directory structure
+    dst_dir="$TRAIN_WAV_DIR/$(dirname "$file")"
+    mkdir -p "$dst_dir"
+    # Copy the file
+    cp "$src_path" "$dst_dir/$(basename "$file")"
 done
 
 # 6. Copy test files into TEST_WAV_DIR, preserving directory structure
 for file in "${test_files[@]}"; do
-    rel_path="$file"
-    dir_path=$(dirname "$rel_path")
-    mkdir -p "$TEST_WAV_DIR/$dir_path"
-    cp "$INPUT_DIR/$file" "$TEST_WAV_DIR/$rel_path"
+    # Get the full source path
+    src_path="$INPUT_DIR/$file"
+    # Create the destination directory structure
+    dst_dir="$TEST_WAV_DIR/$(dirname "$file")"
+    mkdir -p "$dst_dir"
+    # Copy the file
+    cp "$src_path" "$dst_dir/$(basename "$file")"
 done
 
 # 7. Create train_dir and test_dir for spectrograms
@@ -101,7 +104,7 @@ python3 src/spectogram_generator.py \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
-        $([ "$MULTI_THREAD" = false ] && echo "--single_threaded")
+        $([ "$MULTI_THREAD" = true ] && echo "--single_threaded")
 
 python3 src/spectogram_generator.py \
         --src_dir "$TEST_WAV_DIR" \
@@ -109,7 +112,7 @@ python3 src/spectogram_generator.py \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
-        $([ "$MULTI_THREAD" = false ] && echo "--single_threaded")
+        $([ "$MULTI_THREAD" = true ] && echo "--single_threaded")
 
 # Run TweetyBERT
 python3 src/TweetyBERT.py \
