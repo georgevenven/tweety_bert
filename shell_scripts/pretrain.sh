@@ -39,7 +39,6 @@ echo "Created temporary directory: $TEMP_DIR"
 python3 scripts/split_files_into_train_and_test.py "$INPUT_DIR" "$TEST_PERCENTAGE" \
         --train_output "$TRAIN_FILE_LIST" \
         --test_output "$TEST_FILE_LIST" \
-        --full_paths
 
 # 2. Read the file lists into arrays
 train_files=()
@@ -62,27 +61,25 @@ TEST_WAV_DIR="$TEMP_DIR/test_wav"
 mkdir -p "$TRAIN_WAV_DIR"
 mkdir -p "$TEST_WAV_DIR"
 
-# 5. Copy train files into TRAIN_WAV_DIR, preserving directory structure
+# 5. Copy train files into TRAIN_WAV_DIR
 for file in "${train_files[@]}"; do
-    # Get the full source path
-    src_path="$INPUT_DIR/$file"
-    # Create the destination directory structure
-    dst_dir="$TRAIN_WAV_DIR/$(dirname "$file")"
+    # strip the input directory prefix to obtain the relative path
+    relative_path="${file#$INPUT_DIR/}"
+    src_path="$file"
+    dst_dir="$TRAIN_WAV_DIR/$(dirname "$relative_path")"
     mkdir -p "$dst_dir"
-    # Copy the file
-    cp "$src_path" "$dst_dir/$(basename "$file")"
+    cp "$src_path" "$dst_dir/$(basename "$relative_path")"
 done
 
-# 6. Copy test files into TEST_WAV_DIR, preserving directory structure
+# similarly for test files
 for file in "${test_files[@]}"; do
-    # Get the full source path
-    src_path="$INPUT_DIR/$file"
-    # Create the destination directory structure
-    dst_dir="$TEST_WAV_DIR/$(dirname "$file")"
+    relative_path="${file#$INPUT_DIR/}"
+    src_path="$file"
+    dst_dir="$TEST_WAV_DIR/$(dirname "$relative_path")"
     mkdir -p "$dst_dir"
-    # Copy the file
-    cp "$src_path" "$dst_dir/$(basename "$file")"
+    cp "$src_path" "$dst_dir/$(basename "$relative_path")"
 done
+
 
 # 7. Create train_dir and test_dir for spectrograms
 TRAIN_DIR="$TEMP_DIR/train_dir"
