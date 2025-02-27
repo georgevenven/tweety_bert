@@ -5,7 +5,7 @@ cd ..
 
 # CONSTANT VARIABLES
 BIRD_NAMES=("llb3" "llb11" "llb16")
-BASE_WAV_FOLDER="/media/george-vengrovski/George-SSD"
+BASE_WAV_FOLDER="/media/george-vengrovski/Desk SSD/TweetyBERT/embedding_songs"
 SONG_DETECTION_JSON_PATH="merged_output.json"
 MODEL_NAME="LLB_Model_For_Paper"
 
@@ -15,7 +15,7 @@ UMAP_FILES="$TEMP_DIR/UMAP_FILES"
 mkdir -p "$TEMP_DIR"
 
 for BIRD in "${BIRD_NAMES[@]}"; do
-    WAV_FOLDER="$BASE_WAV_FOLDER/${BIRD}_left_comp/${BIRD}_songs"
+    WAV_FOLDER="$BASE_WAV_FOLDER/${BIRD}_songs"
     
     echo "PROCESSING ${BIRD} RN..."
     mkdir -p "$UMAP_FILES"
@@ -25,7 +25,7 @@ for BIRD in "${BIRD_NAMES[@]}"; do
         --src_dir "$WAV_FOLDER" \
         --dst_dir "$UMAP_FILES" \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
-        --generate_random_files_number 350 \
+        --generate_random_files_number 1000 \
         --single_threaded false
 
     # REMOVE EMPTY YARDEN DATA FILES

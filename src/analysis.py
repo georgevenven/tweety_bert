@@ -288,28 +288,64 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
        print(f"ground truth labels arr shape {ground_truth_labels.shape}")
        print(f"spec arr shape {spec_arr.shape}")
 
+       # Check for NaN or Inf values
+       if np.isnan(predictions).any() or np.isinf(predictions).any():
+           print("Warning: NaN or Inf values found in predictions. Removing problematic samples...")
+           # Remove samples with NaN or Inf values
+           valid_indices = ~(np.isnan(predictions).any(axis=1) | np.isinf(predictions).any(axis=1))
+           predictions = predictions[valid_indices]
+           ground_truth_labels = ground_truth_labels[valid_indices]
+           spec_arr = spec_arr[valid_indices]
+           file_indices = file_indices[valid_indices]
+           dataset_indices = dataset_indices[valid_indices]
+           vocalization_arr = vocalization_arr[valid_indices]
 
        vocalization_indices = np.where(vocalization_arr == 1)[0]
+       
+       # Make sure vocalization_indices is not empty
+       if len(vocalization_indices) == 0:
+           print("Error: No vocalization indices found. Cannot proceed with UMAP.")
+           return
+           
        predictions = predictions[vocalization_indices]
        ground_truth_labels = ground_truth_labels[vocalization_indices]
        spec_arr = spec_arr[vocalization_indices]
        file_indices = file_indices[vocalization_indices]
        dataset_indices = dataset_indices[vocalization_indices]
 
-   # fit the umap reducer      
+   # fit the umap reducer with more conservative parameters
    print("initializing umap reducer...")
-   reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
+
+   # Try with more conservative parameters
+   reducer = umap.UMAP(
+       n_neighbors=200,  
+       min_dist=0.1,  
+       n_components=2,
+       metric='cosine',
+       low_memory=True, 
+       random_state=42 
+   )
    print("umap reducer initialized.")
-
-
-   embedding_outputs = reducer.fit_transform(predictions)
+   
+   # Convert to float32 to reduce memory usage
+   predictions_float32 = predictions.astype(np.float32)
+   
+   # Check for and handle any remaining NaN values
+   if np.isnan(predictions_float32).any():
+       print("Warning: NaN values found. Replacing with zeros.")
+       predictions_float32 = np.nan_to_num(predictions_float32)
+   
+   embedding_outputs = reducer.fit_transform(predictions_float32)
    print("umap fitting complete. shape of embedding outputs:", embedding_outputs.shape)
 
 
    print("generating hdbscan labels...")
-   hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
-   print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
-
+   try:
+       hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
+       print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
+   except Exception as e:
+       print(f"HDBSCAN error: {e}")
+       return
 
    # get unique labels and create color palettes
    unique_clusters = np.unique(hdbscan_labels)

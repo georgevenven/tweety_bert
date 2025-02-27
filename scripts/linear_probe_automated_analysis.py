@@ -18,7 +18,7 @@ print(f"Using device: {device}")
 
 # Base directories for datasets
 datasets = ["llb3", "llb11", "llb16"]
-base_data_dir = "/media/george-vengrovski/George-SSD/llb_stuff"
+base_data_dir = "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset"
 
 # Configurations to iterate over
 configurations = [
@@ -75,7 +75,7 @@ for dataset in tqdm(datasets, desc="Processing datasets"):
         print(f"Running configuration: {config['name']}")
 
         # Path to experiment folder
-        experiment_folder = "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper"
+        experiment_folder = "experiments/TweetyBERT_Paper_Yarden_Model"
 
         if config["name"] == "TweetyBERT_untrained":  
             # Load the TweetyBERT model once to use in configurations that require it

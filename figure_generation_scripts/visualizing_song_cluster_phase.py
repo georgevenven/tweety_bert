@@ -289,25 +289,28 @@ class UMAPSelector:
         ax_spec = fig.add_subplot(gs[:,1])
 
         # 1) Phase subplot
-        phase_colors = np.zeros((len(x_norm),3))
-        phase_colors[:,0] = x_norm
-        phase_colors[:,1] = y_norm
-        ax_phase.scatter(x_norm, y_norm, s=6, c=phase_colors, alpha=0.6)
-        ax_phase.set_aspect('equal')
-        ax_phase.set_title("phase", fontsize=24)
+        phase_colors = np.column_stack([x_norm, y_norm, np.zeros_like(x_norm)])
+        ax_phase.scatter(x_norm, y_norm, s=8, c=phase_colors, alpha=0.7)  # Slightly reduced point size
+        ax_phase.set_title("A. Embedding\n(Colored by Location)", fontsize=14, pad=5, fontweight='bold')  # Two-line title
+        
+        # Force the phase plot to be a perfect square with dimensions 100x100
+        ax_phase.set_xlim(0, 1)
+        ax_phase.set_ylim(0, 1)
+        ax_phase.set_aspect("equal")
         ax_phase.set_xticks([])
         ax_phase.set_yticks([])
 
         # 2) If used_group_coloring => purple/green heatmap; else scatter
         if not self.used_group_coloring:
             scatter_colors = [self.get_color(lbl) for lbl in self.labels_for_color[self.selected_points]]
-            ax_dataset.scatter(x_norm, y_norm, s=6, c=scatter_colors, alpha=0.6)
+            ax_dataset.scatter(x_norm, y_norm, s=8, c=scatter_colors, alpha=0.7)  # Slightly reduced point size
             ax_dataset.set_title(
-                "ground truth" if not self.using_hdbscan else "hdbscan",
-                fontsize=24
+                "B. Embedding\n(Colored by Label)",
+                fontsize=14,  # Two-line title
+                fontweight='bold'
             )
         else:
-            brightness_factor = 2.0
+            brightness_factor = 8.0
             nbins = 300
             xedges = np.linspace(0,1,nbins+1)
             yedges = np.linspace(0,1,nbins+1)
@@ -342,11 +345,20 @@ class UMAPSelector:
                 extent=[0,1,0,1],
                 origin="lower"
             )
-            ax_dataset.set_title("dataset", fontsize=24)
+            ax_dataset.set_title(
+                "B. Embedding\n(Colored by Label)", 
+                fontsize=14,  # Two-line title
+                pad=5,
+                fontweight='bold'
+            )
 
         ax_dataset.set_aspect('equal')
         ax_dataset.set_xticks([])
         ax_dataset.set_yticks([])
+
+        # Add 'B' label to the dataset plot
+        ax_dataset.text(-0.1, 1.0, 'B', transform=ax_dataset.transAxes, 
+                       va='center', ha='right', fontsize=14, fontweight='bold')
 
         # 3) Spectrogram
         ax_spec.imshow(spec_region[:, :250].T, aspect='auto', origin='lower', cmap='viridis')
@@ -398,11 +410,11 @@ class UMAPSelector:
         """
         Large "ultrawide" collage mode: 
           - Left column => two subplots stacked: phase + dataset (heatmap if used_group_coloring)
-          - Right column => up to 9 spectrogram subplots from unique songs
+          - Right section => 2x3 grid of spectrogram subplots (6 total) from unique songs
           - Only display subregions >= 100 points
           - Randomize the order of songs
           - Pad each spectrogram with black on the right
-          - Also pad the phase gradient + label color arrays to self.max_length
+          - Also pad the phase gradient + label colors to self.max_length in the same manner
         """
         if self.selected_points is None or len(self.selected_points) == 0:
             return
@@ -419,20 +431,22 @@ class UMAPSelector:
             )
         random_name = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
-        # Build a large figure with minimal margins
-        fig = plt.figure(figsize=(60, 18))
+        # Build a large figure with minimal margins - adjusted for 8.5x11 paper ratio
+        fig = plt.figure(figsize=(11, 8.5))
+        
+        # Add more space at the top to prevent title from being cut off
         outer_gs = fig.add_gridspec(
             1, 2, 
-            width_ratios=[1, 3], 
-            wspace=0.05,
-            top=0.95,
-            bottom=0.05,
-            left=0.005,
-            right=0.995
+            width_ratios=[1, 2.5], 
+            wspace=0.1,  # Reduced spacing between left and right sections
+            top=0.88,    # Reduced from 0.92 to 0.88 to add significantly more space at the top
+            bottom=0.02,
+            left=0.02,
+            right=0.98
         )
 
-        left_gs = outer_gs[0,0].subgridspec(2,1, hspace=0.05)
-        right_gs= outer_gs[0,1].subgridspec(3,3, wspace=0.2, hspace=0.2)
+        left_gs = outer_gs[0,0].subgridspec(2,1, hspace=0.1)  # Reduced spacing between phase and dataset plots
+        right_gs= outer_gs[0,1].subgridspec(3,2, wspace=0.15, hspace=0.2)  # Changed to 3 rows, 2 columns
 
         ax_phase   = fig.add_subplot(left_gs[0, 0])
         ax_dataset = fig.add_subplot(left_gs[1, 0])
@@ -453,8 +467,12 @@ class UMAPSelector:
 
         # Phase
         phase_colors = np.column_stack([x_norm, y_norm, np.zeros_like(x_norm)])
-        ax_phase.scatter(x_norm, y_norm, s=6, c=phase_colors, alpha=0.7)
-        ax_phase.set_title("Phase Plot", fontsize=30, pad=5)
+        ax_phase.scatter(x_norm, y_norm, s=8, c=phase_colors, alpha=0.7)  # Slightly reduced point size
+        ax_phase.set_title("A. Embedding\n(Colored by Location)", fontsize=14, pad=5, fontweight='bold')  # Two-line title
+        
+        # Force the phase plot to be a perfect square with dimensions 100x100
+        ax_phase.set_xlim(0, 1)
+        ax_phase.set_ylim(0, 1)
         ax_phase.set_aspect("equal")
         ax_phase.set_xticks([])
         ax_phase.set_yticks([])
@@ -462,14 +480,16 @@ class UMAPSelector:
         # Dataset or GT
         if not self.used_group_coloring:
             sc_colors = [self.get_color(lb) for lb in self.labels_for_color[self.selected_points]]
-            ax_dataset.scatter(x_norm, y_norm, s=6, c=sc_colors, alpha=0.7)
+            ax_dataset.scatter(x_norm, y_norm, s=8, c=sc_colors, alpha=0.7)  # Slightly reduced point size
             ax_dataset.set_title(
-                "ground truth" if not self.using_hdbscan else "hdbscan",
-                fontsize=24
+                "B. Embedding\n(Colored by Label)",
+                fontsize=14,  # Two-line title
+                fontweight='bold'
             )
         else:
-            brightness_factor = 2.0
-            nbins = 300
+            # Increased brightness factor specifically for the dataset plot
+            brightness_factor = 4.0  # Increased from 2.0 to 4.0 for more vibrant colors
+            nbins = 100  # Set to 100 for 100x100 heatmap
             before_mask = np.isin(self.labels_for_color[self.selected_points], [0,1])
             after_mask  = np.isin(self.labels_for_color[self.selected_points], [2,3])
 
@@ -484,31 +504,46 @@ class UMAPSelector:
                 x_norm[after_mask], y_norm[after_mask],
                 bins=[xedges, yedges]
             )
+            
+            # Normalize each histogram separately to make colors more vibrant
             if hist_before.max()>0:
-                hist_before/=hist_before.max()
+                hist_before /= hist_before.max()
             if hist_after.max()>0:
-                hist_after/=hist_after.max()
+                hist_after /= hist_after.max()
 
+            # Create RGB image with more saturated colors
             rgb = np.zeros((nbins, nbins, 3))
-            rgb[...,0] = hist_before
-            rgb[...,2] = hist_before
-            rgb[...,1] = hist_after
+            # For purple (more saturated)
+            rgb[...,0] = hist_before * 0.8  # R component (slightly reduced for more saturated purple)
+            rgb[...,2] = hist_before        # B component
+            # For green (more saturated)
+            rgb[...,1] = hist_after         # G component
+
+            # Apply brightness factor and clip
             rgb *= brightness_factor
-            np.clip(rgb,0,1,out=rgb)
+            np.clip(rgb, 0, 1, out=rgb)
 
             ax_dataset.imshow(rgb.transpose((1,0,2)), extent=[0,1,0,1], origin="lower")
             ax_dataset.set_title(
-                "Dataset (Purple=0/1, Green=2/3)", 
-                fontsize=26, 
-                pad=5
+                "B. Embedding\n(Colored by Label)", 
+                fontsize=14,  # Two-line title
+                pad=5,
+                fontweight='bold'
             )
 
+        # Add 'B' label to the dataset plot
+        ax_dataset.text(-0.1, 1.0, 'B', transform=ax_dataset.transAxes, 
+                       va='center', ha='right', fontsize=14, fontweight='bold')
+
+        # Force the dataset plot to be a perfect square with dimensions 100x100
+        ax_dataset.set_xlim(0, 1)
+        ax_dataset.set_ylim(0, 1)
         ax_dataset.set_aspect("equal")
         ax_dataset.set_xticks([])
         ax_dataset.set_yticks([])
 
-        # Collage: up to 9 spectrogram subplots. But if a sample is too small (<100 pts),
-        # skip it and try the next. We continue until we either find 9 valid songs or run out.
+        # Collage: up to 6 spectrogram subplots (2x3 grid). But if a sample is too small (<100 pts),
+        # skip it and try the next. We continue until we either find 6 valid songs or run out.
         all_songs = np.unique(self.file_indices[self.selected_points])
         np.random.shuffle(all_songs)
 
@@ -517,12 +552,23 @@ class UMAPSelector:
             pts_this_song = self.selected_points[self.file_indices[self.selected_points] == s]
             if len(pts_this_song) >= 100:
                 valid_songs.append(s)
-            if len(valid_songs) == 9:
+            if len(valid_songs) == 6:  # Changed from 9 to 6
                 break
 
-        # We will create up to 9 subplots for valid songs
-        for i in range(9):
-            ax_spec = fig.add_subplot(right_gs[i//3, i%3])
+        # Add 'C' label and title above the spectrograms section
+        if len(valid_songs) > 0:
+            # Calculate the center position of the right section (spectrograms)
+            # This ensures the title is centered over just the spectrogram columns
+            right_center = 0.5 + 1/(2*3.5)  # Adjusted based on width_ratios=[1, 2.5]
+            
+            # Add centered title for the spectrogram collage section, split into two lines
+            # Position adjusted to 0.94 to place it in the middle of the top margin
+            fig.text(right_center, 0.94, 'C. Spectrogram Collage\nBreeding Season (Purple), Non-breeding Season (Green)', 
+                    fontsize=14, fontweight='bold', ha='center')
+
+        # We will create up to 6 subplots for valid songs
+        for i in range(6):  # Changed from 9 to 6
+            ax_spec = fig.add_subplot(right_gs[i//2, i%2])  # Changed from i//3, i%3 to i//2, i%2
             if i >= len(valid_songs):
                 # no more valid songs to show
                 ax_spec.axis("off")
@@ -552,14 +598,14 @@ class UMAPSelector:
                 origin="lower",
                 cmap="viridis"
             )
-            ax_spec.set_title(f"Song {song_id}", fontsize=20)
+            # Remove the song title to make spectrograms taller
             ax_spec.set_xticks([])
             ax_spec.set_yticks([])
 
             # Also pad the phase gradient and label colors to self.max_length in the same manner
             divider = make_axes_locatable(ax_spec)
-            ax_gradient = divider.append_axes("bottom", size="12%", pad=0.3)
-            ax_labels   = divider.append_axes("bottom", size="12%", pad=0.6)
+            ax_gradient = divider.append_axes("bottom", size="12%", pad=0.3)  # Reduced size and padding
+            ax_labels   = divider.append_axes("bottom", size="12%", pad=0.1)  # Reduced padding between bars
 
             sub_embed = self.embedding[subreg]
             sx_min, sx_max = sub_embed[:,0].min(), sub_embed[:,0].max()
@@ -586,7 +632,6 @@ class UMAPSelector:
 
             ax_gradient.imshow([pc_padded], aspect="auto")
             ax_gradient.set_axis_off()
-            ax_gradient.set_title("Phase Gradient", fontsize=14, y=-0.65)
 
             # Build the non-padded label color array
             sub_labs = self.labels_for_color[subreg]
@@ -597,19 +642,16 @@ class UMAPSelector:
 
             ax_labels.imshow([c_array_padded], aspect="auto")
             ax_labels.set_axis_off()
-            ax_labels.set_title(
-                "Dataset Group" if self.used_group_coloring else "Ground Truth Class",
-                fontsize=14, y=-0.65
-            )
+            
+            # Add C and D labels next to the gradient and label bars
+            ax_gradient.text(-0.05, 0.5, 'E', transform=ax_gradient.transAxes, 
+                            va='center', ha='right', fontsize=12, fontweight='bold')
+            ax_labels.text(-0.05, 0.5, 'F', transform=ax_labels.transAxes, 
+                          va='center', ha='right', fontsize=12, fontweight='bold')
 
-        plt.suptitle(
-            "Group Color Collage View", 
-            fontsize=42,
-            y=0.99
-        )
         plt.tight_layout()
         os.makedirs("imgs/selected_regions", exist_ok=True)
-        fig.savefig(f"imgs/selected_regions/collage_{random_name}_{label_str}.png", dpi=150)
+        fig.savefig(f"imgs/selected_regions/collage_{random_name}_{label_str}.png", dpi=300)  # Increased DPI for print quality
         plt.close(fig)
 
 
@@ -618,7 +660,7 @@ if __name__ == "__main__":
     file_path = "/media/george-vengrovski/66AA-9C0A/USA5494_Seasonality_4_Groups.npz"
     selector = UMAPSelector(
         file_path=file_path, 
-        max_length=1000, 
+        max_length=500, 
         used_group_coloring=True,   
         collage_mode=True
     )

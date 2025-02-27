@@ -30,7 +30,6 @@ def process_directory(directory_path):
             
             # Get unique labels
             unique_labels = np.unique(data['labels'])
-            print(unique_labels)
             data.close()  # Close the file to prevent memory leaks
             
             # Check if only contains 0 or -1

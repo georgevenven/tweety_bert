@@ -40,6 +40,18 @@ def main(experiment_folder, data_dirs, category_colors_file, save_name, samples,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate dimension-reduced birdsong plots.")
+    
+    # Helper function to convert string to boolean
+    def str2bool(v):
+        if isinstance(v, bool):
+            return v
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            raise argparse.ArgumentTypeError('Boolean value expected.')
+    
     parser.add_argument('--experiment_folder', type=str, default="experiments/default_experiment", help='Path to the experiment folder.')
     parser.add_argument('--data_dirs', nargs='+', default=["train_dir"], help='List of directories containing the data.')
     parser.add_argument('--category_colors_file', type=str, default="files/category_colors_llb3.pkl", help='Path to the category colors file.')
@@ -48,8 +60,8 @@ if __name__ == "__main__":
     parser.add_argument('--layer_index', type=int, default=-2, help='Layer index to use for UMAP projection.')
     parser.add_argument('--dict_key', type=str, default="attention_output", help='Dictionary key to use for UMAP projection.')
     parser.add_argument('--context', type=int, default=1000, help='Context size for the model.')
-    parser.add_argument('--raw_spectogram', type=bool, default=False, help='Whether to use raw spectogram.')
-    parser.add_argument('--save_dict_for_analysis', type=bool, default=True, help='Whether to save dictionary for analysis.')
+    parser.add_argument('--raw_spectogram', type=str2bool, default=False, help='Whether to use raw spectogram. Use true/false, yes/no, y/n, 1/0')
+    parser.add_argument('--save_dict_for_analysis', type=str2bool, default=True, help='Whether to save dictionary for analysis. Use true/false, yes/no, y/n, 1/0')
     parser.add_argument('--min_cluster_size', type=int, default=500, help='Minimum cluster size for HDBSCAN.')
 
     args = parser.parse_args()

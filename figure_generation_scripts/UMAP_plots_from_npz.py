@@ -1,9 +1,15 @@
 import os
 import sys
 
-# Add project root to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
+# Get the directory of the current script and the project root
+figure_generation_dir = os.path.dirname(__file__)
+project_root = os.path.dirname(figure_generation_dir)
+
+# Change the working directory to the project root
+os.chdir(project_root)
+
+# Add src directory to Python path
+sys.path.append("src")
 
 import numpy as np
 import matplotlib
@@ -15,11 +21,12 @@ from glob import glob
 matplotlib.use("TkAgg")  # or Qt5Agg, etc., depending on your environment
 
 from matplotlib.widgets import RectangleSelector
-from src.analysis import ComputerClusterPerformance
+from analysis import ComputerClusterPerformance
+from data_class import SongDataSet_Image, CollateFunction
 
 # ------------------ CONFIGURABLE PATHS ------------------ #
 # Either a .npz file (interactive cropping) or folder
-input_path = "/media/george-vengrovski/66AA-9C0A/yarden_umaps_for_paper/llb16_for_paper_raw_spec.npz"
+input_path = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"
 output_dir = "imgs/umap_plots"
 # -------------------------------------------------------- #
 
@@ -34,7 +41,7 @@ def interactive_crop(embeddings, colors):
 
     fig, ax = plt.subplots()
     scatter = ax.scatter(
-        embeddings[:, 0], embeddings[:, 1], c=colors, s=10, alpha=0.6
+        embeddings[:, 0], embeddings[:, 1], c=colors, s=10, alpha=0.1
     )
     ax.set_title("Drag to select crop region. Close window when done.")
 
@@ -114,7 +121,7 @@ def plot_embeddings(
         plot_embeddings[:, 1],
         c=colors,
         s=10,
-        alpha=0.6,
+        alpha=0.1,
         edgecolors="none",
     )
     plt.title(title, fontsize=16)
@@ -136,7 +143,7 @@ def plot_embeddings(
             plot_embeddings[:, 1],
             c=colors,
             s=10,
-            alpha=0.6,
+            alpha=0.1,
             edgecolors="none",
         )
         plt.title(title + " (Cropped)", fontsize=16)
