@@ -103,6 +103,7 @@ python3 src/spectogram_generator.py \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
         --single_threaded False 
+        
 python3 src/spectogram_generator.py \
         --src_dir "$TEST_WAV_DIR" \
         --dst_dir "$TEST_DIR" \

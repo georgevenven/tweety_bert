@@ -3,11 +3,13 @@ import matplotlib.pyplot as plt
 import random
 import sys
 import os
-# Add the project root directory to the Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
 
-from src.analysis import ComputerClusterPerformance
+# Add the src directory to the Python path
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
+
+# Now import from src
+from data_class import SongDataSet_Image, CollateFunction
+from analysis import ComputerClusterPerformance
 
 # Create an instance of ComputerClusterPerformance
 # We can pass an empty list since we're only using the method
@@ -23,7 +25,7 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
     print(embedding.shape)
 
     # Convert syllable labels to phrase labels using the class method
-    labels = cluster_performance.majority_vote(labels, window_size=0)
+    labels = cluster_performance.majority_vote(labels, window_size=150)
     ground_truth_labels = cluster_performance.syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
     # === HDBSCAN Labels Coloring ===
@@ -159,7 +161,7 @@ def generate_all_spectrograms(file_path, segment_length, step_size, output_dir):
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "/media/george-vengrovski/66AA-9C0A/yarden_umaps_for_paper/llb3_for_paper.npz"
+    file_path = "/home/george-vengrovski/Music/llb3_fold1.npz"
     
     # Hyperparameters
     segment_length = 1000  # Length of each spectrogram window

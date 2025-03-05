@@ -26,7 +26,7 @@ from data_class import SongDataSet_Image, CollateFunction
 
 # ------------------ CONFIGURABLE PATHS ------------------ #
 # Either a .npz file (interactive cropping) or folder
-input_path = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"
+input_path = "/home/george-vengrovski/Videos/llb16_for_paper_raw_spec.npz"
 output_dir = "imgs/umap_plots"
 # -------------------------------------------------------- #
 
@@ -124,9 +124,11 @@ def plot_embeddings(
         alpha=0.1,
         edgecolors="none",
     )
-    plt.title(title, fontsize=16)
-    plt.xticks([])
-    plt.yticks([])
+    plt.title(title, fontsize=32)
+    plt.xlabel("UMAP 1", fontsize=24)
+    plt.ylabel("UMAP 2", fontsize=24)
+    plt.xticks([])  # Remove tick marks but keep axis
+    plt.yticks([])  # Remove tick marks but keep axis
 
     uncropped_file = os.path.join(
         output_directory, f"{base_name}_embedding_plot_{suffix}.png"
@@ -146,9 +148,11 @@ def plot_embeddings(
             alpha=0.1,
             edgecolors="none",
         )
-        plt.title(title + " (Cropped)", fontsize=16)
-        plt.xticks([])
-        plt.yticks([])
+        plt.title(title + " (Cropped)", fontsize=32)
+        plt.xlabel("UMAP 1", fontsize=24)
+        plt.ylabel("UMAP 2", fontsize=24)
+        plt.xticks([])  # Remove tick marks but keep axis
+        plt.yticks([])  # Remove tick marks but keep axis
         plt.xlim([x_min, x_max])
         plt.ylim([y_min, y_max])
 
@@ -188,7 +192,7 @@ def process_file(file_path, output_directory=None, bounding_box=None):
     plot_embeddings(
         embeddings=embeddings,
         labels=ground_truth,
-        title="Embeddings Colored by Ground Truth",
+        title="Embeddings (Ground Truth)",
         is_hdbscan=False,
         ground_truth_colors=ground_truth_colors,
         base_name=base_name,
@@ -200,7 +204,7 @@ def process_file(file_path, output_directory=None, bounding_box=None):
     plot_embeddings(
         embeddings=embeddings,
         labels=phrase_labels,
-        title="Embeddings Colored by Phrase Labels",
+        title="Embeddings (Phrase)",
         is_hdbscan=False,
         ground_truth_colors=ground_truth_colors,
         base_name=base_name + "_phrase",
@@ -212,7 +216,7 @@ def process_file(file_path, output_directory=None, bounding_box=None):
     plot_embeddings(
         embeddings=embeddings,
         labels=hdbscan_labels,
-        title="Embeddings Colored by HDBSCAN Labels",
+        title="Embeddings (HDBSCAN)",
         is_hdbscan=True,
         ground_truth_colors=ground_truth_colors,
         base_name=base_name + "_hdbscan",

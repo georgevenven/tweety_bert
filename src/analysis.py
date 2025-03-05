@@ -852,22 +852,17 @@ class ComputerClusterPerformance():
                right_idx += 1
           
            # Compute distances if valid
-           left_dist = (idx - left_idx) if (left_idx >= 0 and labels[left_idx] != -1) else np.inf
-           right_dist = (right_idx - idx) if (right_idx < len(labels) and labels[right_idx] != -1) else np.inf
-
+           left_dist = (idx - left_idx) if left_idx >= 0 else np.inf
+           right_dist = (right_idx - idx) if right_idx < len(labels) else np.inf
 
            # Assign based on nearest non-noise label
            if left_dist == np.inf and right_dist == np.inf:
                # No non-noise neighbors found, remain -1
                continue
-           elif left_dist < right_dist:
+           elif left_dist <= right_dist:
                labels[idx] = labels[left_idx]
-           elif right_dist < left_dist:
-               labels[idx] = labels[right_idx]
            else:
-               # Equidistant, pick left arbitrarily
-               labels[idx] = labels[left_idx]
-
+               labels[idx] = labels[right_idx]
 
        return labels
 

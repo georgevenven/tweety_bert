@@ -388,7 +388,7 @@ def main():
         generate_random_files_number=args.generate_random_files_number,
         single_threaded=single_threaded
     )
-    wav_to_spec.process_directory()
+    wav_to_spec.process_directory()  
 
 if __name__ == "__main__":
     main()
@@ -396,25 +396,27 @@ if __name__ == "__main__":
 
 '''
 Spectrogram Generation and Preprocessing
-Raw audio recordings were first filtered to remove low-frequency noise components and emphasize relevant spectral features of canary songs. Specifically, a 5th-order elliptic high-pass filter (0.2 dB ripple, 40 dB stopband attenuation, 500 Hz cutoff frequency) was applied to the time-domain signal. This filter choice ensures that energy below 500 Hz—often dominated by low-frequency noise or cage sounds—is attenuated, improving subsequent feature extraction.
+Raw audio recordings are filtered to remove low-frequency noise components and emphasize relevant spectral features of canary songs. A 5th-order elliptic high-pass filter (0.2 dB ripple, 40 dB stopband attenuation, 500 Hz cutoff frequency) is applied to the time-domain signal, attenuating energy below 500 Hz that is often dominated by low-frequency noise or cage sounds.
 
-Following filtering, spectrograms were generated using a Short-Time Fourier Transform (STFT) with a Hann window, a 1024-point FFT, and a 119-sample hop length. The 119-sample hop length (at a 44.2 kHz sampling rate) yielded a temporal resolution sufficient to capture fine-grained temporal structure in canary syllables, while still maintaining computational efficiency. The resulting complex spectrogram was converted to a decibel scale via amplitude-to-dB conversion (referenced to the maximum amplitude), yielding a time-frequency representation well-suited for downstream analysis. 
+Spectrograms are generated using a Short-Time Fourier Transform (STFT) with a Hann window, a 1024-point FFT, and a 119-sample hop length. At a 44.2 kHz sampling rate, this hop length provides temporal resolution sufficient to capture fine-grained structure in canary syllables while maintaining computational efficiency. The complex spectrogram is converted to a decibel scale via amplitude-to-dB conversion (referenced to maximum amplitude).
 
 Handling of Long and Short Recordings
-Due to memory and computational constraints, recordings were segmented into manageable lengths. If a continuous WAV file exceeded a certain duration threshold (find exact ms threshold), it was split into multiple shorter files. Conversely, recordings shorter than find exact ms threshold were discarded to maintain consistent quality and uniformity in the dataset. This segmentation step ensured that no single file would overwhelm system memory during the STFT and embedding processes, thereby improving the robustness and scalability of the pipeline.
+Recordings shorter than 500 ms are discarded to maintain consistent quality and uniformity in the dataset. For longer recordings, the system processes them in manageable segments to prevent memory issues during STFT and embedding processes.
 
 Vocalization-Based Filtering and JSON Metadata
-To avoid processing large amounts of non-vocal segments (silence or environmental noise), a supervised "song detection" JSON file was employed (if available). For each WAV file, the system checked a corresponding JSON entry containing segment onsets, offsets, and syllable-level annotations. Only time intervals marked as containing vocalizations were retained, and non-vocal segments were omitted. If no vocalizations were present, the file was skipped altogether. This approach minimized unnecessary computation and focused the analysis on behaviorally relevant acoustic signals.
+To avoid processing non-vocal segments (silence or environmental noise), a "song detection" JSON file can be provided. For each WAV file, the system checks for corresponding JSON entries containing segment onsets, offsets, and syllable-level annotations. Only time intervals marked as containing vocalizations are retained. If no vocalizations are present, the file is skipped.
 
-Segmenting Spectrograms and Removing Small Spectrograms
-After applying the STFT, the resulting spectrogram was evaluated for minimal time dimension requirements. Segments of the time-frequency representation with fewer than 1000 time bins (~2.7 seconds, given the 119-sample hop length) were discarded to ensure sufficient contextual information for downstream analyses. This threshold prevented the inclusion of overly short, fragmented spectrograms that might hinder stable embedding and interpretation.
+Segmenting Spectrograms
+After applying the STFT, segments with fewer than 1000 time bins (~2.7 seconds) are discarded to ensure sufficient contextual information for downstream analyses. For segments meeting this minimum length criteria, the pipeline generates spectrogram excerpts corresponding to vocalization intervals.
 
-For segments meeting the minimum length criteria, the pipeline generated one or more smaller spectrogram excerpts corresponding to vocalization intervals. Each excerpt was saved as a compressed NumPy archive (.npz) for storage efficiency and faster downstream loading. These per-segment files contained three arrays: (1) the log-amplitude spectrogram, (2) a binary "vocalization" array indicating that the entire segment contains song, and (3) syllable-level label arrays if available from the JSON annotations. Segment-level saving further reduced memory overhead by distributing computations across multiple smaller files and preventing the accumulation of large, unwieldy in-memory arrays.
+Each excerpt is saved as a compressed NumPy archive (.npz) containing three arrays:
+1. The log-amplitude spectrogram
+2. A binary "vocalization" array indicating that the entire segment contains song
+3. Syllable-level label arrays if available from JSON annotations
 
 Labeling and Integration
-When syllable-level labels were provided, the pipeline aligned these annotations with the spectrogram's time bins. Time bins were converted to seconds using the known sampling rate and hop length, allowing the assignment of correct syllable or silence labels to each time bin. This integration of annotations facilitated subsequent evaluations of model performance, including comparisons to ground truth labels and alignment with biologically meaningful vocal units (e.g., syllables, phrases).
+When syllable-level labels are provided, the pipeline aligns these annotations with the spectrogram's time bins, converting time bins to seconds using the sampling rate and hop length. This integration facilitates subsequent evaluations of model performance and alignment with biologically meaningful vocal units.
 
 Parallelization and Memory Management
-To accelerate spectrogram generation and preprocessing, the code leveraged multiprocessing capabilities, distributing file processing tasks across all available CPU cores. Memory checks ensured that new processes were spawned only when sufficient system memory was available. In cases of transient memory pressure, the code waited before processing additional files, thereby maintaining stability and preventing system slowdowns or crashes.
-
-If a file encountered errors or failures (e.g., due to corrupted input data), it was logged, and the pipeline attempted to reprocess it after completing the initial batch. This built-in resilience helped maintain data integrity and ensured that the pipeline could progress even in the face of irregularities in the input data.'''
+The code can leverage multiprocessing capabilities, distributing file processing tasks across available CPU cores. Memory checks ensure that new processes are spawned only when sufficient system memory is available. Files that encounter errors are logged and the pipeline attempts to reprocess them after completing the initial batch.
+'''

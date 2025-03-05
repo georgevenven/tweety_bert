@@ -71,7 +71,7 @@ def plot_umap_for_layers(model, folder, config, category_colors_file, umap_data_
             torch.cuda.empty_cache()
 
 
-def execute_umap_plotting(experiment_configs, category_colors_file, umap_samples=1e6, min_cluster_size=500, skip_existing=True):
+def execute_umap_plotting(experiment_configs, category_colors_file, umap_samples=1e6, min_cluster_size=5000, skip_existing=True):
     """
     Executes UMAP plotting across multiple experiments.
     """
@@ -109,16 +109,25 @@ def execute_umap_plotting(experiment_configs, category_colors_file, umap_samples
 # Example usage
 experiment_configs = [
     {
-        "experiment_path": "/media/george-vengrovski/George-SSD/llb_stuff/LLB_Model_For_Paper",
-        "train_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb3_train",
-        "test_dir": "/media/george-vengrovski/George-SSD/llb_stuff/llb3_test"
+        "experiment_path": "experiments/TweetyBERT_Paper_Yarden_Model",
+        "train_dir": "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/llb3_train",
+        "test_dir": "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/llb3_test"
     },
-    # ... other configs ...
+        {
+        "experiment_path": "experiments/TweetyBERT_Paper_Yarden_Model",
+        "train_dir": "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/llb11_train",
+        "test_dir": "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/llb11_test"
+    },
+        {
+        "experiment_path": "experiments/TweetyBERT_Paper_Yarden_Model",
+        "train_dir": "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/llb16_train",
+        "test_dir": "/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/llb16_test"
+    },
 ]
 
 category_colors_file = "files/category_colors_llb3.pkl"
-umap_samples = 1e4
-min_cluster_size = 500
+umap_samples = 1e6
+min_cluster_size = 5000
 
 execute_umap_plotting(
     experiment_configs=experiment_configs,

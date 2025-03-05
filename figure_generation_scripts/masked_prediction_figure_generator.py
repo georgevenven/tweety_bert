@@ -83,7 +83,15 @@ class MaskedPredictionVisualizer:
                 self.save_full_spectrogram(spectrogram, file_name[0], i)
                 
                 # Process segments if the spectrogram is longer than context_length
-                if spectrogram.shape[0] > self.context_length:
+                if spectrogram.shape[0] > self.context_length:umba.jit' decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.
+  @numba.jit()
+Traceback (most recent call last):
+  File "/home/george-vengrovski/Documents/projects/tweety_bert_paper/figure_generation_scripts/visualizing_hdb_scan_labels.py", line 10, in <module>
+    from src.analysis import ComputerClusterPerformance
+  File "/home/george-vengrovski/Documents/projects/tweety_bert_paper/src/analysis.py", line 8, in <module>
+    from data_class import SongDataSet_Image, CollateFunction
+ModuleNotFoundError: No module named 'data_class'
+(base) george-vengrovski@gardner-lambda:~/Documents/projects/tweety_bert_paper$ 
                     # Choose a random segment
                     start_idx = torch.randint(0, spectrogram.shape[0] - self.context_length, (1,)).item()
                     segment = spectrogram[start_idx:start_idx + self.context_length]

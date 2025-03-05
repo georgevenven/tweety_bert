@@ -105,6 +105,10 @@ def calculate_statistical_significance(similarity_matrix):
 
 def plot_similarity_comparison(similarity_matrix, stats_results, save_dir, bird_id):
     """Create summary visualization of similarity structure."""
+    # Create a bird-specific subdirectory to prevent overwriting
+    bird_save_dir = os.path.join(save_dir, f"bird_{bird_id}")
+    os.makedirs(bird_save_dir, exist_ok=True)
+    
     # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
     
@@ -144,8 +148,8 @@ def plot_similarity_comparison(similarity_matrix, stats_results, save_dir, bird_
     
     plt.suptitle(f'Bird {bird_id} - Recording Group Similarities', fontsize=14)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, f'bird_{bird_id}_similarity_analysis.png'), dpi=300)
-    plt.savefig(os.path.join(save_dir, f'bird_{bird_id}_similarity_analysis.svg'))
+    plt.savefig(os.path.join(bird_save_dir, f'bird_{bird_id}_similarity_analysis.png'), dpi=300)
+    plt.savefig(os.path.join(bird_save_dir, f'bird_{bird_id}_similarity_analysis.svg'))
     plt.close()
 
 def plot_pairwise_comparisons(embedding_outputs, dataset_indices, save_dir, bird_id, file_indices, file_map):
@@ -324,11 +328,11 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     """
     Plot individual UMAPs and combined before/after comparison.
     """
-    bins = 300
+    # Create a bird-specific subdirectory to prevent overwriting
+    bird_save_dir = os.path.join(save_dir, f"bird_{bird_id}")
+    os.makedirs(bird_save_dir, exist_ok=True)
     
-    # Create directory
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    bins = 300
     
     # Get consistent binning using all data
     _, xedges, yedges = np.histogram2d(embedding_outputs[:, 0], embedding_outputs[:, 1], bins=bins)
@@ -429,8 +433,8 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         ax.set_xlabel('UMAP Dimension 1')
         ax.set_ylabel('UMAP Dimension 2')
         fig.tight_layout()
-        fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300)
-        fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
+        fig.savefig(os.path.join(bird_save_dir, f'{filename}.png'), dpi=300)
+        fig.savefig(os.path.join(bird_save_dir, f'{filename}.svg'))
         plt.close(fig)
     
     # Create combined before heatmap
@@ -474,8 +478,8 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     ax.set_ylabel('UMAP Dimension 2')
     fig.tight_layout()
     filename = f"{bird_id}_combined_before_{date_str}"
-    fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300)
-    fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
+    fig.savefig(os.path.join(bird_save_dir, f'{filename}.png'), dpi=300)
+    fig.savefig(os.path.join(bird_save_dir, f'{filename}.svg'))
     plt.close(fig)
     
     # Create combined after heatmap
@@ -519,8 +523,8 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     ax.set_ylabel('UMAP Dimension 2')
     fig.tight_layout()
     filename = f"{bird_id}_combined_after_{date_str}"
-    fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300)
-    fig.savefig(os.path.join(save_dir, f'{filename}.svg'))
+    fig.savefig(os.path.join(bird_save_dir, f'{filename}.png'), dpi=300)
+    fig.savefig(os.path.join(bird_save_dir, f'{filename}.svg'))
     plt.close(fig)
     
     # Add pairwise overlap plots
@@ -564,9 +568,9 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
         filename = f"{bird_id}_overlap_{labels[idx1]}_{labels[idx2]}"
         
         # Save with transparent=False to ensure black background is saved
-        fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300, 
+        fig.savefig(os.path.join(bird_save_dir, f'{filename}.png'), dpi=300, 
                     facecolor='black', edgecolor='none', bbox_inches='tight')
-        fig.savefig(os.path.join(save_dir, f'{filename}.svg'), 
+        fig.savefig(os.path.join(bird_save_dir, f'{filename}.svg'), 
                     facecolor='black', edgecolor='none', bbox_inches='tight')
         plt.close(fig)
     
@@ -623,15 +627,19 @@ def plot_separate_and_combined_umaps(embedding_outputs, dataset_indices, save_di
     filename = f"{bird_id}_all_before_vs_all_after_overlap"
     
     # Save with transparent=False to ensure black background is saved
-    fig.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300, 
+    fig.savefig(os.path.join(bird_save_dir, f'{filename}.png'), dpi=300, 
                 facecolor='black', edgecolor='none', bbox_inches='tight')
-    fig.savefig(os.path.join(save_dir, f'{filename}.svg'), 
+    fig.savefig(os.path.join(bird_save_dir, f'{filename}.svg'), 
                 facecolor='black', edgecolor='none', bbox_inches='tight')
     plt.close(fig)
 
 def plot_all_heatmaps_combined(embedding_outputs, dataset_indices, save_dir, bird_id, file_indices, file_map, 
                                labels=['Before1', 'Before2', 'After1', 'After2']):
     """Create a single figure with all heatmaps arranged in a grid."""
+    # Create a bird-specific subdirectory to prevent overwriting
+    bird_save_dir = os.path.join(save_dir, f"bird_{bird_id}")
+    os.makedirs(bird_save_dir, exist_ok=True)
+    
     bins = 300
     
     # Set up the figure with subplots in a 2x3 grid
@@ -762,12 +770,12 @@ def plot_all_heatmaps_combined(embedding_outputs, dataset_indices, save_dir, bir
     
     plt.suptitle(f'Bird {bird_id} - All UMAP Projections', fontsize=16)
     filename = f'{bird_id}_all_umaps'
-    plt.savefig(os.path.join(save_dir, f'{filename}.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(save_dir, f'{filename}.svg'), bbox_inches='tight')
+    plt.savefig(os.path.join(bird_save_dir, f'{filename}.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(bird_save_dir, f'{filename}.svg'), bbox_inches='tight')
     plt.close()
     
     # Save unnormalized heatmaps
-    np.savez(os.path.join(save_dir, f'bird_{bird_id}_heatmaps.npz'), **all_heatmaps)
+    np.savez(os.path.join(bird_save_dir, f'bird_{bird_id}_heatmaps.npz'), **all_heatmaps)
 
 def parse_date_time(file_path, format="standard"):
     """Parse the date and time from the file name."""
@@ -873,6 +881,6 @@ def plot_similarity_summary(results_df, save_dir):
 
 if __name__ == "__main__":
     # test on two birds
-    npz_files = ["/media/george-vengrovski/flash-drive/DOI_data_/USA5506_PrePostDOI.npz", "/media/george-vengrovski/flash-drive/DOI_data_/USA5508_PrePostDOI.npz"]
-    save_dir = "imgs/test"
+    npz_files = ["/media/george-vengrovski/Desk SSD/TweetyBERT/seasonality_npz_files/5494_Seasonality_Final.npz", "/media/george-vengrovski/Desk SSD/TweetyBERT/seasonality_npz_files/5508_Seasonality_Final.npz"]
+    save_dir = "imgs/seasonality_analysis"
     results_df = analyze_multiple_birds(npz_files, save_dir)

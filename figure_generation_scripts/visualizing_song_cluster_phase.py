@@ -657,11 +657,11 @@ class UMAPSelector:
 
 # Usage example:
 if __name__ == "__main__":
-    file_path = "/media/george-vengrovski/66AA-9C0A/USA5494_Seasonality_4_Groups.npz"
+    file_path = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Embeddings/llb16_raw_false.npz"
     selector = UMAPSelector(
         file_path=file_path, 
         max_length=500, 
-        used_group_coloring=True,   
-        collage_mode=True
+        used_group_coloring=False,   
+        collage_mode=False
     )
     selector.plot_umap_with_selection()

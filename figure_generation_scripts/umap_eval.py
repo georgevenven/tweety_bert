@@ -691,7 +691,7 @@ def plot_correlation_comparisons(
     """
 
     plt.style.use('default')
-    FONT_SIZE = 18
+    FONT_SIZE = 22  # Reverted back to original size
     plt.rcParams.update({
         'font.size': FONT_SIZE,
         'axes.linewidth': 2,
@@ -751,13 +751,7 @@ def plot_correlation_comparisons(
     ax.set_xlim(0, max_entropy)
     ax.set_ylim(0, max_entropy)
     
-    from matplotlib.lines import Line2D
-    legend_elems = []
-    for b in unique_birds:
-        legend_elems.append(Line2D([0],[0],
-                                   marker='o', color='black', label=b,
-                                   markersize=8, markerfacecolor=bird_color_map[b]))
-    ax.legend(handles=legend_elems, title="Bird ID", fontsize=FONT_SIZE-2, loc='lower right')
+    # Removed legend
     
     plt.tight_layout()
     if output_dir:
@@ -795,7 +789,7 @@ def plot_correlation_comparisons(
     ax.set_xlim(0, max_length)
     ax.set_ylim(0, max_length)
     
-    ax.legend(handles=legend_elems, title="Bird ID", fontsize=FONT_SIZE-2, loc='lower right')
+    # Removed legend
     
     plt.tight_layout()
     if output_dir:
@@ -914,6 +908,8 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
                 verticalalignment='center',
                 fontsize=FONT_SIZE-4)
     
+    # Removed legend
+    
     # Adjust layout
     plt.tight_layout()
     
@@ -930,7 +926,7 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
 #                               MAIN SCRIPT
 ##############################################################################
 if __name__ == "__main__":
-    folder_path = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"
+    folder_path = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"
     output_dir  = "results/proxy_metrics"
     os.makedirs(output_dir, exist_ok=True)
     
@@ -939,7 +935,7 @@ if __name__ == "__main__":
     
     # Smoothing windows to test
     # (Example range: 0, 252, 504, etc.)
-    window_sizes = list(range(0, 26, 25))
+    window_sizes = list(range(0, 501, 25))
     
     for wsize in window_sizes:
         window_dirs[wsize] = os.path.join(output_dir, f'window_{wsize}')
@@ -1057,36 +1053,44 @@ if __name__ == "__main__":
         f.write(f"Overall FER (mapped only) : {overall_fer_mapped_best:.2f}%\n")
         f.write(f"Overall FER (with -1 err) : {overall_fer_any_best:.2f}%\n\n")
 
-    ###########################################################################
-    # Also produce correlation plots for the best window
-    ###########################################################################
-    plot_correlation_comparisons(
-        gt_e_best, hd_e_best, gt_l_best, hd_l_best,
-        birds_best, folds_best, counts_best,
-        bird_phrase_fer_best,
-        best_wsize, max_entropy, max_length,
-        output_dir=best_window_corr_dir
-    )
-    
-    # Add frequency reports for each window
-    for wsize in window_sizes:
-        freq_dict = label_frequencies_by_window[wsize]
-        f.write(f"\n=== Predicted Label Frequency for Window {wsize} ===\n")
-        c_total = sum(freq_dict.values())
-        for lbl, ct in sorted(freq_dict.items()):
+        # Add frequency reports for each window
+        for wsize in window_sizes:
+            freq_dict = label_frequencies_by_window[wsize]
+            f.write(f"\n=== Predicted Label Frequency for Window {wsize} ===\n")
+            c_total = sum(freq_dict.values())
+            for lbl, ct in sorted(freq_dict.items()):
+                if lbl != -1:
+                    freq = 100.0 * ct / c_total if c_total > 0 else 0.0
+                    f.write(f"   Label {lbl:3d}: count={ct:8d}, freq={freq:6.2f}%\n")
+        
+        # Add frequency report for best window
+        f.write("\n=== Predicted Label Frequency for Best Window ===\n")
+        c_total_best = sum(best_window_pred_label_freq.values())
+        for lbl, ct in sorted(best_window_pred_label_freq.items()):
             if lbl != -1:
-                freq = 100.0 * ct / c_total if c_total > 0 else 0.0
+                freq = 100.0 * ct / c_total_best if c_total_best > 0 else 0.0
                 f.write(f"   Label {lbl:3d}: count={ct:8d}, freq={freq:6.2f}%\n")
-    
-    # Add frequency report for best window
-    f.write("\n=== Predicted Label Frequency for Best Window ===\n")
-    c_total_best = sum(best_window_pred_label_freq.values())
-    for lbl, ct in sorted(best_window_pred_label_freq.items()):
-        if lbl != -1:
-            freq = 100.0 * ct / c_total_best if c_total_best > 0 else 0.0
-            f.write(f"   Label {lbl:3d}: count={ct:8d}, freq={freq:6.2f}%\n")
 
     print("\nALL DONE!")
     print(" * Detailed per-window summaries are in each window_{N} folder.")
     print(" * A consolidated 'all_windows_summary.txt' is in:", output_dir)
     print(" * The best window's step-by-step diagonalization logs, plots, etc. can be found in", best_window_corr_dir)
+
+    # The function process_all_folds returns the data needed for the scatter plots
+    (gt_e_best, hd_e_best, gt_l_best, hd_l_best,
+     birds_best, folds_best, counts_best,
+     overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
+     best_window_pred_label_freq) = \
+         process_all_folds(
+             all_npz_files, best_wsize, labels_path=folder_path,
+             output_dir=best_window_corr_dir,
+             do_step_plots=True
+         )
+
+    # Need to add this line:
+    plot_correlation_comparisons(
+        gt_e_best, hd_e_best, gt_l_best, hd_l_best,
+        birds_best, folds_best, counts_best,
+        bird_phrase_fer_best, best_wsize, max_entropy, max_length,
+        output_dir=best_window_corr_dir
+    )

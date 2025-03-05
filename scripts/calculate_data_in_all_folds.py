@@ -11,7 +11,7 @@ import os
 import numpy as np
 
 # Directory containing the NPZ files
-data_dir = "/media/george-vengrovski/George-SSD/folds_for_paper_llb"  # Replace with your actual directory path
+data_dir = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"  # Replace with your actual directory path
 
 # List to store first dimensions
 first_dimensions = []
