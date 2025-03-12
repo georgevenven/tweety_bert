@@ -85,6 +85,28 @@ out_dir = os.path.join(project_root, "imgs", "verifying_ground_truth_labels")
 print(f"Attempting to create directory at: {os.path.abspath(out_dir)}")
 os.makedirs(out_dir, exist_ok=True)
 
+# Create a consistent color map for all spectrograms
+# Using a combination of tab10, tab20, and tab20b for more distinct colors
+cmap1 = plt.get_cmap('tab10')
+cmap2 = plt.get_cmap('tab20')
+cmap3 = plt.get_cmap('tab20b')
+
+# Create a fixed color map for labels 0-30
+fixed_colors = []
+# First 10 colors from tab10
+fixed_colors.extend([cmap1(i) for i in range(10)])
+# Next 10 colors from tab20 (skipping duplicates with tab10)
+fixed_colors.extend([cmap2(i) for i in range(10, 20)])
+# Additional colors from tab20b if needed
+fixed_colors.extend([cmap3(i) for i in range(10)])
+
+# Make sure we have at least 31 colors (for labels 0-30)
+while len(fixed_colors) < 31:
+    fixed_colors.append((random.random(), random.random(), random.random(), 1))
+
+# Make silence black (label 0)
+fixed_colors[0] = (0, 0, 0, 1)  # Black color for silence
+
 # Debug: Print number of files to process
 print(f"Found {len(npz_files)} total files")
 print(f"Processing {num_samples} sample files")
@@ -100,18 +122,9 @@ for file in tqdm(sample_files, desc="Processing files"):
     # obtain phrase labels via the provided function
     phrase_labels = syllable_to_phrase_labels(labels, silence=0)
 
-    # use the union of labels for consistent color mapping
-    all_labels = np.unique(np.concatenate((np.array(labels), np.array(phrase_labels))))
-    cmap = plt.get_cmap('tab10')
-    colors = [cmap(i) for i in range(len(all_labels))]
-    label_color_map = {label: color for label, color in zip(all_labels, colors)}
-    
-    # Make silences black (label 0)
-    label_color_map[0] = (0, 0, 0, 1)  # Black color for silence
-
-    # create color arrays for both label versions
-    orig_colors = [label_color_map[label] for label in labels]
-    phrase_colors = [label_color_map[label] for label in phrase_labels]
+    # create color arrays for both label versions using the fixed color map
+    orig_colors = [fixed_colors[min(label, 30)] for label in labels]
+    phrase_colors = [fixed_colors[min(label, 30)] for label in phrase_labels]
 
     # create a figure with three vertically stacked subplots using gridspec for custom heights
     fig = plt.figure(figsize=(18, 9))  # Increased height by 1 inch (8→9)

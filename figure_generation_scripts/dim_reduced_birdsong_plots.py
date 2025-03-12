@@ -63,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument('--raw_spectogram', type=str2bool, default=False, help='Whether to use raw spectogram. Use true/false, yes/no, y/n, 1/0')
     parser.add_argument('--save_dict_for_analysis', type=str2bool, default=True, help='Whether to save dictionary for analysis. Use true/false, yes/no, y/n, 1/0')
     parser.add_argument('--min_cluster_size', type=int, default=500, help='Minimum cluster size for HDBSCAN.')
-
+    parser.add_argument('--state_finding_algorithm', type=str, default="HDBSCAN", help='State finding algorithm to use. Use HDBSCAN, or GHMM.')
     args = parser.parse_args()
     main(
         args.experiment_folder, 

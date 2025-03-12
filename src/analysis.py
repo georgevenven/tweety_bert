@@ -65,46 +65,53 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
    """
    Generate labels for data points using the HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise) clustering algorithm.
 
-
    Parameters:
    - array: ndarray of shape (n_samples, n_features)
      The input data to cluster.
-
-
    - min_samples: int, default=5
      The number of samples in a neighborhood for a point to be considered as a core point.
-
-
    - min_cluster_size: int, default=5
      The minimum number of points required to form a cluster.
-
 
    Returns:
    - labels: ndarray of shape (n_samples)
      Cluster labels for each point in the dataset. Noisy samples are given the label -1.
    """
-
-
    import hdbscan
-
-
    # Create an HDBSCAN object with the specified parameters.
    hdbscan_model = hdbscan.HDBSCAN(min_samples=min_samples, min_cluster_size=min_cluster_size)
-
-
    # Fit the model to the data and extract the labels.
    labels = hdbscan_model.fit_predict(array)
-
-
    print(f"discovered labels {np.unique(labels)}")
-
-
    return labels
+
+
+def generate_ghmm_labels(array):
+    from hmmlearn import hmm
+
+    print(array.shape)
+
+    # normalize the array
+    array = (array - np.mean(array)) / np.std(array)
+
+    # define GHMM w/ 2 hidden states
+    model = hmm.GaussianHMM(n_components=20, covariance_type='full')
+    # train (EM)
+    model.fit(array)
+
+    # predict hidden states
+    states = model.predict(array)
+
+    print("means:", model.means_)
+    print("covariances:", model.covars_)
+
+    print(states.shape)
+    return states
 
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                        layer_index=None, dict_key=None,
                        context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True,
-                       remove_non_vocalization=True, min_cluster_size=500):
+                       remove_non_vocalization=True, min_cluster_size=500, state_finding_algorithm="HDBSCAN"):
    """
    parameters:
    - data_dirs: list of data directories to analyze
@@ -338,14 +345,21 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
    embedding_outputs = reducer.fit_transform(predictions_float32)
    print("umap fitting complete. shape of embedding outputs:", embedding_outputs.shape)
 
+   if state_finding_algorithm == "HDBSCAN":
+    print("generating hdbscan labels...")
+    try:
+        hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
+        print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
+    except Exception as e:
+        print(f"HDBSCAN error: {e}")
+        return
 
-   print("generating hdbscan labels...")
-   try:
-       hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
-       print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
-   except Exception as e:
-       print(f"HDBSCAN error: {e}")
-       return
+   elif state_finding_algorithm == "GHMM":
+       print("generating ghmm labels...")
+       hdbscan_labels = generate_ghmm_labels(embedding_outputs)
+       print("ghmm labels generated. unique labels found:", np.unique(hdbscan_labels))
+
+       # rename the HDBSCAN states later .... it will require some downstream refactoring ... so keep for now 
 
    # get unique labels and create color palettes
    unique_clusters = np.unique(hdbscan_labels)
@@ -819,9 +833,6 @@ class ComputerClusterPerformance():
            output[i] = major_label
       
        return output
-
-
-
 
    def fill_noise_with_nearest_label(self, labels):
        """
