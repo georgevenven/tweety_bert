@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load the spectrogram data from npz file
-data = np.load('/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_specs/llb3_0185_2018_04_24_08_34_45_segment_0.npz')
+data = np.load('temp/umap_files/1741203573-USA5483_segment_10.npz')
 spectrogram = data['s']  # Access the 's' array
 
 # Crop the spectrogram as specified

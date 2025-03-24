@@ -58,7 +58,7 @@ def syllable_to_phrase_labels(arr, silence=0):
     
 
 class SongDataSet_Image(Dataset):
-    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False, min_length=100, phrase_labels=False):
+    def __init__(self, file_dir, num_classes=40, infinite_loader=True, segment_length=1000, pitch_shift=False, min_length=10, phrase_labels=False):
         self.file_paths = [os.path.join(file_dir, file) for file in os.listdir(file_dir)]
         self.num_classes = num_classes
         self.infinite_loader = infinite_loader

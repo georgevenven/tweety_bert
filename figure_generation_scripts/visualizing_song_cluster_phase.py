@@ -655,13 +655,13 @@ class UMAPSelector:
         plt.close(fig)
 
 
-# Usage example:
+# Usage example: 
 if __name__ == "__main__":
-    file_path = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Embeddings/llb16_raw_false.npz"
+    file_path = "files/Calls_Test.npz"
     selector = UMAPSelector(
         file_path=file_path, 
-        max_length=500, 
+        max_length=100, 
         used_group_coloring=False,   
-        collage_mode=False
+        collage_mode=True
     )
     selector.plot_umap_with_selection()

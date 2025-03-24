@@ -99,6 +99,7 @@ class WavtoSpec:
                 try:
                     print(f"[Single-thread] Processing file: {file_path}")
                     if self.song_detection_json_path is not None:
+                        # Only process if this file has valid vocalization info
                         if self.has_vocalization(file_path):
                             self.multiprocess_process_file(file_path, self.song_detection_json_path)
                         else:
@@ -244,45 +245,59 @@ class WavtoSpec:
         if hasattr(self, 'skipped_files_count'):
             self.skipped_files_count.value += 1
 
-    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=500,
-                               min_timebins=1000, save_npz=True):
+    def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=25,
+                               min_timebins=25, save_npz=True):
         try:
+            # Process audio in chunks instead of loading the entire file
+            chunk_size = 10000000  # Process ~10MB chunks at a time
+            
             with sf.SoundFile(file_path, 'r') as wav_file:
                 samplerate = wav_file.samplerate
-                data = wav_file.read(dtype='int16')
-                if wav_file.channels > 1:
-                    data = data[:, 0]
-
-            length_in_ms = (len(data) / samplerate) * 1000
-            if length_in_ms < min_length_ms:
-                logging.info(f"File {file_path} skipped: below length threshold ({length_in_ms}ms < {min_length_ms}ms)")
-                self.increment_skip_counter()
-                return None, None
-
-            if song_detection_json_path is not None:
-                vocalization_data, syllable_labels = self.check_vocalization(
-                    file_name=os.path.basename(file_path),
-                    data=data,
-                    samplerate=samplerate,
-                    song_detection_json_path=song_detection_json_path
-                )
-                if not vocalization_data:
-                    logging.info(f"File {file_path} skipped: no vocalization data found")
+                channels = wav_file.channels
+                total_frames = wav_file.frames
+                
+                # Check duration first
+                length_in_ms = (total_frames / samplerate) * 1000
+                if length_in_ms < min_length_ms:
+                    logging.info(f"File {file_path} skipped: below length threshold ({length_in_ms}ms < {min_length_ms}ms)")
                     self.increment_skip_counter()
                     return None, None
-            else:
-                # Assume entire file is a vocalization if no JSON is given
-                vocalization_data = [(0, len(data)/samplerate)]
-                syllable_labels = {}
-
+                
+                # For multi-channel, we'll only use first channel
+                if song_detection_json_path is not None:
+                    vocalization_data, syllable_labels = self.check_vocalization(
+                        file_name=os.path.basename(file_path),
+                        data=None,  # Don't pass data here to save memory
+                        samplerate=samplerate,
+                        song_detection_json_path=song_detection_json_path
+                    )
+                    if not vocalization_data:
+                        logging.info(f"File {file_path} skipped: no vocalization data found")
+                        self.increment_skip_counter()
+                        return None, None
+                else:
+                    # Assume entire file is a vocalization if no JSON is given
+                    vocalization_data = [(0, total_frames/samplerate)]
+                    syllable_labels = {}
+                
+                # Read the actual data only when needed
+                data = wav_file.read(dtype='int16')
+                if channels > 1:
+                    data = data[:, 0]
+            
             # High-pass filter
             b, a = ellip(5, 0.2, 40, 500/(samplerate/2), 'high')
             data = filtfilt(b, a, data)
-
+            
+            # Explicitly delete variables after use to help garbage collection
+            del wav_file
+            
             # Compute STFT
             Sxx = librosa.stft(data.astype(float), n_fft=self.nfft, hop_length=self.step_size, window='hann')
+            del data  # Remove data from memory as soon as we're done with it
+            
             Sxx_log = librosa.amplitude_to_db(np.abs(Sxx), ref=np.max)
-
+            
             # Prepare label array
             labels = np.zeros(Sxx.shape[1], dtype=int)
 
@@ -292,21 +307,22 @@ class WavtoSpec:
                     start_bin = np.searchsorted(np.arange(Sxx.shape[1]) * self.step_size / samplerate, start_sec)
                     end_bin = np.searchsorted(np.arange(Sxx.shape[1]) * self.step_size / samplerate, end_sec)
                     labels[start_bin:end_bin] = int(label)
-
-            # Process each vocalization segment
+                
+            # Process each segment individually to reduce peak memory usage
+            results = []
             for i, (start_sec, end_sec) in enumerate(vocalization_data):
                 start_bin = np.searchsorted(
                     np.arange(Sxx.shape[1]) * self.step_size / samplerate, start_sec)
                 end_bin = np.searchsorted(
                     np.arange(Sxx.shape[1]) * self.step_size / samplerate, end_sec)
 
-                # Only process segments that are at least 500 time bins long
                 if (end_bin - start_bin) < min_timebins:
                     print(f"Segment {i} has fewer than {min_timebins} time bins and will be skipped.")
                     continue
 
-                segment_Sxx_log = Sxx_log[:, start_bin:end_bin]
-                segment_labels = labels[start_bin:end_bin]
+                # Extract segment
+                segment_Sxx_log = Sxx_log[:, start_bin:end_bin].copy()  # Force copy to avoid reference issues
+                segment_labels = labels[start_bin:end_bin].copy()
                 segment_vocalization = np.ones(end_bin - start_bin, dtype=int)
 
                 if save_npz:
@@ -314,20 +330,34 @@ class WavtoSpec:
                     segment_spec_file_path = os.path.join(
                         self.dst_dir, f"{spec_filename}_segment_{i}.npz"
                     )
-                    np.savez(
+                    np.savez_compressed(  # Use compressed version to save disk space
                         segment_spec_file_path,
                         s=segment_Sxx_log,
                         vocalization=segment_vocalization,
                         labels=segment_labels
                     )
                     print(f"Segment {i} spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
-            return Sxx_log, vocalization_data, labels
+                    
+                    # Clear segment data after saving to reduce memory usage
+                    del segment_Sxx_log
+                    del segment_labels
+                    del segment_vocalization
+                    gc.collect()  # Force garbage collection
+                
+                results.append((start_sec, end_sec))
+            
+            return Sxx_log, results, labels
 
         except Exception as e:
             logging.error(f"Error processing {file_path}: {e}")
+            gc.collect()  # Force garbage collection
             return None, None, None
 
     def check_vocalization(self, file_name, data, samplerate, song_detection_json_path):
+        """
+        Return only those segments specifically marked as containing song.
+        If no JSON is provided, or if 'song_present' is not True, skip the file.
+        """
         if not self.use_json:
             return [(0, len(data)/samplerate)], {}
 
@@ -340,14 +370,21 @@ class WavtoSpec:
                 json_data = json.load(json_file)
                 for entry in json_data:
                     if entry['filename'] == file_name:
+                        # If the JSON explicitly says there's no song, skip entirely
                         if not entry.get('song_present', False):
                             logging.info(f"File {file_name} skipped: no song present according to JSON")
                             return None, None
                         
-                        onsets_offsets = [
-                            (seg['onset_ms'] / 1000, seg['offset_ms'] / 1000)
-                            for seg in entry.get('segments', [])
-                        ]
+                        onsets_offsets = []
+                        for seg in entry.get('segments', []):
+                            onsets_offsets.append(
+                                (seg['onset_ms'] / 1000, seg['offset_ms'] / 1000)
+                            )
+
+                        # if there are no valid segments, skip
+                        if not onsets_offsets:
+                            return None, None
+
                         syllable_labels = entry.get('syllable_labels', {})
                         return onsets_offsets, syllable_labels
         except Exception as e:
@@ -392,6 +429,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 '''

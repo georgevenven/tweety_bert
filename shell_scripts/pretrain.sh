@@ -6,13 +6,13 @@ set -euo pipefail
 cd ..
 
 # required parameters
-INPUT_DIR="/media/george-vengrovski/disk1/canary/canary_recordings/USA5210"
-SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Desk SSD/TweetyBERT/contains_seasonality.json"
+INPUT_DIR="/media/george-vengrovski/George-SSD/alistair_call_data_test_org/wav_subset"
+SONG_DETECTION_JSON_PATH="/media/george-vengrovski/George-SSD/alistair_call_data_test_org/combined_calls.json"
 TEST_PERCENTAGE=20
-EXPERIMENT_NAME="delete_me"
+EXPERIMENT_NAME="TweetyBERT_Call_Model"
 
 # change default parameters (if needed)
-BATCH_SIZE=42                    # training batch size
+BATCH_SIZE=128                    # training batch size
 LEARNING_RATE=3e-4              # learning rate for training
 MULTI_THREAD=true               # set to false for single-thread spectrogram generation
 STEP_SIZE=119                   # step size for spectrogram generation
@@ -102,7 +102,7 @@ python3 src/spectogram_generator.py \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
-        --single_threaded False 
+        --single_threaded true 
         
 python3 src/spectogram_generator.py \
         --src_dir "$TEST_WAV_DIR" \
@@ -110,7 +110,7 @@ python3 src/spectogram_generator.py \
         --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
         --step_size "$STEP_SIZE" \
         --nfft "$NFFT" \
-        --single_threaded False 
+        --single_threaded true
 
 # run tweetybert
 python3 src/TweetyBERT.py \
@@ -118,7 +118,9 @@ python3 src/TweetyBERT.py \
         --train_dir "$TRAIN_DIR" \
         --test_dir "$TEST_DIR" \
         --batch_size "$BATCH_SIZE" \
-        --learning_rate "$LEARNING_RATE"
+        --learning_rate "$LEARNING_RATE" \
+        --m 100 \
+        --context 250
 
 # 10. save file lists into the experiment folder
 EXPERIMENT_DIR="experiments/$EXPERIMENT_NAME"

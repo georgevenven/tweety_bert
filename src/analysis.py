@@ -147,11 +147,9 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                # retrieve the next batch
                data, ground_truth_label, vocalization, file_path = next(data_loader_iter)
 
-
                # temporary fix for corrupted data
-               if data.shape[1] < 100:
+               if data.shape[1] < 10:
                    continue
-
 
                num_classes = ground_truth_label.shape[-1]
                original_data_length = data.shape[1]
