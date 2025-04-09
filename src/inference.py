@@ -135,7 +135,7 @@ class TweetyBertInference:
       file_creation_timestamp = get_creation_date(Path(file_path))
       creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
 
-      spec, vocalization, labels = self.wav_to_spec.process_file(self.wav_to_spec, file_path=file_path)
+      spec, vocalization, labels = self.wav_to_spec.safe_process_file(self.wav_to_spec, file_path=file_path)
       if spec is None:
           return {
               "file_name": os.path.basename(file_path),
