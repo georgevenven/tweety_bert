@@ -233,7 +233,7 @@ class WavtoSpec:
             return None
         return file_path
 
-    def multiprocess_process_file(self, file_path, song_detection_json_path):
+    def multiprocess_process_file(self, file_path, song_detection_json_path, save_npz=True):
         return self.convert_to_spectrogram(
             file_path,
             song_detection_json_path=song_detection_json_path,
@@ -330,7 +330,7 @@ class WavtoSpec:
                     segment_spec_file_path = os.path.join(
                         self.dst_dir, f"{spec_filename}_segment_{i}.npz"
                     )
-                    np.savez_compressed(  # Use compressed version to save disk space
+                    np.savez(  # Use uncompressed version
                         segment_spec_file_path,
                         s=segment_Sxx_log,
                         vocalization=segment_vocalization,

@@ -44,7 +44,8 @@ do
     python src/spectogram_generator.py \
         --src_dir "$GROUP_SRC_DIR" \
         --dst_dir "$GROUP_SPEC_DIR" \
-        --song_detection_json_path "$SONG_DETECTION_JSON_PATH"
+        --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
+        --single_threaded false
     DATA_DIRS+=("$GROUP_SPEC_DIR")
 done
 
