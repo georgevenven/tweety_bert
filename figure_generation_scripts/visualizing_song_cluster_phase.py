@@ -654,8 +654,6 @@ class UMAPSelector:
         fig.savefig(f"imgs/selected_regions/collage_{random_name}_{label_str}.png", dpi=300)  # Increased DPI for print quality
         plt.close(fig)
 
-
-# Usage example: 
 if __name__ == "__main__":
     file_path = "files/Calls_Test.npz"
     selector = UMAPSelector(

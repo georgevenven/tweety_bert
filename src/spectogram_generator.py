@@ -237,7 +237,7 @@ class WavtoSpec:
         return self.convert_to_spectrogram(
             file_path,
             song_detection_json_path=song_detection_json_path,
-            save_npz=True
+            save_npz=save_npz
         )
 
     def increment_skip_counter(self):

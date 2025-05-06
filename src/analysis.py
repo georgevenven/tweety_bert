@@ -18,6 +18,8 @@ import torch.nn.functional as F
 from sklearn.neighbors import NearestNeighbors
 import warnings
 from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
+from scipy.signal import fftconvolve      
+
 
 
 warnings.filterwarnings("ignore", category=NumbaDeprecationWarning)
@@ -108,10 +110,42 @@ def generate_ghmm_labels(array):
     print(states.shape)
     return states
 
+def _gaussian_kernel(radius: int, peak: float, sigma_divisor: float = 3.0):
+    """
+    build a symmetric 1-D gaussian kernel with height = `peak`.
+
+    radius :   how many neighbours on each side (e.g. 1000)
+    peak   :   kernel[0] after scaling (e.g. 0.05 or 0.1)
+    """
+    x     = np.arange(-radius, radius + 1)
+    sigma = radius / sigma_divisor
+    k     = np.exp(-0.5 * (x / sigma) ** 2)
+    k    *= peak / k[radius]          # scale so centre == peak
+    return k.astype(np.float32)       # save RAM
+
+def smooth_predictions(pred, *, radius=1000, peak=0.05, include_self=True):
+    """
+    pred : (T, F) ndarray      (T ≈ 1e6, F ≈ 196)
+    returns smoothed + residual-added predictions
+    """
+    kernel = _gaussian_kernel(radius, peak)
+    if not include_self:
+        kernel[radius] = 0.0          # don't double-count self
+
+    # fft-based convolution along time axis for every feature at once
+    if fftconvolve is not None:
+        smoothed = fftconvolve(pred, kernel[:, None], mode='same', axes=0)
+    else:                             # fallback: plain np.convolve (slower)
+        smoothed = np.empty_like(pred)
+        for f in range(pred.shape[1]):
+            smoothed[:, f] = np.convolve(pred[:, f], kernel, mode='same')
+
+    return pred + smoothed
+
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                        layer_index=None, dict_key=None,
                        context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True,
-                       remove_non_vocalization=True, min_cluster_size=500, state_finding_algorithm="HDBSCAN"):
+                       remove_non_vocalization=True, min_cluster_size=500, state_finding_algorithm="HDBSCAN-TIME"):
    """
    parameters:
    - data_dirs: list of data directories to analyze
@@ -321,6 +355,31 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
    # fit the umap reducer with more conservative parameters
    print("initializing umap reducer...")
 
+   # cosine similarity between adjacent prediction vectors
+   vec1 = predictions[:-1]
+   vec2 = predictions[1:]
+   dot_product = np.sum(vec1 * vec2, axis=1)
+   norm1 = np.linalg.norm(vec1, axis=1)
+   norm2 = np.linalg.norm(vec2, axis=1)
+   cosine_similarity = dot_product / (norm1 * norm2)
+
+   # print max and min of cosine similarity, and the mean
+   print(f"max cosine similarity: {np.max(cosine_similarity)}")
+   print(f"min cosine similarity: {np.min(cosine_similarity)}")
+   print(f"mean cosine similarity: {np.mean(cosine_similarity)}")
+
+   # set lower quartile of cosine similarity to 
+
+
+   if state_finding_algorithm == "HDBSCAN-TIME":
+    # temporal density injection
+    predictions = smooth_predictions(
+        predictions,
+        radius=10,       # or 100 for a tighter window
+        peak=.05,         # 0.05 or 0.1 as you specified
+        include_self=True # set True if you want self-reinforcement
+    )
+
    # Try with more conservative parameters
    reducer = umap.UMAP(
        n_neighbors=200,  
@@ -343,7 +402,7 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
    embedding_outputs = reducer.fit_transform(predictions_float32)
    print("umap fitting complete. shape of embedding outputs:", embedding_outputs.shape)
 
-   if state_finding_algorithm == "HDBSCAN":
+   if state_finding_algorithm == "HDBSCAN" or state_finding_algorithm == "HDBSCAN-TIME":
     print("generating hdbscan labels...")
     try:
         hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)

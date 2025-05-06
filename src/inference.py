@@ -55,6 +55,7 @@ class TweetyBertInference:
       self.visualize = visualize
       self.dump_interval = dump_interval
       self.apply_post_processing = apply_post_processing
+      self.song_detection_json = song_detection_json
       if song_detection_json is not None:
           with open(song_detection_json, 'r') as f:
               self.song_detection_data = json.load(f)
@@ -100,7 +101,7 @@ class TweetyBertInference:
       ).to(self.device)
 
   def setup_wav_to_spec(self, folder, csv_file_dir=None):
-      self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, csv_file_dir)
+      self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, song_detection_json_path=self.song_detection_json)
 
   def smooth_labels(self, labels, window_size=50):
       labels = np.array(labels)
@@ -135,7 +136,7 @@ class TweetyBertInference:
       file_creation_timestamp = get_creation_date(Path(file_path))
       creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
 
-      spec, vocalization, labels = self.wav_to_spec.multiprocess_process_file(file_path, self.wav_to_spec, json_path=self.song_detection_data, save_npz=False)
+      spec, vocalization, labels = self.wav_to_spec.multiprocess_process_file(file_path, save_npz=False)
       if spec is None:
           return {
               "file_name": os.path.basename(file_path),

@@ -212,6 +212,33 @@ def calculate_weighted_pearson(y_true, y_pred, weights):
     return cov/denom
 
 
+def calculate_unweighted_pearson(y_true, y_pred):
+    """standard (un-weighted) Pearson correlation"""
+    if len(y_true) < 2:
+        return np.nan
+    r = np.corrcoef(y_true, y_pred)[0, 1]
+    return float(r)
+
+
+def pad_with_unmapped(gt_vals, hd_vals, lbl_ids):
+    """
+    extend gt / hd metric lists so *all* GT labels (even those mapped to –1)
+    appear once; machine metric is zero when missing.
+    """
+    out_gt, out_hd = [], []
+    for g, h in zip(gt_vals, hd_vals):
+        out_gt.append(g)
+        out_hd.append(h)
+    # any GT label that never got a machine metric carries 0 on machine side
+    if len(out_gt) != len(lbl_ids):
+        seen = set(range(len(out_gt)))
+        for idx in range(len(lbl_ids)):
+            if idx not in seen:
+                out_gt.append(gt_vals[idx])
+                out_hd.append(0.0)
+    return np.array(out_gt), np.array(out_hd)
+
+
 def find_files_in_folder(folder_path: str) -> List[str]:
     """
     Return sorted list of .npz files in folder_path.
@@ -417,6 +444,7 @@ def process_all_folds(files: List[str],
     bird_ids               = []
     fold_ids               = []
     phrase_counts          = []
+    phrase_label_ids       = []
 
     # Summation for mismatch
     total_frames_global_mapped   = 0
@@ -540,6 +568,7 @@ def process_all_folds(files: List[str],
             ground_truth_lengths.append(gt_length)
             hdbscan_lengths.append(hd_length)
             phrase_counts.append(pcount)
+            phrase_label_ids.append(label)
             
             bird_ids.append(bird_id)
             fold_ids.append(fold_id)
@@ -642,7 +671,7 @@ def process_all_folds(files: List[str],
     
     return (ground_truth_entropies, hdbscan_entropies,
             ground_truth_lengths, hdbscan_lengths,
-            bird_ids, fold_ids, phrase_counts,
+            bird_ids, fold_ids, phrase_counts, phrase_label_ids,
             overall_fer_mapped, overall_fer_any, per_bird_phrase_fer,
             pred_label_freq)
 
@@ -847,6 +876,8 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
     entropy_results = [(window_size, r_entropy), ...]
     length_results = [(window_size, r_length), ...]
     """
+    if len(window_results) == 0:
+        raise ValueError("window_results is empty – populate v_measure_results before plotting.")
     ws = [x[0] for x in window_results]
     vs = [x[1] for x in window_results]
     re = [x[1] for x in entropy_results]
@@ -953,8 +984,8 @@ if __name__ == "__main__":
     
     all_results = []
     v_measure_results = []
-    entropy_results = []
-    length_results = []
+    entropy_results   = []
+    length_results    = []
     label_frequencies_by_window = {}
 
     best_wsize = None
@@ -969,7 +1000,7 @@ if __name__ == "__main__":
         do_plots = (wsize == 0)
         
         (gt_e, hd_e, gt_l, hd_l, 
-         birds, folds, counts,
+         birds, folds, counts, lbl_ids,
          overall_fer_mapped, overall_fer_any, bird_phrase_fer,
          pred_label_freq) = process_all_folds(
              all_npz_files, wsize, labels_path=folder_path,
@@ -979,26 +1010,46 @@ if __name__ == "__main__":
         
         label_frequencies_by_window[wsize] = pred_label_freq
         
-        # Weighted correlations
-        r_e = calculate_weighted_pearson(np.array(gt_e), np.array(hd_e), np.array(counts))
-        r_l = calculate_weighted_pearson(np.array(gt_l), np.array(hd_l), np.array(counts))
+        # --- mapped-only correlations --------------------------------------
+        wts = np.array(counts)
+        gt_e_arr, hd_e_arr = np.array(gt_e), np.array(hd_e)
+        gt_l_arr, hd_l_arr = np.array(gt_l), np.array(hd_l)
+
+        r_e_w = calculate_weighted_pearson(gt_e_arr, hd_e_arr, wts)
+        r_l_w = calculate_weighted_pearson(gt_l_arr, hd_l_arr, wts)
+        r_e_u = calculate_unweighted_pearson(gt_e_arr, hd_e_arr)
+        r_l_u = calculate_unweighted_pearson(gt_l_arr, hd_l_arr)
+
+        # --- full correlations (include unmapped GT labels) ----------------
+        gt_e_full, hd_e_full = pad_with_unmapped(gt_e_arr, hd_e_arr, lbl_ids)
+        gt_l_full, hd_l_full = pad_with_unmapped(gt_l_arr, hd_l_arr, lbl_ids)
+
+        r_e_full = calculate_weighted_pearson(gt_e_full, hd_e_full, np.ones_like(gt_e_full))
+        r_l_full = calculate_weighted_pearson(gt_l_full, hd_l_full, np.ones_like(gt_l_full))
+
+        # aggregate v-measure across all folds
+        gt_concat, pred_concat = [], []
+        for f in all_npz_files:
+            d = np.load(f)
+            cc = ComputerClusterPerformance(labels_path=folder_path)
+            gt  = cc.syllable_to_phrase_labels(d['ground_truth_labels'], silence=0)
+            pf  = cc.fill_noise_with_nearest_label(d['hdbscan_labels'])
+            ps  = cc.majority_vote(pf, wsize)
+            gt_concat.append(gt)
+            pred_concat.append(ps)
+        gt_concat   = np.concatenate(gt_concat)
+        pred_concat = np.concatenate(pred_concat)
+        v_score = v_measure_score(gt_concat, pred_concat)
         
-        # For demonstration, let's do a v_measure with just the first file
-        if len(all_npz_files) > 0:
-            data = np.load(all_npz_files[0])
-            comp_cluster = ComputerClusterPerformance(labels_path=folder_path)
-            gtp = comp_cluster.syllable_to_phrase_labels(data['ground_truth_labels'], silence=0)
-            # fill & smooth
-            pf   = comp_cluster.fill_noise_with_nearest_label(data['hdbscan_labels'])
-            ps   = comp_cluster.majority_vote(pf, wsize)
-            v_score = v_measure_score(gtp, ps)
-        else:
-            v_score = 0.0
-        
-        all_results.append((wsize, r_e, r_l, v_score, overall_fer_mapped, overall_fer_any))
+        all_results.append((wsize,
+                           r_e_w, r_l_w,             # existing weighted
+                           r_e_u, r_l_u,             # NEW unweighted
+                           r_e_full, r_l_full,       # NEW full
+                           v_score,
+                           overall_fer_mapped, overall_fer_any))
         v_measure_results.append((wsize, v_score))
-        entropy_results.append((wsize, r_e))
-        length_results.append((wsize, r_l))
+        entropy_results.append((wsize, r_e_w))   # plotting still uses weighted
+        length_results.append((wsize, r_l_w))
         
         # Change best window selection to use FER instead of v_score
         if best_wsize is None or overall_fer_mapped < best_fer:
@@ -1010,7 +1061,7 @@ if __name__ == "__main__":
     ###########################################################################
     best_window_corr_dir = window_dirs[best_wsize]
     (gt_e_best, hd_e_best, gt_l_best, hd_l_best,
-     birds_best, folds_best, counts_best,
+     birds_best, folds_best, counts_best, lbl_ids_best,
      overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
      best_window_pred_label_freq) = \
          process_all_folds(
@@ -1022,7 +1073,10 @@ if __name__ == "__main__":
     ###########################################################################
     # Plot metrics across windows
     ###########################################################################
-    plot_v_measure_by_window(v_measure_results, entropy_results, length_results, output_dir=output_dir)
+    plot_v_measure_by_window(v_measure_results,
+                             entropy_results,
+                             length_results,
+                             output_dir=output_dir)
     
     ###########################################################################
     # Build a final summary across all windows
@@ -1034,15 +1088,19 @@ if __name__ == "__main__":
         f.write("============================================================\n\n")
         
         header = (
-            "Window |   r_e   |   r_l   | v_score |   FER(mapped)%  |   FER(-1)%  \n"
-            "-------+---------+---------+---------+-----------------+------------\n"
+            "Window | r_e_w | r_l_w | r_e_u | r_l_u | r_e_full | r_l_full |"
+            " v_score | FER(mapped)% | FER(-1)%\n"
+            "-------+-------+-------+-------+-------+---------+---------+"
+            "---------+--------------+-----------\n"
         )
         f.write(header)
         
-        for i, (wsize, re_, rl_, v_, fer_map, fer_any) in enumerate(all_results):
+        for i, (wsize, re_w, rl_w, re_u, rl_u, re_f, rl_f, v_, fer_map, fer_any) in enumerate(all_results):
             f.write(
-                f"{wsize:6d} | {re_:7.3f} | {rl_:7.3f} | {v_:7.3f} |"
-                f"     {fer_map:7.2f}%      |   {fer_any:7.2f}%   \n"
+                f"{wsize:6d} | {re_w:6.3f} | {rl_w:6.3f} |"
+                f" {re_u:6.3f} | {rl_u:6.3f} |"
+                f" {re_f:7.3f} | {rl_f:7.3f} |"
+                f" {v_:7.3f} |  {fer_map:7.2f}% |  {fer_any:7.2f}%\n"
             )
         
         f.write("\n\n--- BEST WINDOW SELECTION ---\n\n")
@@ -1078,7 +1136,7 @@ if __name__ == "__main__":
 
     # The function process_all_folds returns the data needed for the scatter plots
     (gt_e_best, hd_e_best, gt_l_best, hd_l_best,
-     birds_best, folds_best, counts_best,
+     birds_best, folds_best, counts_best, lbl_ids_best,
      overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
      best_window_pred_label_freq) = \
          process_all_folds(

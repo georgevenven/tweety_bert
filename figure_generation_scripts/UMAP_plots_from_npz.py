@@ -26,7 +26,7 @@ from data_class import SongDataSet_Image, CollateFunction
 
 # ------------------ CONFIGURABLE PATHS ------------------ #
 # Either a .npz file (interactive cropping) or folder
-input_path = "/home/george-vengrovski/Videos/llb16_for_paper_raw_spec.npz"
+input_path = "files/LLB3_Untrained.npz"
 output_dir = "imgs/umap_plots"
 # -------------------------------------------------------- #
 
