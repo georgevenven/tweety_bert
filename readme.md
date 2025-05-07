@@ -16,7 +16,6 @@ For questions or collaboration inquiries, please email: georgev [at] Uoregon.edu
 
 The repository is organized as follows:
 
-<pre>
 tweety_bert/
 ├── readme.md                     # This file
 ├── pretrain.py                   # Python script for pretraining TweetyBERT
@@ -54,14 +53,7 @@ tweety_bert/
 │   ├── temp_process_aws_data_formats.ipynb # Jupyter notebook for processing AWS data formats
 │   ├── vast_ai_unzipper.py           # Utility for unzipping files on Vast.ai
 │   └── whisperseg.py                 # Processes WAV files using WhisperSeg for vocalization detection
-├── shell_scripts/                # Shell scripts for automation (Alternative workflow)
-│   ├── batch_decoding.sh             # Script for batch processing of multiple birds (UMAP, Decoder Training, Inference)
-│   ├── fold_umap_generation.sh       # Generates UMAPs for different data folds
-│   ├── inference.sh                  # Runs inference on new WAV files
-│   ├── llb_umap_generations.sh       # Generates UMAPs for specific LLB birds
-│   ├── pretrain.sh                   # Script for pretraining TweetyBERT
-│   ├── train_decoder.sh              # Script for training a decoder for a single bird
-│   └── train_decoder_multiple_dir.sh # Script for training a decoder using data from multiple directories
+├── shell_scripts/                # Shell scripts for automation (Alternative workflow / depriciated)
 ├── src/                          # Core model implementation and primary codebase
 │   ├── __init__.py                   # Makes src a Python package
 │   ├── analysis.py                   # Contains functions for UMAP plotting and performance metrics
@@ -76,8 +68,6 @@ tweety_bert/
 │   ├── TweetyBERT.py                 # Main script for running TweetyBERT experiments
 │   ├── TweetyNET.py                  # Implementation of TweetyNET model (likely for song detection)
 │   └── utils.py                      # Utility functions (e.g., loading models, configs)
-├── temp.ipynb                    # Temporary Jupyter notebook
-├── test.py                       # Test script, e.g., for loading and inspecting .npz files
 ├── files/                        # Stores NPZ files and JSON annotation databases [User must populate or adjust paths in scripts]
 │   ├── LLB3_Untrained.npz            # Example NPZ file for UMAP plots from npz script
 │   ├── category_colors_llb3.pkl      # Example category colors file
@@ -94,9 +84,6 @@ tweety_bert/
 │   └── proxy_metrics/                # Stores results from umap_eval.py (Fig 5D,E,F)
 │       ├── all_windows_summary.txt     # Summary of stats for each smoothing window
 │       └── metrics_by_window.png       # Plot for Figure 5F
-└── LLB_Embedding/                # Example directory containing NPZ files for Figure 3 [User must populate]
-└── LLB_Fold_Data/                # Example directory containing NPZ files for Figure 4A,B V-Measure calculation [User must populate]
-</pre>
 
 ## 🚀 Installation & Environment Setup
 
