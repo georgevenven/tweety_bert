@@ -217,7 +217,7 @@ python decoding.py \
     --song_detection_json_path "/path/to/this_birds/song_detection.json" \
     --num_samples_umap 1e5
 ```
-*(Note: The grouping mode currently relies on the interaction with `scripts/copy_files_from_wavdir_to_multiple_event_dirs.py`, which might require specific setup or be interactive).*
+*(Note: The grouping mode currently relies on the interaction with `scripts/copy_files_from_wavdir_to_multiple_event_dirs.py`, which is interactive).*
 
 ## 🔍 Inference
 
@@ -269,7 +269,7 @@ The `.npz` files used for embeddings and analysis generally contain the followin
 ## 📄 Regenerating Figures from the Paper
 
 The following instructions outline how to regenerate the figures presented in the paper.
-**Note:** You will need to adjust file paths within the scripts to point to your local data locations. The original paths mentioned (e.g., `/media/george-vengrovski/...`) are specific to the original development environment. Placeholder paths like `[Path_to_your_data_here]` should be replaced.
+**Note:** You will need to adjust file paths within the scripts to point to your local data locations. 
 
 **General Setup:**
 1.  Ensure your Conda environment (`tweetybert`) is activated.
