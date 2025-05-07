@@ -655,10 +655,10 @@ class UMAPSelector:
         plt.close(fig)
 
 if __name__ == "__main__":
-    file_path = "files/Calls_Test.npz"
+    file_path = "files/LLB16_order_randomized.npz"
     selector = UMAPSelector(
         file_path=file_path, 
-        max_length=100, 
+        max_length=1000, 
         used_group_coloring=False,   
         collage_mode=True
     )

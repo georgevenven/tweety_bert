@@ -12,7 +12,7 @@ TEST_PERCENTAGE=20
 EXPERIMENT_NAME="TweetyBERT_Call_Model"
 
 # change default parameters (if needed)
-BATCH_SIZE=128                    # training batch size
+BATCH_SIZE=42                    # training batch size
 LEARNING_RATE=3e-4              # learning rate for training
 MULTI_THREAD=true               # set to false for single-thread spectrogram generation
 STEP_SIZE=119                   # step size for spectrogram generation

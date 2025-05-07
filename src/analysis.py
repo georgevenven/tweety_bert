@@ -351,35 +351,8 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
        spec_arr = spec_arr[vocalization_indices]
        file_indices = file_indices[vocalization_indices]
        dataset_indices = dataset_indices[vocalization_indices]
-
    # fit the umap reducer with more conservative parameters
    print("initializing umap reducer...")
-
-   # cosine similarity between adjacent prediction vectors
-   vec1 = predictions[:-1]
-   vec2 = predictions[1:]
-   dot_product = np.sum(vec1 * vec2, axis=1)
-   norm1 = np.linalg.norm(vec1, axis=1)
-   norm2 = np.linalg.norm(vec2, axis=1)
-   cosine_similarity = dot_product / (norm1 * norm2)
-
-   # print max and min of cosine similarity, and the mean
-   print(f"max cosine similarity: {np.max(cosine_similarity)}")
-   print(f"min cosine similarity: {np.min(cosine_similarity)}")
-   print(f"mean cosine similarity: {np.mean(cosine_similarity)}")
-
-   # set lower quartile of cosine similarity to 
-
-
-   if state_finding_algorithm == "HDBSCAN-TIME":
-    # temporal density injection
-    predictions = smooth_predictions(
-        predictions,
-        radius=10,       # or 100 for a tighter window
-        peak=.05,         # 0.05 or 0.1 as you specified
-        include_self=True # set True if you want self-reinforcement
-    )
-
    # Try with more conservative parameters
    reducer = umap.UMAP(
        n_neighbors=200,  
