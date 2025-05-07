@@ -1,3 +1,5 @@
+[TweetyBERT: Automated parsing of birdsong through self-supervised machine learning (bioRxiv preprint)](https://www.biorxiv.org/content/10.1101/2025.04.09.648029v1)
+
 # TweetyBERT: Automated Parsing of Birdsong Through Self-Supervised Machine Learning
 
 This repository contains the code and instructions to replicate the results and figures presented in the paper "TweetyBERT: Automated parsing of birdsong through self-supervised machine learning."
