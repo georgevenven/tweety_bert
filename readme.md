@@ -16,7 +16,7 @@ For questions or collaboration inquiries, please email: georgev [at] Uoregon.edu
 
 The repository is organized as follows:
 
-```
+<pre>
 tweety_bert/
 ├── readme.md                     # This file
 ├── pretrain.py                   # Python script for pretraining TweetyBERT
@@ -96,7 +96,7 @@ tweety_bert/
 │       └── metrics_by_window.png       # Plot for Figure 5F
 └── LLB_Embedding/                # Example directory containing NPZ files for Figure 3 [User must populate]
 └── LLB_Fold_Data/                # Example directory containing NPZ files for Figure 4A,B V-Measure calculation [User must populate]
-```
+</pre>
 
 ## 🚀 Installation & Environment Setup
 
