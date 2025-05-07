@@ -26,7 +26,8 @@ class WavtoSpec:
         step_size=119,
         nfft=1024,
         generate_random_files_number=None,
-        single_threaded=True
+        single_threaded=True,
+        file_list=None
     ):
         """
         Constructor for the WavtoSpec class.
@@ -39,6 +40,7 @@ class WavtoSpec:
             nfft (int): FFT size for the STFT.
             generate_random_files_number (int or None): If set, processes only N random files.
             single_threaded (bool): Whether to run single-threaded (True) or multi-threaded (False).
+            file_list (str or None): Path to a text file containing a list of audio file paths (one per line). If provided, src_dir is ignored.
         """
         self.src_dir = src_dir
         self.dst_dir = dst_dir
@@ -48,6 +50,7 @@ class WavtoSpec:
         self.nfft = nfft
         self.generate_random_files_number = generate_random_files_number
         self.single_threaded = single_threaded
+        self.file_list = file_list
         
         # Initialize the shared counter
         manager = multiprocessing.Manager()
@@ -64,14 +67,20 @@ class WavtoSpec:
 
     def process_directory(self):
         print("Starting process_directory")
-        print(f"Source directory: {self.src_dir}")
 
-        # Gather .wav files
-        audio_files = [
-            os.path.join(root, file)
-            for root, dirs, files in os.walk(self.src_dir)
-            for file in files if file.lower().endswith('.wav')
-        ]
+        if self.file_list:
+            print(f"Reading file list from: {self.file_list}")
+            with open(self.file_list, 'r') as f:
+                # Read full paths directly from the file list
+                audio_files = [line.strip() for line in f if line.strip()]
+            print(f"Found {len(audio_files)} files in the list.")
+        else:
+            print(f"Scanning source directory: {self.src_dir}")
+            audio_files = [
+                os.path.join(root, file)
+                for root, dirs, files in os.walk(self.src_dir)
+                for file in files if file.lower().endswith('.wav')
+            ]
 
         # Handle random file selection if user requested
         if (self.generate_random_files_number is not None 
@@ -87,15 +96,17 @@ class WavtoSpec:
 
         manager = multiprocessing.Manager()
         failed_files = manager.list()  # shared list for failed files
+        total_files = len(audio_files) # Get total number of files for progress reporting
 
-        pbar = tqdm(total=len(audio_files), desc="Processing files")
+        pbar = tqdm(total=total_files, desc="Processing files")
 
         # ------------------------------------
         # SINGLE-THREADED MODE
         # ------------------------------------
         if self.single_threaded:
             print("Running in single-threaded mode.")
-            for file_path in audio_files:
+            for i, file_path in enumerate(audio_files): # Use enumerate for progress count
+                print(f"Processing file {i+1}/{total_files}: {os.path.basename(file_path)}") # Progress print
                 try:
                     print(f"[Single-thread] Processing file: {file_path}")
                     if self.song_detection_json_path is not None:
@@ -111,14 +122,16 @@ class WavtoSpec:
                     logging.error(f"Error processing {file_path}: {e}")
                     self.skipped_files_count.value += 1
                     failed_files.append(file_path)
-
-                pbar.update()
+                # pbar.update()
 
             # Retry failed files (still single-threaded)
-            if failed_files:
-                print(f"Retrying {len(failed_files)} failed files (single-threaded)...")
-                pbar_failed = tqdm(total=len(failed_files), desc="Retrying failed files")
-                for file_path in failed_files:
+            failed_files_list = list(failed_files) # Convert manager list to regular list for retrying
+            num_failed = len(failed_files_list)
+            if num_failed > 0:
+                print(f"Retrying {num_failed} failed files (single-threaded)...")
+                # pbar_failed = tqdm(total=num_failed, desc="Retrying failed files") # Keep internal tqdm for now
+                for i, file_path in enumerate(failed_files_list): # Use enumerate for progress count
+                    print(f"Retrying file {i+1}/{num_failed}: {os.path.basename(file_path)}") # Progress print
                     try:
                         print(f"[Single-thread retry] Processing file: {file_path}")
                         if self.song_detection_json_path is not None:
@@ -131,8 +144,8 @@ class WavtoSpec:
                     except Exception as e:
                         logging.error(f"Error re-processing {file_path}: {e}")
                         self.skipped_files_count.value += 1
-                    pbar_failed.update()
-                pbar_failed.close()
+                    # pbar_failed.update()
+                # pbar_failed.close()
 
         # ------------------------------------
         # MULTI-THREADED MODE
@@ -142,20 +155,22 @@ class WavtoSpec:
             print(f"Running in multi-threaded mode with {max_processes} workers.")
 
             def update_progress_bar(_):
-                pbar.update()
+                # pbar.update() # Keep internal tqdm for now
+                pass
 
             def error_callback(e):
                 logging.error(f"Error: {e}")
                 self.skipped_files_count.value += 1
-                pbar.update()
+                # pbar.update()
 
             def file_failed_callback(file_path):
                 logging.error(f"File failed: {file_path}")
                 failed_files.append(file_path)
-                pbar.update()
+                # pbar.update()
 
             with Pool(processes=max_processes, maxtasksperchild=100) as pool:
-                for file_path in audio_files:
+                for i, file_path in enumerate(audio_files): # Use enumerate for progress count
+                    print(f"Queueing file {i+1}/{total_files}: {os.path.basename(file_path)}") # Progress print
                     # Simple memory check loop
                     while True:
                         available_memory = psutil.virtual_memory().available
@@ -176,22 +191,25 @@ class WavtoSpec:
                 pool.close()
                 pool.join()
 
-            # Retry failed files in multi-threaded mode
-            if failed_files:
-                print(f"Retrying {len(failed_files)} failed files in multi-threaded mode...")
-                pbar_failed = tqdm(total=len(failed_files), desc="Retrying failed files")
+            # Retry failed files (multi-threaded)
+            failed_files_list = list(failed_files) # Convert manager list to regular list for retrying
+            num_failed = len(failed_files_list)
+            if num_failed > 0:
+                print(f"Retrying {num_failed} failed files (multi-threaded)...")
+                # pbar_failed = tqdm(total=num_failed, desc="Retrying failed files") # Keep internal tqdm for now
                 with Pool(processes=max_processes, maxtasksperchild=100) as pool:
-                    for file_path in failed_files:
+                    for i, file_path in enumerate(failed_files_list): # Use enumerate for progress count
+                        print(f"Retrying file {i+1}/{num_failed}: {os.path.basename(file_path)}") # Progress print
                         print(f"[Multi-thread retry] Processing file: {file_path}")
                         pool.apply_async(
                             WavtoSpec.safe_process_file,
                             args=(self, file_path),
-                            callback=lambda _: pbar_failed.update(),
-                            error_callback=error_callback
+                            callback=update_progress_bar, # Use the same update callback
+                            error_callback=error_callback # Use the same error callback
                         )
                     pool.close()
                     pool.join()
-                pbar_failed.close()
+                # pbar_failed.close()
 
         pbar.close()
 
@@ -396,7 +414,7 @@ class WavtoSpec:
 
 def main():
     parser = argparse.ArgumentParser(description="Convert WAV files to spectrograms.")
-    parser.add_argument('--src_dir', type=str, required=True, help='Source directory containing WAV files.')
+    parser.add_argument('--src_dir', type=str, required=False, help='Source directory containing WAV files (used if --file_list is not provided).')
     parser.add_argument('--dst_dir', type=str, required=True, help='Destination directory to save spectrograms.')
     parser.add_argument('--song_detection_json_path', type=str, default=None,
                         help='Path to the JSON file with song detection data.')
@@ -404,14 +422,21 @@ def main():
     parser.add_argument('--nfft', type=int, default=1024, help='FFT size for the spectrogram.')
     parser.add_argument('--generate_random_files_number', type=int, default=None,
                         help='Number of random files to process.')
-    parser.add_argument('--single_threaded', 
+    parser.add_argument('--single_threaded',
                         type=str,
                         default='true',
                         choices=['true', 'false', '1', '0', 'yes', 'no'],
-                        help='Whether to run single-threaded (True) or multi-threaded (False). '
-                             'Default is True. Example usage: --single_threaded false')
+                        help='Whether to run single-threaded (True) or multi-threaded (False). Default is True.')
+    parser.add_argument('--file_list', type=str, default=None,
+                        help='Path to a text file containing a list of audio file paths (one per line). If provided, --src_dir is ignored.')
 
     args = parser.parse_args()
+    
+    # Validate that either src_dir or file_list is provided
+    if not args.src_dir and not args.file_list:
+        parser.error("Either --src_dir or --file_list must be provided.")
+    if args.src_dir and args.file_list:
+        print("Warning: Both --src_dir and --file_list provided. Using --file_list and ignoring --src_dir.")
     
     # Convert the string to boolean after parsing
     single_threaded = args.single_threaded.lower() in ['true', '1', 'yes']
@@ -423,7 +448,8 @@ def main():
         step_size=args.step_size,
         nfft=args.nfft,
         generate_random_files_number=args.generate_random_files_number,
-        single_threaded=single_threaded
+        single_threaded=single_threaded,
+        file_list=args.file_list
     )
     wav_to_spec.process_directory()  
 

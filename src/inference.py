@@ -136,15 +136,38 @@ class TweetyBertInference:
       file_creation_timestamp = get_creation_date(Path(file_path))
       creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
 
-      spec, vocalization, labels = self.wav_to_spec.multiprocess_process_file(file_path, save_npz=False)
-      if spec is None:
-          return {
-              "file_name": os.path.basename(file_path),
-              "creation_date": creation_date_str,
-              "song_present": False,
-              "syllable_onsets_offsets_ms": {},
-              "syllable_onsets_offsets_timebins": {}
-          }
+      # Ensure WavtoSpec instance exists
+      if self.wav_to_spec is None:
+           print(f"Error: WavtoSpec not initialized before processing {os.path.basename(file_path)}. Skipping.")
+           # Return an empty/error structure
+           return {"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": "WavtoSpec not initialized", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+
+      try:
+          spec_data_tuple = self.wav_to_spec.multiprocess_process_file(
+              file_path,
+              song_detection_json_path=self.song_detection_json, # Pass the path here
+              save_npz=False
+          )
+      except Exception as e:
+          print(f"ERROR [{os.path.basename(file_path)}]: Exception during spec generation! Error: {e}")
+          return {"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": f"Spec gen exception: {e}", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+
+      # --- Unpack the spectrogram data ---
+      # Expecting (Sxx_log, results, labels) or (None, None, None)
+      if spec_data_tuple is None or spec_data_tuple[0] is None:
+            print(f"Spectrogram generation failed or skipped for {os.path.basename(file_path)}")
+            return {
+                "file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False,
+                "error": "Spectrogram generation failed or skipped",
+                "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}
+            }
+      # Assign the actual spectrogram array (first element of the tuple)
+      spec = spec_data_tuple[0]
+      # We might not need vocalization_segments_info or labels_from_specgen directly here
+      # vocalization_segments_info = spec_data_tuple[1]
+      # labels_from_specgen = spec_data_tuple[2]
+      # --- End Unpacking ---
+
       if self.song_detection_data is None:
           vocalization_data = tweety_net_detector_inference(input_file=file_path)
           if not vocalization_data or vocalization_data.get('segments') == []:
@@ -168,9 +191,33 @@ class TweetyBertInference:
                   "syllable_onsets_offsets_ms": {},
                   "syllable_onsets_offsets_timebins": {}
               }
-      vocalization_data = vocalization_data['segments'][0]
-      song_spec = spec[:, vocalization_data['onset_timebin']:vocalization_data['offset_timebin']]
+      # --- DEBUG: Check the segment being used and spec_data ---
+      # Use the first segment for now, assuming single segment processing logic
+      segment_to_process = vocalization_data['segments'][0]
+      print(f"DEBUG [{file_name}]: Segment used for slicing: Type={type(segment_to_process)}, Value={segment_to_process}")
+      print(f"DEBUG [{file_name}]: spec (spectrogram array) before slicing: Type={type(spec)}, Shape={spec.shape if isinstance(spec, np.ndarray) else 'N/A'}")
+      # --- END DEBUG ---
+      try:
+          # Slice the unpacked 'spec' array, not the original tuple 'spec_data'
+          song_spec = spec[:, segment_to_process['onset_timebin']:segment_to_process['offset_timebin']]
+      except TypeError as e:
+          print(f"ERROR [{file_name}]: TypeError during slicing! Error: {e}")
+          print(f"  spec type: {type(spec)}") # Print type of spec array
+          print(f"  segment_to_process type: {type(segment_to_process)}")
+          print(f"  segment_to_process value: {segment_to_process}")
+          # Handle error, e.g., return an error dict or skip
+          return {"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "error": f"TypeError slicing: {e}", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+      except IndexError as e:
+           print(f"ERROR [{file_name}]: IndexError during slicing! Error: {e}")
+           print(f"  spec shape: {spec.shape if isinstance(spec, np.ndarray) else 'N/A'}") # Print shape of spec array
+           print(f"  Indices attempted: {segment_to_process.get('onset_timebin', 'N/A')}:{segment_to_process.get('offset_timebin', 'N/A')}")
+           return {"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "error": f"IndexError slicing: {e}", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+
       spectogram, pad_amount = self.inference_data_class(song_spec)
+      # Handle potential None return from inference_data_class
+      if spectogram is None:
+           print(f"Warning: inference_data_class returned None for {file_name}. Skipping inference.")
+           return {"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "error": "Data class preparation failed", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
       spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
       logits = self.classifier_model(spec_tensor.permute(0,1,3,2))
       logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
@@ -182,9 +229,17 @@ class TweetyBertInference:
       else:
           post_processed_labels = predicted_labels
       onsets_offsets_ms, onsets_offsets_timebins = self.convert_to_onset_offset(post_processed_labels)
-      song_present = len(onsets_offsets_ms) > 0
+      song_present = bool(onsets_offsets_ms) # Song is present if any non -1 labels resulted in segments
+
+      # --- Visualize ---
       if self.visualize:
-          self.visualize_spectrogram(spectogram.flatten(0,1)[:-pad_amount].T, post_processed_labels, os.path.basename(file_path))
+          # Ensure spec is a 2D numpy array before passing
+          spec_np = spec if isinstance(spec, np.ndarray) else spec.cpu().numpy()
+          labels_np = post_processed_labels if isinstance(post_processed_labels, np.ndarray) else post_processed_labels.cpu().numpy()
+          if spec_np.ndim == 2: # Only visualize if spec is 2D
+              self.visualize_spectrogram(spec_np, labels_np, os.path.basename(file_path))
+          else:
+              print(f"Warning: Skipping visualization for {os.path.basename(file_path)} due to unexpected spec shape: {spec_np.shape}")
       return {
           "file_name": os.path.basename(file_path),
           "creation_date": creation_date_str,
@@ -284,21 +339,54 @@ class TweetyBertInference:
       return syllable_dict, syllable_dict_no_ms
 
   def visualize_spectrogram(self, spec, predicted_labels, file_name):
-      plt.figure(figsize=(15, 10))
-      plt.subplot(2, 1, 1)
-      plt.imshow(spec, aspect='auto', origin='lower', cmap='viridis')
-      plt.title('Spectrogram', fontsize=24)
-      plt.colorbar(format='%+2.0f dB')
-      plt.subplot(2, 1, 2)
-      im = plt.imshow([predicted_labels], aspect='auto', origin='lower', cmap=self.cmap, vmin=0, vmax=self.num_classes-1)
-      plt.title('Predicted Labels', fontsize=24)
-      cbar = plt.colorbar(im, ticks=range(self.num_classes))
-      cbar.set_label('Syllable Class')
-      cbar.set_ticklabels(['Silence'] + [f'Class {i}' for i in range(1, self.num_classes)])
-      plt.tight_layout()
+      # spec is now guaranteed to be a 2D numpy array [freq, time]
+      # predicted_labels is a 1D numpy array [time]
+
+      if spec.ndim != 2:
+          print(f"ERROR [{file_name}]: Spectrogram passed to visualize is not 2D! Shape: {spec.shape}. Skipping visualization.")
+          return
+
+      plt.figure(figsize=(25, 10)) # Wider figure
+      # Adjust GridSpec: make label plot height 1/8th of spectrogram plot height (approx)
+      gs = plt.GridSpec(2, 1, height_ratios=[8, 1], hspace=0.05) # Changed height ratio
+
+      # Plot Spectrogram
+      ax1 = plt.subplot(gs[0])
+      # Display with freq on y-axis, time on x-axis
+      im = ax1.imshow(spec, aspect='auto', origin='lower', cmap='viridis') # Keep original orientation
+      ax1.set_title(f'Spectrogram - {file_name}', fontsize=16)
+      ax1.set_ylabel('Frequency Bins', fontsize=14) # Slightly larger label
+      ax1.tick_params(axis='y', labelsize=10)
+      ax1.tick_params(axis='x', bottom=False, labelbottom=False) # Hide x-axis ticks and labels for top plot
+      # REMOVED Spectrogram colorbar
+      # cbar_spec = plt.colorbar(im, ax=ax1, format='%+2.0f dB', pad=0.01)
+      # cbar_spec.ax.tick_params(labelsize=10)
+
+      # Plot Predicted Labels
+      ax2 = plt.subplot(gs[1], sharex=ax1) # Share x-axis with spectrogram
+      # Ensure labels are 2D for imshow: shape (1, time)
+      # Adjust vmin/vmax based on actual labels present + background
+      min_label_val = -1 # Assume -1 for background/noise
+      max_label_val = self.num_classes - 1
+      im_labels = ax2.imshow([predicted_labels], aspect='auto', origin='lower', cmap=self.cmap,
+                             vmin=min_label_val, vmax=max_label_val)
+      ax2.set_title('Predicted Syllable Labels', fontsize=16)
+      ax2.set_xlabel('Time Bins', fontsize=14) # Slightly larger label
+      ax2.set_yticks([]) # Hide y-axis ticks
+      ax2.tick_params(axis='x', labelsize=10)
+
+      # Remove the colorbar for the predicted label plot
+      # (No plt.colorbar for im_labels)
+
+      plt.tight_layout(rect=[0, 0, 1, 0.97]) # Adjust layout to prevent title overlap
       output_path = os.path.join(self.spec_dst_folder, f"{os.path.splitext(file_name)[0]}_visualization.png")
-      plt.savefig(output_path, dpi=300, bbox_inches='tight')
-      plt.close()
+
+      try:
+          plt.savefig(output_path, dpi=150, bbox_inches='tight') # Lower DPI if needed
+      except Exception as e:
+          print(f"ERROR [{file_name}]: Failed during visualization/saving! Error: {e}") # Catch plotting/saving errors
+      finally:
+          plt.close() # Ensure plot is closed even if error occurs
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Run TweetyBert Inference")

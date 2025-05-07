@@ -66,7 +66,7 @@ if __name__ == "__main__":
     parser.add_argument("--pos_enc_type", type=str, default="relative")
     parser.add_argument("--pitch_shift", type=bool, default=True)
     parser.add_argument("--learning_rate", type=float, default=3e-4)
-    parser.add_argument("--max_steps", type=float, default=1e5)
+    parser.add_argument("--max_steps", type=float, default=1e3)
     parser.add_argument("--eval_interval", type=int, default=500)
     parser.add_argument("--save_interval", type=int, default=500)
     parser.add_argument("--context", type=int, default=1000)
