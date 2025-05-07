@@ -22,3 +22,5 @@ results
 WhisperSeg/
 archive
 *.svg
+/song_detector
+song_detector
