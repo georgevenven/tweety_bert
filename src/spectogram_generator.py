@@ -96,17 +96,11 @@ class WavtoSpec:
 
         manager = multiprocessing.Manager()
         failed_files = manager.list()  # shared list for failed files
-        total_files = len(audio_files) # Get total number of files for progress reporting
+        total_files = len(audio_files)
 
-        pbar = tqdm(total=total_files, desc="Processing files")
-
-        # ------------------------------------
-        # SINGLE-THREADED MODE
-        # ------------------------------------
         if self.single_threaded:
             print("Running in single-threaded mode.")
-            for i, file_path in enumerate(audio_files): # Use enumerate for progress count
-                print(f"Processing file {i+1}/{total_files}: {os.path.basename(file_path)}") # Progress print
+            for file_path in tqdm(audio_files, desc="Processing files (single-thread)", total=total_files):
                 try:
                     print(f"[Single-thread] Processing file: {file_path}")
                     if self.song_detection_json_path is not None:
@@ -122,15 +116,13 @@ class WavtoSpec:
                     logging.error(f"Error processing {file_path}: {e}")
                     self.skipped_files_count.value += 1
                     failed_files.append(file_path)
-                # pbar.update()
 
             # Retry failed files (still single-threaded)
             failed_files_list = list(failed_files) # Convert manager list to regular list for retrying
             num_failed = len(failed_files_list)
             if num_failed > 0:
                 print(f"Retrying {num_failed} failed files (single-threaded)...")
-                # pbar_failed = tqdm(total=num_failed, desc="Retrying failed files") # Keep internal tqdm for now
-                for i, file_path in enumerate(failed_files_list): # Use enumerate for progress count
+                for file_path in tqdm(failed_files_list, desc="Retrying failed files (single-thread)", total=num_failed):
                     print(f"Retrying file {i+1}/{num_failed}: {os.path.basename(file_path)}") # Progress print
                     try:
                         print(f"[Single-thread retry] Processing file: {file_path}")
@@ -144,74 +136,45 @@ class WavtoSpec:
                     except Exception as e:
                         logging.error(f"Error re-processing {file_path}: {e}")
                         self.skipped_files_count.value += 1
-                    # pbar_failed.update()
-                # pbar_failed.close()
 
-        # ------------------------------------
-        # MULTI-THREADED MODE
-        # ------------------------------------
         else:
             max_processes = multiprocessing.cpu_count()
             print(f"Running in multi-threaded mode with {max_processes} workers.")
 
-            def update_progress_bar(_):
-                # pbar.update() # Keep internal tqdm for now
-                pass
-
             def error_callback(e):
                 logging.error(f"Error: {e}")
                 self.skipped_files_count.value += 1
-                # pbar.update()
 
             def file_failed_callback(file_path):
                 logging.error(f"File failed: {file_path}")
                 failed_files.append(file_path)
-                # pbar.update()
 
             with Pool(processes=max_processes, maxtasksperchild=100) as pool:
-                for i, file_path in enumerate(audio_files): # Use enumerate for progress count
-                    print(f"Queueing file {i+1}/{total_files}: {os.path.basename(file_path)}") # Progress print
-                    # Simple memory check loop
-                    while True:
-                        available_memory = psutil.virtual_memory().available
-                        current_memory_usage = psutil.Process(os.getpid()).memory_info().rss
-                        if available_memory > current_memory_usage:
-                            break
-                        print("Not enough memory to spawn new process, waiting...")
-                        time.sleep(1)
+                # Prepare arguments for mapping
+                process_args = [(self, file_path, i, total_files) for i, file_path in enumerate(audio_files)]
 
-                    print(f"[Multi-thread] Processing file: {file_path}")
-                    pool.apply_async(
-                        WavtoSpec.safe_process_file,
-                        args=(self, file_path),
-                        callback=update_progress_bar,
-                        error_callback=lambda e, fp=file_path: file_failed_callback(fp)
-                    )
+                # Use tqdm with pool.imap_unordered
+                results_iterator = pool.imap_unordered(WavtoSpec.safe_process_file_wrapper, process_args)
 
-                pool.close()
-                pool.join()
+                # Iterate through results with tqdm progress bar
+                for result in tqdm(results_iterator, total=total_files, desc="Processing files (multi-thread)"):
+                    if result is None: # Indicates a failure handled within safe_process_file
+                        # Optionally log or handle failures reported back
+                        pass
 
-            # Retry failed files (multi-threaded)
             failed_files_list = list(failed_files) # Convert manager list to regular list for retrying
             num_failed = len(failed_files_list)
             if num_failed > 0:
                 print(f"Retrying {num_failed} failed files (multi-threaded)...")
-                # pbar_failed = tqdm(total=num_failed, desc="Retrying failed files") # Keep internal tqdm for now
-                with Pool(processes=max_processes, maxtasksperchild=100) as pool:
-                    for i, file_path in enumerate(failed_files_list): # Use enumerate for progress count
-                        print(f"Retrying file {i+1}/{num_failed}: {os.path.basename(file_path)}") # Progress print
-                        print(f"[Multi-thread retry] Processing file: {file_path}")
-                        pool.apply_async(
-                            WavtoSpec.safe_process_file,
-                            args=(self, file_path),
-                            callback=update_progress_bar, # Use the same update callback
-                            error_callback=error_callback # Use the same error callback
-                        )
-                    pool.close()
-                    pool.join()
-                # pbar_failed.close()
+                # Prepare arguments for retry mapping
+                retry_args = [(self, file_path, i, num_failed) for i, file_path in enumerate(failed_files_list)]
 
-        pbar.close()
+                with Pool(processes=max_processes, maxtasksperchild=100) as pool:
+                    retry_iterator = pool.imap_unordered(WavtoSpec.safe_process_file_wrapper, retry_args)
+                    # Iterate through retry results with tqdm
+                    for result in tqdm(retry_iterator, total=num_failed, desc="Retrying failed files (multi-thread)"):
+                         if result is None:
+                             pass # Optionally handle retry failures
 
         total_processed = len(audio_files) - len(failed_files)
         print(f"Total files processed: {total_processed}")
@@ -231,11 +194,21 @@ class WavtoSpec:
         return True
 
     @staticmethod
-    def safe_process_file(instance, file_path):
+    def safe_process_file_wrapper(args):
+        """Wrapper function to unpack arguments for pool.imap_unordered."""
+        instance, file_path, current_file_index, total_files = args
+        return WavtoSpec.safe_process_file(instance, file_path, current_file_index, total_files)
+
+    @staticmethod
+    def safe_process_file(instance, file_path, current_file_index=None, total_files=None):
         """
         Thin wrapper for multiprocess calls. 
         Logs errors instead of letting them bubble up.
         """
+        if current_file_index is not None:
+            instance.current_file_index = current_file_index
+        if total_files is not None:
+            instance.total_files = total_files
         try:
             if instance.song_detection_json_path is not None:
                 if instance.has_vocalization(file_path):
@@ -348,13 +321,8 @@ class WavtoSpec:
                     segment_spec_file_path = os.path.join(
                         self.dst_dir, f"{spec_filename}_segment_{i}.npz"
                     )
-                    np.savez(  # Use uncompressed version
-                        segment_spec_file_path,
-                        s=segment_Sxx_log,
-                        vocalization=segment_vocalization,
-                        labels=segment_labels
-                    )
-                    print(f"Segment {i} spectrogram, vocalization data, and labels saved to {segment_spec_file_path}")
+                    np.savez(segment_spec_file_path, s=segment_Sxx_log, vocalization=segment_vocalization, labels=segment_labels)
+                    # Removed the individual save print to reduce spam
                     
                     # Clear segment data after saving to reduce memory usage
                     del segment_Sxx_log

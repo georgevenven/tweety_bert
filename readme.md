@@ -1,8 +1,6 @@
-[TweetyBERT: Automated parsing of birdsong through self-supervised machine learning (bioRxiv preprint)](https://www.biorxiv.org/content/10.1101/2025.04.09.648029v1)
-
 # TweetyBERT: Automated Parsing of Birdsong Through Self-Supervised Machine Learning
 
-This repository contains the code and instructions to replicate the results and figures presented in the paper "TweetyBERT: Automated parsing of birdsong through self-supervised machine learning."
+This repository contains the code and instructions to replicate the results and figures presented in the paper [TweetyBERT: Automated parsing of birdsong through self-supervised machine learning (bioRxiv preprint)](https://www.biorxiv.org/content/10.1101/2025.04.09.648029v1)
 
 ## 🐦 TweetyBERT Overview
 
@@ -137,8 +135,6 @@ TweetyBERT uses a JSON file to identify segments of bird song within audio recor
 * **`spec_parameters`**: Parameters used for spectrogram generation (e.g., `step_size`, `nfft`).
 * **`syllable_labels` (optional)**: Time intervals for each labeled syllable, keyed by label ID.
 
-Typically, a separate song detection tool (like the one potentially in `src/TweetyNET.py` or `scripts/whisperseg.py`) is used to generate this JSON.
-
 ### Generating the Song Detection JSON (Recommended)
 
 This repository includes a wrapper script `detect_song.py` to simplify the process of generating the required JSON file using the [TweetyNet Song Detector](https://github.com/georgevenven/tweety_net_song_detector).
@@ -149,38 +145,14 @@ This repository includes a wrapper script `detect_song.py` to simplify the proce
 
 **Example:**
 ```bash
-python detect_song.py --wav_dir "/path/to/your/wav/files"
-# Optional: Specify a different output file name/location
-# python detect_song.py --wav_dir "/path/to/your/wav/files" --output_json "files/my_custom_detection.json"
+python detect_song.py --input_dir "/path/to/your/wav/files"
 ```
 
 * The first time you run it, the script will automatically clone the detector repository into a local folder named `song_detector`.
-* It will then process all `.wav` files found in the specified `--wav_dir` (including subdirectories).
+* It will then process all `.wav` files found in the specified `--input_dir` (including subdirectories).
 * The output is a single JSON file (defaulting to `files/song_detection.json`) containing entries for each processed WAV file, indicating detected song segments.
 * **Use the path to this generated JSON file** for the `--song_detection_json_path` argument when running `pretrain.py`, `decoding.py`, or `run_inference.py`.
 
-## 🗄️ NPZ File Format
-
-The `.npz` files used for embeddings and analysis generally contain the following arrays:
-
-| Array Name            | Example Shape        | Data Type   | Description                                                                 |
-| :-------------------- | :------------------- | :---------- | :-------------------------------------------------------------------------- |
-| `embedding_outputs`   | `(N, 2)`             | `float32`   | 2D UMAP embedding coordinates for N timebins.                               |
-| `hdbscan_labels`      | `(N,)`               | `int64`     | Cluster labels assigned by HDBSCAN for each timebin (-1 for noise).         |
-| `ground_truth_labels` | `(N,)`               | `int64`     | Human-annotated syllable labels for each timebin.                           |
-| `predictions`         | `(N, 196)`           | `float32`   | Raw output (neural activations) from a TweetyBERT layer before UMAP.        |
-| `s`                   | `(N, 196)`           | `float32`   | Spectrogram data for the N timebins (frequency bins = 196).                 |
-| `hdbscan_colors`      | `(C_hdbscan, 3)`     | `float64`   | RGB color values for each HDBSCAN cluster.                                  |
-| `ground_truth_colors` | `(C_gt, 3)`          | `float64`   | RGB color values for each ground truth syllable class.                      |
-| `original_spectogram` | `(N, 196)`           | `float32`   | Original full spectrogram corresponding to the N timebins.                  |
-| `vocalization`        | `(N,)`               | `int64`     | Binary array indicating if a timebin contains vocalization (1) or not (0). |
-| `file_indices`        | `(N,)`               | `int64`     | Index mapping each timebin to its original source file in `file_map`.       |
-| `dataset_indices`     | `(N,)`               | `int64`     | Index indicating which dataset or group a timebin belongs to (e.g., for seasonality). |
-| `file_map`            | `()` (scalar object) | `object`    | A dictionary mapping integer file indices to actual file path strings.      |
-
-*N = Total number of timebins in the NPZ file (e.g., 1,001,549 in the example).*
-*C_hdbscan = Number of unique HDBSCAN clusters.*
-*C_gt = Number of unique ground truth syllable classes.*
 
 ## 🏋️ Training the Model (Pretraining)
 
@@ -269,6 +241,30 @@ python run_inference.py \
     --visualize True
 ```
 The output will be a JSON database (`files/<bird_name>_decoded_database.json`) summarizing detected syllables. Visualizations (if enabled) are saved in `imgs/inference_specs_<bird_name>/`.
+
+
+## 🗄️ NPZ File Format
+
+The `.npz` files used for embeddings and analysis generally contain the following arrays:
+
+| Array Name            | Example Shape        | Data Type   | Description                                                                 |
+| :-------------------- | :------------------- | :---------- | :-------------------------------------------------------------------------- |
+| `embedding_outputs`   | `(N, 2)`             | `float32`   | 2D UMAP embedding coordinates for N timebins.                               |
+| `hdbscan_labels`      | `(N,)`               | `int64`     | Cluster labels assigned by HDBSCAN for each timebin (-1 for noise).         |
+| `ground_truth_labels` | `(N,)`               | `int64`     | Human-annotated syllable labels for each timebin.                           |
+| `predictions`         | `(N, 196)`           | `float32`   | Raw output (neural activations) from a TweetyBERT layer before UMAP.        |
+| `s`                   | `(N, 196)`           | `float32`   | Spectrogram data for the N timebins (frequency bins = 196).                 |
+| `hdbscan_colors`      | `(C_hdbscan, 3)`     | `float64`   | RGB color values for each HDBSCAN cluster.                                  |
+| `ground_truth_colors` | `(C_gt, 3)`          | `float64`   | RGB color values for each ground truth syllable class.                      |
+| `original_spectogram` | `(N, 196)`           | `float32`   | Original full spectrogram corresponding to the N timebins.                  |
+| `vocalization`        | `(N,)`               | `int64`     | Binary array indicating if a timebin contains vocalization (1) or not (0). |
+| `file_indices`        | `(N,)`               | `int64`     | Index mapping each timebin to its original source file in `file_map`.       |
+| `dataset_indices`     | `(N,)`               | `int64`     | Index indicating which dataset or group a timebin belongs to (e.g., for seasonality). |
+| `file_map`            | `()` (scalar object) | `object`    | A dictionary mapping integer file indices to actual file path strings.      |
+
+*N = Total number of timebins in the NPZ file (e.g., 1,001,549 in the example).*
+*C_hdbscan = Number of unique HDBSCAN clusters.*
+*C_gt = Number of unique ground truth syllable classes.*
 
 ## 📄 Regenerating Figures from the Paper
 

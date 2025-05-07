@@ -8,11 +8,11 @@ from pathlib import Path
 import multiprocessing # To determine nproc for spectrogram generation
 
 # --- Helper Function to Run Commands ---
-def run_command(command, check=True):
+def run_command(command, check=True, cwd=None):
     """Runs a command using subprocess and optionally checks for errors."""
     print(f"Running command: {' '.join(command)}")
     try:
-        result = subprocess.run(command, check=check, capture_output=True, text=True)
+        result = subprocess.run(command, check=check, text=True, cwd=cwd, stdout=None, stderr=None)
         if result.stdout:
             print("Output:", result.stdout)
         if result.stderr:
