@@ -40,6 +40,7 @@ tweety_bert/
 ├── experiments/                  # Stores model checkpoints and training logs [User must populate or adjust paths]
 ├── imgs/                         # Stores generated images, plots, and visualizations [Output directory]
 └── results/                      # Stores output data from model computations and analysis [Output directory]
+├── detect_song.py                # Python script for running song detection
 ```
 * **Root Directory:** Contains the main workflow scripts (`pretrain.py`, `decoding.py`, `run_inference.py`) and this README.
 * **`figure_generation_scripts/`**: Contains Python scripts specifically designed to reproduce the figures shown in the associated publication. Edit paths within these scripts as needed.
@@ -50,6 +51,7 @@ tweety_bert/
 * **`experiments/`**: Default location where trained model checkpoints (`.pth`), configuration files (`config.json`), and training logs (`training_statistics.json`, `train_files.txt`, `test_files.txt`) are saved.
 * **`imgs/`**: Default output directory for generated images, such as UMAP plots, spectrogram visualizations, and other figures.
 * **`results/`**: Default output directory for non-image results, like performance metrics (`.txt`, `.csv`).
+* **`detect_song.py`**: Python script for running song detection.
 
 ## 🚀 Installation & Environment Setup
 
@@ -130,11 +132,32 @@ TweetyBERT uses a JSON file to identify segments of bird song within audio recor
 ```
 * **`filename`**: Name of the WAV file.
 * **`song_present`**: Boolean indicating if song is detected.
+* **(Important):** Even if `song_present` is true, the file might be skipped later if the `segments` list is empty or contains only very short segments.
 * **`segments`**: List of detected song segments with onset/offset times (in timebins and milliseconds).
 * **`spec_parameters`**: Parameters used for spectrogram generation (e.g., `step_size`, `nfft`).
 * **`syllable_labels` (optional)**: Time intervals for each labeled syllable, keyed by label ID.
 
 Typically, a separate song detection tool (like the one potentially in `src/TweetyNET.py` or `scripts/whisperseg.py`) is used to generate this JSON.
+
+### Generating the Song Detection JSON (Recommended)
+
+This repository includes a wrapper script `detect_song.py` to simplify the process of generating the required JSON file using the [TweetyNet Song Detector](https://github.com/georgevenven/tweety_net_song_detector).
+
+1.  **Prerequisite:** Ensure `git` is installed on your system.
+2.  **Navigate:** Go to the root directory of the `tweety_bert` repository.
+3.  **Run:** Execute the `detect_song.py` script, providing the path to your WAV files.
+
+**Example:**
+```bash
+python detect_song.py --wav_dir "/path/to/your/wav/files"
+# Optional: Specify a different output file name/location
+# python detect_song.py --wav_dir "/path/to/your/wav/files" --output_json "files/my_custom_detection.json"
+```
+
+* The first time you run it, the script will automatically clone the detector repository into a local folder named `song_detector`.
+* It will then process all `.wav` files found in the specified `--wav_dir` (including subdirectories).
+* The output is a single JSON file (defaulting to `files/song_detection.json`) containing entries for each processed WAV file, indicating detected song segments.
+* **Use the path to this generated JSON file** for the `--song_detection_json_path` argument when running `pretrain.py`, `decoding.py`, or `run_inference.py`.
 
 ## 🗄️ NPZ File Format
 
@@ -179,8 +202,8 @@ python pretrain.py \
     --test_percentage 20 \
     --batch_size 42 \
     --learning_rate 3e-4 \
-    --context 250 \
-    --m 100 \
+    --context 1000 \
+    --m 250 \
     --multi_thread # Add this flag to use multi-threading for spec gen
 ```
 
