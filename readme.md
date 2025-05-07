@@ -1,4 +1,3 @@
-```markdown
 # TweetyBERT: Automated Parsing of Birdsong Through Self-Supervised Machine Learning
 
 This repository contains the code and instructions to replicate the results and figures presented in the paper "TweetyBERT: Automated parsing of birdsong through self-supervised machine learning."
@@ -16,74 +15,39 @@ For questions or collaboration inquiries, please email: georgev [at] Uoregon.edu
 
 The repository is organized as follows:
 
+```
 tweety_bert/
 ├── readme.md                     # This file
 ├── pretrain.py                   # Python script for pretraining TweetyBERT
 ├── decoding.py                   # Python script for UMAP generation and decoder training
 ├── run_inference.py              # Python script for running inference
 ├── figure_generation_scripts/    # Scripts for generating paper figures
-│   ├── dim_reduced_birdsong_plots.py # Generates UMAP plots from embeddings
-│   ├── generating_inference_fig2b.py # Script for Figure 2B
-│   ├── inspecting_hdbscan_labels.py  # For visualizing HDBSCAN labels on spectrograms
-│   ├── linear_probe_analysis.ipynb   # Jupyter notebook for linear probe analysis and plots (Fig 6)
-│   ├── masked_prediction_figure_generator.py # Generates visualizations for masked predictions (Fig 2)
-│   ├── paper_loss_plots.py           # Generates training and validation loss plots
-│   ├── spec_image_generator.py       # Generates spectrogram images
-│   ├── umap_comparison_figure_generation.py # For seasonality analysis plots (Fig 7)
-│   ├── umap_eval.py                  # Evaluates UMAP clustering and generates Fig 5D,E,F
-│   ├── UMAP_plots_from_npz.py        # Generates UMAP plots from .npz files (Fig 3B,C, Fig 4A,B)
-│   ├── visualizing_hdb_scan_labels.py # Visualizes HDBSCAN labels (Fig 4C,D,E, Fig 5A,B,C)
-│   └── visualizing_song_cluster_phase.py # Interactive UMAP region selection (Fig 3A)
-├── scripts/                      # Helper scripts and utilities for one-off tasks
-│   ├── convert_yarden_to_phrase_labels.py # Converts Yarden annotations to phrase labels for JSON
-│   ├── fold_v_measure_calculation.py # Calculates V-Measure for UMAP folds (Fig 4A,B)
-│   ├── Layer_Wise_FER.py             # Performs layer-wise Frame Error Rate analysis
-│   ├── layer_wise_v_measure.py       # Calculates V-Measure layer by layer
-│   ├── linear_probe_automated_analysis.py # Automates linear probe analysis (Fig 6 data)
-│   ├── merge_output_label_jsons.py   # Merges multiple JSON label files into one
-│   ├── move_non_zero_files.py        # Moves WAV files that contain audio above a threshold
-│   ├── multiple_dir_to_single_folder.py # Combines files from multiple source directories into one
-│   ├── plot_all_umaps.py             # Generates UMAPs for multiple layers of the model
-│   ├── plot_num_songs_detected.py    # Plots the number of songs detected per bird/day from a JSON
-│   ├── remove_empty_yarden_data.py   # Removes Yarden data files with no labels
-│   ├── segmenting_script.py          # Interactive tool for thresholding and segmenting spectrograms (PyQtGraph)
-│   ├── split_based_on_canary_date.py # Splits files into groups based on date relative to an experiment date
-│   ├── split_files_into_train_and_test.py # Splits files into training and testing sets
-│   ├── tape_archive_extractor.py     # Extracts data from tape archive .raw files to .wav
-│   ├── temp_process_aws_data_formats.ipynb # Jupyter notebook for processing AWS data formats
-│   ├── vast_ai_unzipper.py           # Utility for unzipping files on Vast.ai
-│   └── whisperseg.py                 # Processes WAV files using WhisperSeg for vocalization detection
-├── shell_scripts/                # Shell scripts for automation (Alternative workflow / depriciated)
+├── scripts/                      # Helper scripts and utilities for data processing and analysis
+├── shell_scripts/                # Shell scripts for automation (Alternative workflow / deprecated)
 ├── src/                          # Core model implementation and primary codebase
-│   ├── __init__.py                   # Makes src a Python package
-│   ├── analysis.py                   # Contains functions for UMAP plotting and performance metrics
-│   ├── data_class.py                 # Defines Dataset and Dataloader classes
-│   ├── decoder.py                    # Handles decoder training and saving
-│   ├── experiment_manager.py         # Manages experiment configurations and runs
-│   ├── inference.py                  # Script for running inference with a trained model
-│   ├── linear_probe.py               # Implements linear probe model and trainer
 │   ├── model.py                      # Defines the TweetyBERT model architecture
 │   ├── spectogram_generator.py       # Generates spectrograms from WAV files
-│   ├── trainer.py                    # Handles model training loop and metrics
-│   ├── TweetyBERT.py                 # Main script for running TweetyBERT experiments
-│   ├── TweetyNET.py                  # Implementation of TweetyNET model (likely for song detection)
+│   ├── trainer.py                    # Handles model pretraining loop and metrics
+│   ├── decoder.py                    # Handles decoder training and saving
+│   ├── inference.py                  # Core script for running inference with a trained model
+│   ├── linear_probe.py               # Implements linear probe model and trainer
+│   ├── analysis.py                   # Contains functions for UMAP plotting and performance metrics
+│   ├── data_class.py                 # Defines Dataset and Dataloader classes
 │   └── utils.py                      # Utility functions (e.g., loading models, configs)
-├── files/                        # Stores NPZ files and JSON annotation databases [User must populate or adjust paths in scripts]
-│   ├── LLB3_Untrained.npz            # Example NPZ file for UMAP plots from npz script
-│   ├── category_colors_llb3.pkl      # Example category colors file
-│   └── llb3_predictions_for_fig2b.npz # NPZ file for generating Figure 2b
-├── experiments/                  # Stores model checkpoints and training logs [User must populate or adjust paths in scripts]
-│   └── TweetyBERT_Paper_Yarden_Model/  # Example model directory for linear probe & pretraining
-│       ├── train_files.txt             # List of training files
-│       └── test_files.txt              # List of test files
+├── files/                        # Stores NPZ files and JSON annotation databases [User must populate or adjust paths]
+├── experiments/                  # Stores model checkpoints and training logs [User must populate or adjust paths]
 ├── imgs/                         # Stores generated images, plots, and visualizations [Output directory]
-│   ├── umap_plots/                   # Output directory for UMAP_plots_from_npz.py
-│   ├── verifying_ground_truth_labels/ # Output for visualizing_ground_truth_labels.py
-│   └── seasonality_analysis/         # Output directory for umap_comparison_figure_generation.py
-├── results/                      # Stores output data from model computations and analysis [Output directory]
-│   └── proxy_metrics/                # Stores results from umap_eval.py (Fig 5D,E,F)
-│       ├── all_windows_summary.txt     # Summary of stats for each smoothing window
-│       └── metrics_by_window.png       # Plot for Figure 5F
+└── results/                      # Stores output data from model computations and analysis [Output directory]
+```
+* **Root Directory:** Contains the main workflow scripts (`pretrain.py`, `decoding.py`, `run_inference.py`) and this README.
+* **`figure_generation_scripts/`**: Contains Python scripts specifically designed to reproduce the figures shown in the associated publication. Edit paths within these scripts as needed.
+* **`scripts/`**: A collection of utility Python scripts for various tasks like data conversion, splitting, merging, plotting specific metrics, etc.
+* **`shell_scripts/`**: Contains the original bash scripts for running workflows (now largely superseded by the root Python scripts). Kept for reference or alternative use cases.
+* **`src/`**: Holds the core Python source code for the TweetyBERT model, data handling, training, inference logic, and analysis functions.
+* **`files/`**: Intended location for input data like annotation files (`.json`) and embedding files (`.npz`). You will need to place your data here or modify paths in the scripts.
+* **`experiments/`**: Default location where trained model checkpoints (`.pth`), configuration files (`config.json`), and training logs (`training_statistics.json`, `train_files.txt`, `test_files.txt`) are saved.
+* **`imgs/`**: Default output directory for generated images, such as UMAP plots, spectrogram visualizations, and other figures.
+* **`results/`**: Default output directory for non-image results, like performance metrics (`.txt`, `.csv`).
 
 ## 🚀 Installation & Environment Setup
 
@@ -414,3 +378,4 @@ These are cartoon schematics, and their direct replication from code is not appl
     * The script will generate various plots in `save_dir/bird_{bird_id}/`. The specific PNG files used for the paper are titled `bird_{bird_id}_all_before_vs_all_after_overlap.png`.
 
 ---
+
