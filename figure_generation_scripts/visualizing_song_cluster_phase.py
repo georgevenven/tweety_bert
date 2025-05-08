@@ -24,6 +24,7 @@ import random
 import string
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import argparse  # <-- Add this import at the top
 
 class UMAPSelector:
     def __init__(
@@ -655,11 +656,19 @@ class UMAPSelector:
         plt.close(fig)
 
 if __name__ == "__main__":
-    file_path = "files/LLB16_order_randomized.npz"
+    # --- Add argparse setup ---
+    parser = argparse.ArgumentParser(description="Interactive UMAP region visualization.")
+    parser.add_argument("file_path", type=str, help="Path to the input NPZ file.")
+    parser.add_argument("--max_length", type=int, default=1000, help="Max length for collage.")
+    parser.add_argument("--used_group_coloring", action='store_true', help="Use dataset group coloring (purple/green).")
+    parser.add_argument("--collage_mode", action='store_true', default=True, help="Enable collage mode.")  # Default to True as in original example
+    args = parser.parse_args()
+    # --- End argparse setup ---
+
     selector = UMAPSelector(
-        file_path=file_path, 
-        max_length=1000, 
-        used_group_coloring=False,   
-        collage_mode=True
+        file_path=args.file_path,  # <-- Use args.file_path
+        max_length=args.max_length,
+        used_group_coloring=args.used_group_coloring,
+        collage_mode=args.collage_mode
     )
     selector.plot_umap_with_selection()

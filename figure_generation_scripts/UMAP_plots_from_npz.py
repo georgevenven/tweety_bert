@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 # Get the directory of the current script and the project root
 figure_generation_dir = os.path.dirname(__file__)
@@ -26,8 +27,8 @@ from data_class import SongDataSet_Image, CollateFunction
 
 # ------------------ CONFIGURABLE PATHS ------------------ #
 # Either a .npz file (interactive cropping) or folder
-input_path = "files/LLB3_Untrained.npz"
-output_dir = "imgs/umap_plots"
+# input_path = "files/LLB3_Untrained.npz"
+# output_dir = "imgs/umap_plots"
 # -------------------------------------------------------- #
 
 def interactive_crop(embeddings, colors):
@@ -226,25 +227,26 @@ def process_file(file_path, output_directory=None, bounding_box=None):
 
 
 if __name__ == "__main__":
+    # --- Add argparse setup ---
+    parser = argparse.ArgumentParser(description="Generate UMAP plots from NPZ files.")
+    parser.add_argument("input_path", type=str, help="Path to the input NPZ file or folder.")
+    parser.add_argument("output_dir", type=str, help="Directory to save the output plots.")
+    args = parser.parse_args()
+    # --- End argparse setup ---
 
-    if os.path.isdir(input_path):
-        # If input_path is a folder, process each .npz with NO cropping
-        npz_files = glob(os.path.join(input_path, "*.npz"))
-        out_dir = os.path.join(output_dir, "umap_folds")
+    if os.path.isdir(args.input_path):
+        npz_files = glob(os.path.join(args.input_path, "*.npz"))
+        out_dir = os.path.join(args.output_dir, "umap_folds")
         for fpath in npz_files:
             process_file(fpath, output_directory=out_dir, bounding_box=None)
     else:
-        # If input_path is a single .npz file, do an interactive crop
-        if not input_path.endswith(".npz"):
-            print(f"Error: Must provide a .npz file or a folder, got: {input_path}")
+        if not args.input_path.endswith(".npz"):
+            print(f"Error: Must provide a .npz file or a folder, got: {args.input_path}")
             sys.exit(1)
 
-        # Load data to show for user cropping
-        npz_data = np.load(input_path, allow_pickle=True)
+        npz_data = np.load(args.input_path, allow_pickle=True)
         embeddings = npz_data["embedding_outputs"]
         ground_truth = npz_data["ground_truth_labels"] + 1
-
-        # We only need some colors for the preview
         ground_truth_colors = list(npz_data["ground_truth_colors"])
         ground_truth_colors[1] = [0, 0, 0]
         label_indices = ground_truth.astype(int)
@@ -254,17 +256,15 @@ if __name__ == "__main__":
         ]
         preview_colors = [ground_truth_colors[lbl] for lbl in label_indices]
 
-        # Start interactive cropping
         print("Opening interactive window for bounding box selection...")
         x_min, x_max, y_min, y_max = interactive_crop(embeddings, preview_colors)
         bounding_box = (x_min, x_max, y_min, y_max)
         print(f"Selected bounding box = {bounding_box}")
 
-        # Now generate all final plots
-        file_name = os.path.splitext(os.path.basename(input_path))[0]
-        out_dir = os.path.join(output_dir, file_name)
+        file_name = os.path.splitext(os.path.basename(args.input_path))[0]
+        out_dir = os.path.join(args.output_dir, file_name)
         process_file(
-            input_path,
+            args.input_path,
             output_directory=out_dir,
             bounding_box=bounding_box,
         )

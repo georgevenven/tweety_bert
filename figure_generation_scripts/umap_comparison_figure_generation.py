@@ -9,6 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import warnings
 warnings.filterwarnings('ignore')
 from datetime import datetime
+import argparse  # Add argparse import
 
 def load_embedding_data(npz_file_path):
     """Load embedding data and metadata from NPZ file."""
@@ -880,7 +881,12 @@ def plot_similarity_summary(results_df, save_dir):
     plt.close()
 
 if __name__ == "__main__":
-    # test on two birds
-    npz_files = ["/media/george-vengrovski/Desk SSD/TweetyBERT/seasonality_npz_files/5494_Seasonality_Final.npz", "/media/george-vengrovski/Desk SSD/TweetyBERT/seasonality_npz_files/5508_Seasonality_Final.npz"]
-    save_dir = "imgs/seasonality_analysis"
-    results_df = analyze_multiple_birds(npz_files, save_dir)
+    # --- Add argparse setup ---
+    parser = argparse.ArgumentParser(description="Analyze seasonality UMAP embeddings from NPZ files.")
+    parser.add_argument("save_dir", type=str, help="Directory to save the output plots and results.")
+    parser.add_argument("npz_files", nargs='+', help="Paths to one or more seasonality embedding NPZ files.")
+    args = parser.parse_args()
+    # --- End argparse setup ---
+
+    # Use arguments from parser
+    results_df = analyze_multiple_birds(args.npz_files, args.save_dir)

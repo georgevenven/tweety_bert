@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import shutil
+import argparse
 
 # Add the src directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
@@ -16,9 +17,9 @@ from data_class import SongDataSet_Image, CollateFunction
 from utils import load_model, get_device
 
 # Configuration - modify these paths as needed
-MODEL_DIR = "experiments/TweetyBERT_Paper_Yarden_Model"  # Directory containing the model checkpoint
-DATA_DIR = "/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_specs"  # Directory containing spectrogram files
-OUTPUT_DIR = "imgs/masked_predictions_for_figure_2"  # Output directory for visualizations
+# MODEL_DIR = "experiments/TweetyBERT_Paper_Yarden_Model"  # Directory containing the model checkpoint
+# DATA_DIR = "/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_specs"  # Directory containing spectrogram files
+# OUTPUT_DIR = "imgs/masked_predictions_for_figure_2"  # Output directory for visualizations
 CONTEXT_LENGTH = 1000  # Context length for the model
 NUM_SAMPLES = 100  # Number of samples to process
 MASK_PERCENTAGE = 0.25  # 25% masking as mentioned
@@ -83,15 +84,7 @@ class MaskedPredictionVisualizer:
                 self.save_full_spectrogram(spectrogram, file_name[0], i)
                 
                 # Process segments if the spectrogram is longer than context_length
-                if spectrogram.shape[0] > self.context_length:umba.jit' decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.
-  @numba.jit()
-Traceback (most recent call last):
-  File "/home/george-vengrovski/Documents/projects/tweety_bert_paper/figure_generation_scripts/visualizing_hdb_scan_labels.py", line 10, in <module>
-    from src.analysis import ComputerClusterPerformance
-  File "/home/george-vengrovski/Documents/projects/tweety_bert_paper/src/analysis.py", line 8, in <module>
-    from data_class import SongDataSet_Image, CollateFunction
-ModuleNotFoundError: No module named 'data_class'
-(base) george-vengrovski@gardner-lambda:~/Documents/projects/tweety_bert_paper$ 
+                if spectrogram.shape[0] > self.context_length:
                     # Choose a random segment
                     start_idx = torch.randint(0, spectrogram.shape[0] - self.context_length, (1,)).item()
                     segment = spectrogram[start_idx:start_idx + self.context_length]
@@ -191,15 +184,28 @@ ModuleNotFoundError: No module named 'data_class'
         plt.close()
 
 def main():
+    # --- Add argparse setup ---
+    parser = argparse.ArgumentParser(description="Generate masked prediction visualizations for TweetyBERT.")
+    parser.add_argument("--model-dir", type=str, default="experiments/TweetyBERT_Paper_Yarden_Model",
+                        help="Directory containing the trained TweetyBERT model checkpoint.")
+    parser.add_argument("--data-dir", type=str, default="/media/george-vengrovski/disk2/canary/yarden_data/llb3_data/llb3_specs",
+                        help="Directory containing spectrogram NPZ files for visualization.")
+    parser.add_argument("--output-dir", type=str, default="imgs/masked_predictions_for_figure_2",
+                        help="Directory where visualization images will be saved.")
+    parser.add_argument("--num-samples", type=int, default=NUM_SAMPLES,
+                        help="Number of random samples to visualize.")
+    # Could add context_length and mask_percentage as args too if desired
+    args = parser.parse_args()
+    # --- End argparse setup ---
+
     visualizer = MaskedPredictionVisualizer(
-        model_dir=MODEL_DIR,
-        data_dir=DATA_DIR,
-        output_dir=OUTPUT_DIR,
-        context_length=CONTEXT_LENGTH,
-        num_samples=NUM_SAMPLES,
-        mask_percentage=MASK_PERCENTAGE
+        model_dir=args.model_dir,       # <-- Use arg
+        data_dir=args.data_dir,         # <-- Use arg
+        output_dir=args.output_dir,     # <-- Use arg
+        context_length=CONTEXT_LENGTH,  # <-- Keep constant or make arg
+        num_samples=args.num_samples,   # <-- Use arg
+        mask_percentage=MASK_PERCENTAGE # <-- Keep constant or make arg
     )
-    
     visualizer.generate_visualizations()
 
 if __name__ == "__main__":

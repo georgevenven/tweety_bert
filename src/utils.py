@@ -15,7 +15,7 @@ def load_weights(dir, model):
     FileNotFoundError: If the weights file is not found.
     """
     try:
-        model.load_state_dict(torch.load(dir))
+        model.load_state_dict(torch.load(dir, map_location=model.device))
     except FileNotFoundError:
         raise FileNotFoundError(f"Weight file not found at {dir}")
 
@@ -54,13 +54,14 @@ def load_config(config_path):
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
-def load_model(experiment_folder, random_init=False):
+def load_model(experiment_folder, random_init=False, device='cpu'):
     """
     Initialize and load the model with the given configuration and weights from the experiment folder.
 
     Args:
     experiment_folder (str): The path to the experiment folder containing the config and weights.
     random_init (bool): If True, use random initialization instead of loading weights.
+    device (str or torch.device): Device to load the model on. Default is 'cpu'.
 
     Returns:
     torch.nn.Module: The initialized model.
@@ -84,7 +85,8 @@ def load_model(experiment_folder, random_init=False):
         p=config['p'],
         alpha=config['alpha'],
         pos_enc_type=config['pos_enc_type'],
-        length=config['context']
+        length=config['context'],
+        device=device
     )
 
     # Skip loading weights if random_init is True

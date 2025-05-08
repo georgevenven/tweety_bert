@@ -159,7 +159,7 @@ class PositionalEncoding(torch.nn.Module):
         return x + self.pe[:, :x.size(1), :]
 
 class TweetyBERT(nn.Module):
-    def __init__(self, d_transformer, nhead_transformer, num_freq_bins, num_labels, dropout=0.1, transformer_layers=3, dim_feedforward=128, m = 33, p = 0.01, alpha = 1, length = 500, pos_enc_type="relative"):
+    def __init__(self, d_transformer, nhead_transformer, num_freq_bins, num_labels, dropout=0.1, transformer_layers=3, dim_feedforward=128, m = 33, p = 0.01, alpha = 1, length = 500, pos_enc_type="relative", device=None):
         super(TweetyBERT, self).__init__()
         self.num_labels = num_labels
         self.dropout = dropout
@@ -188,8 +188,11 @@ class TweetyBERT(nn.Module):
         self.transformer_encoder = nn.ModuleList([CustomEncoderBlock(d_model=d_transformer, num_heads=nhead_transformer, ffn_dim=dim_feedforward, dropout=dropout, pos_enc_type=pos_enc_type, length=length) for _ in range(transformer_layers)])        
         self.transformerDeProjection = nn.Linear(d_transformer, num_freq_bins)
 
-        # Replace the hardcoded CUDA device with automatic detection
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Device selection logic
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = torch.device(device)
         self.to(self.device)
 
     def get_layer_output_pairs(self):

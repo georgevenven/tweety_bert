@@ -13,6 +13,7 @@ import numpy as np
 from utils import load_model
 from pathlib import Path
 from datetime import datetime
+from post_processing import majority_vote
 
 def get_creation_date(path):
     stat = path.stat()
@@ -45,9 +46,10 @@ def tweety_net_detector_inference(input_file, return_json=True, mode="local_file
        return None
 
 class TweetyBertInference:
-  def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False, dump_interval=500, apply_post_processing=True):
+  def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False, dump_interval=500, apply_post_processing=True, window_size=50):
       print(output_path)
-      self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+      # Force CPU usage
+      self.device = torch.device("cpu")
       self.classifier = self.load_decoder_state(classifier_path)
       self.wav_to_spec = None
       self.spec_dst_folder = spec_dst_folder
@@ -55,6 +57,7 @@ class TweetyBertInference:
       self.visualize = visualize
       self.dump_interval = dump_interval
       self.apply_post_processing = apply_post_processing
+      self.window_size = window_size
       self.song_detection_json = song_detection_json
       if song_detection_json is not None:
           with open(song_detection_json, 'r') as f:
@@ -80,9 +83,9 @@ class TweetyBertInference:
       with open(tweety_bert_json, "r") as f:
           config = json.load(f)
       self.context_length = config["context"]
-      tweety_bert_model = load_model(self.model_dir)
+      tweety_bert_model = load_model(self.model_dir, device='cpu')
       self.create_classifier(tweety_bert_model)
-      model = self.classifier_model.load_state_dict(torch.load(os.path.join(save_dir, "decoder_weights.pth")))
+      model = self.classifier_model.load_state_dict(torch.load(os.path.join(save_dir, "decoder_weights.pth"), map_location=self.device))
       print(f"Decoder state loaded from {save_dir}")
       return model
 
@@ -104,27 +107,7 @@ class TweetyBertInference:
       self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, song_detection_json_path=self.song_detection_json)
 
   def smooth_labels(self, labels, window_size=50):
-      labels = np.array(labels)
-      for i in range(len(labels)):
-          if labels[i] == -1:
-              left = right = i
-              while left >= 0 or right < len(labels):
-                  if left >= 0 and labels[left] != -1:
-                      labels[i] = labels[left]
-                      break
-                  if right < len(labels) and labels[right] != -1:
-                      labels[i] = labels[right]
-                      break
-                  left -= 1
-                  right += 1
-      smoothed_labels = np.zeros_like(labels)
-      for i in range(len(labels)):
-          start = max(0, i - window_size // 2)
-          end = min(len(labels), i + window_size // 2 + 1)
-          window = labels[start:end]
-          unique, counts = np.unique(window, return_counts=True)
-          smoothed_labels[i] = unique[np.argmax(counts)]
-      return smoothed_labels
+      return majority_vote(labels, window_size=window_size)
 
   def process_file(self, file_path):
       # Print detection method being used
@@ -223,7 +206,7 @@ class TweetyBertInference:
       logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
       predicted_labels = torch.argmax(logits, dim=1).detach().cpu().numpy()
       if self.apply_post_processing:
-          post_processed_labels = self.smooth_labels(predicted_labels, window_size=50)
+          post_processed_labels = self.smooth_labels(predicted_labels, window_size=self.window_size)
           post_processed_labels[-pad_amount:] = -1
           post_processed_labels = post_processed_labels[:-pad_amount]
       else:
@@ -393,9 +376,9 @@ if __name__ == "__main__":
   parser.add_argument('--bird_name', type=str, required=True, help='Name of the bird')
   parser.add_argument('--wav_dir', type=str, required=True, help='Path to the input wav file')
   parser.add_argument('--song_detection_json', type=str, default=None, help='Path to the song detection JSON file')
-  parser.add_argument('--visualize', type=bool, default=False, help='Enable visualization')
-  parser.add_argument('--apply_post_processing', type=bool, default=False, help='Apply post-processing')
-  parser.add_argument('--window_size', type=int, default=50, help='Window size for label smoothing')
+  parser.add_argument('--visualize', type=lambda x: (str(x).lower() == 'true'), default=False, help='Enable visualization')
+  parser.add_argument('--apply_post_processing', type=lambda x: (str(x).lower() == 'true'), default=False, help='Apply post-processing')
+  parser.add_argument('--window_size', type=int, default=50, help='Window size for label smoothing if post-processing is enabled.')
   args = parser.parse_args()
   classifier_path = f"experiments/{args.bird_name}_linear_decoder"
   inference_spec_dst_folder = f"imgs/decoder_specs_inference_test"
@@ -406,7 +389,8 @@ if __name__ == "__main__":
       output_path,
       song_detection_json=args.song_detection_json,
       visualize=args.visualize,
-      apply_post_processing=args.apply_post_processing
+      apply_post_processing=args.apply_post_processing,
+      window_size=args.window_size
   )
   inference.setup_wav_to_spec(args.wav_dir)
   results = inference.process_folder(args.wav_dir)

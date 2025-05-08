@@ -9,6 +9,7 @@ import os
 import re
 from sklearn.metrics import v_measure_score
 import sys
+import argparse  # Add argparse import
 # Add both parent and src directories to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
@@ -926,8 +927,18 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
 #                               MAIN SCRIPT
 ##############################################################################
 if __name__ == "__main__":
-    folder_path = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"
-    output_dir  = "results/proxy_metrics"
+    # --- Add argparse setup ---
+    parser = argparse.ArgumentParser(description="Evaluate UMAP folds and smoothing windows.")
+    parser.add_argument("folder_path", type=str, help="Directory containing UMAP fold NPZ files.")
+    parser.add_argument("output_dir", type=str, help="Directory to save the output plots and summary files.")
+    parser.add_argument("--labels_path", type=str, default=None,
+                        help="Optional path to the specific NPZ file containing labels if different from fold data (used by ComputerClusterPerformance). Defaults to using labels within each fold file.")
+    args = parser.parse_args()
+    # --- End argparse setup ---
+
+    folder_path = args.folder_path
+    output_dir = args.output_dir
+    labels_path_arg = args.labels_path
     os.makedirs(output_dir, exist_ok=True)
     
     # Create subdirectories for different window sizes
@@ -949,7 +960,10 @@ if __name__ == "__main__":
     all_npz_files = find_files_in_folder(folder_path)
     
     # 2) Compute global maxima for phrase entropy/length (to scale scatter plots)
-    max_entropy, max_length = calculate_max_values_for_folder(all_npz_files, labels_path=folder_path)
+    max_entropy, max_length = calculate_max_values_for_folder(
+        all_npz_files,
+        labels_path=labels_path_arg if labels_path_arg else folder_path
+    )
     
     all_results = []
     v_measure_results = []
@@ -972,7 +986,7 @@ if __name__ == "__main__":
          birds, folds, counts,
          overall_fer_mapped, overall_fer_any, bird_phrase_fer,
          pred_label_freq) = process_all_folds(
-             all_npz_files, wsize, labels_path=folder_path,
+             all_npz_files, wsize, labels_path=labels_path_arg,
              output_dir=current_window_dir,
              do_step_plots=do_plots
         )
@@ -986,7 +1000,9 @@ if __name__ == "__main__":
         # For demonstration, let's do a v_measure with just the first file
         if len(all_npz_files) > 0:
             data = np.load(all_npz_files[0])
-            comp_cluster = ComputerClusterPerformance(labels_path=folder_path)
+            comp_cluster = ComputerClusterPerformance(
+                labels_path=[all_npz_files[0]] if labels_path_arg is None else [labels_path_arg]
+            )
             gtp = comp_cluster.syllable_to_phrase_labels(data['ground_truth_labels'], silence=0)
             # fill & smooth
             pf   = comp_cluster.fill_noise_with_nearest_label(data['hdbscan_labels'])
@@ -1014,7 +1030,7 @@ if __name__ == "__main__":
      overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
      best_window_pred_label_freq) = \
          process_all_folds(
-             all_npz_files, best_wsize, labels_path=folder_path,
+             all_npz_files, best_wsize, labels_path=labels_path_arg,
              output_dir=best_window_corr_dir,
              do_step_plots=True
          )
@@ -1082,7 +1098,7 @@ if __name__ == "__main__":
      overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
      best_window_pred_label_freq) = \
          process_all_folds(
-             all_npz_files, best_wsize, labels_path=folder_path,
+             all_npz_files, best_wsize, labels_path=labels_path_arg,
              output_dir=best_window_corr_dir,
              do_step_plots=True
          )

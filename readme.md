@@ -280,15 +280,17 @@ The following instructions outline how to regenerate the figures presented in th
 
 **Figures 1 & 2:**
 These are cartoon schematics, and their direct replication from code is not applicable. Figure 2's masked prediction visualizations can be conceptually generated using `figure_generation_scripts/masked_prediction_figure_generator.py`.
-    - **To generate similar masked prediction examples:**
-      1. Edit `figure_generation_scripts/masked_prediction_figure_generator.py`:
-         - Set `MODEL_DIR` to your trained model directory (e.g., `"experiments/TweetyBERT_Paper_Yarden_Model"`).
-         - Set `DATA_DIR` to the directory containing spectrogram NPZ files for visualization (e.g., `"[Path_to_your_data_here]/llb3_specs"`).
-         - Set `OUTPUT_DIR` to where visualizations will be saved (e.g., `"imgs/masked_predictions_for_figure_2"`).
-      2. Run the script from the `tweety_bert` root directory:
+- **To generate similar masked prediction examples:**
+      1. Run the `masked_prediction_figure_generator.py` script from the `tweety_bert` root directory. Provide the paths to your trained model directory, the directory containing spectrogram NPZ files for visualization, and the desired output directory using command-line arguments.
          ```bash
-         python figure_generation_scripts/masked_prediction_figure_generator.py
+         python figure_generation_scripts/masked_prediction_figure_generator.py \
+             --model-dir experiments/TweetyBERT_Paper_Yarden_Model \
+             --data-dir [Path_to_your_data_here]/llb3_specs \
+             --output-dir imgs/masked_predictions_for_figure_2 \
+             --num-samples 10 # Optional: specify number of samples
          ```
+      2. The script will generate visualization images in the specified output directory.
+This completes the refactoring for all figure generation scripts mentioned in the README to use command-line arguments.
 
 ---
 
@@ -296,73 +298,91 @@ These are cartoon schematics, and their direct replication from code is not appl
 
 * **Data:** Prepare NPZ files containing TweetyBERT embeddings and raw spectrogram embeddings, along with ground truth labels. Assume you place them in `files/LLB_Embedding_Paper/`.
 * **Figure 3B & 3C (UMAP plots):**
-    1.  Edit `figure_generation_scripts/UMAP_plots_from_npz.py`:
-        * Set `input_path` to the path of an NPZ file (e.g., `"files/LLB_Embedding_Paper/Your_Bird_Embeddings.npz"`).
-        * Set `output_dir` (e.g., `"imgs/umap_plots_fig3"`).
-    2.  Run from the `tweety_bert` root directory:
+    1. Run from the `tweety_bert` root directory, providing the input NPZ file and output directory as arguments:
         ```bash
-        python figure_generation_scripts/UMAP_plots_from_npz.py
+        python figure_generation_scripts/UMAP_plots_from_npz.py \
+            files/LLB_Embedding_Paper/Your_Bird_Embeddings.npz \
+            imgs/umap_plots_fig3
         ```
+       *(This script may open an interactive window for cropping if processing a single file.)*
 * **Figure 3A (Interactive UMAP region visualization):**
-    1.  Edit `figure_generation_scripts/visualizing_song_cluster_phase.py`:
-        * Set `file_path` to the path of an NPZ file (e.g., `"files/LLB_Embedding_Paper/Your_Bird_Embeddings.npz"`).
-    2.  Run from the `tweety_bert` root directory:
+    1. Run from the `tweety_bert` root directory, providing the input NPZ file as an argument:
         ```bash
-        python figure_generation_scripts/visualizing_song_cluster_phase.py
+        python figure_generation_scripts/visualizing_song_cluster_phase.py \
+            files/LLB_Embedding_Paper/Your_Bird_Embeddings.npz
         ```
-        This script is interactive and requires a GUI; use the Lasso tool to select a UMAP region. Saved images appear in `imgs/selected_regions/`.
+       This script requires a GUI; use the Lasso tool in the interactive plot to select a UMAP region. Saved images appear in `imgs/selected_regions/`.
+       *(Optional arguments like `--collage_mode`, `--max_length`, `--used_group_coloring` can be added.)*
 
 ---
 
 **Figure 4: Machine-derived vs. Human-derived Clusters**
 
-* **Data:** Prepare NPZ files from UMAP folds (e.g., in `files/LLB_Fold_Data_Paper/`). Each file should contain embeddings and labels for a data fold.
+* **Data:** Prepare NPZ files from UMAP folds (e.g., in `files/LLB_Fold_Data_Paper/`). Each file should contain embeddings and labels for a data fold[cite: 111].
 * **Figure 4A & 4B (V-Measure Calculation and UMAP Plots):**
     1.  **Calculate V-Measure scores:**
-        * Edit `scripts/fold_v_measure_calculation.py`:
-            * Set `npz_directory` to your folder of UMAP fold data (e.g., `"files/LLB_Fold_Data_Paper/"`).
-        * Run from the `tweety_bert` root directory:
+        * Run from the `tweety_bert` root directory, providing the path to your fold data:
             ```bash
-            python scripts/fold_v_measure_calculation.py
+            python scripts/fold_v_measure_calculation.py files/LLB_Fold_Data_Paper/
             ```
-            This will print V-measure scores for each fold.
+            This will print V-measure scores for each fold[cite: 113].
     2.  **Generate UMAP plots** (will plot both syllable and phrase labels for comparison):
-        * Edit `figure_generation_scripts/UMAP_plots_from_npz.py`:
-            * Set `input_path` to one of the NPZ files from your fold data (e.g., `"files/LLB_Fold_Data_Paper/fold1.npz"`).
-            * Set `output_dir` (e.g., `"imgs/umap_plots_fig4"`).
-        * Run from the `tweety_bert` root directory:
+        * Run from the `tweety_bert` root directory, providing the input NPZ file and output directory:
             ```bash
-            python figure_generation_scripts/UMAP_plots_from_npz.py
+            python figure_generation_scripts/UMAP_plots_from_npz.py \
+                files/LLB_Fold_Data_Paper/fold1.npz \
+                imgs/umap_plots_fig4
             ```
+           *(This script may open an interactive window for cropping if processing a single file)*[cite: 114, 115].
 * **Figure 4C, 4D, 4E (Spectrograms with HDBSCAN and Ground Truth Labels):**
-    1.  Edit `figure_generation_scripts/visualizing_hdb_scan_labels.py`:
-        * Set `file_path` to an NPZ file from your UMAP fold data (e.g., `"files/LLB_Fold_Data_Paper/fold1.npz"`).
-        * Adjust `segment_length` and `start_idx` or rely on the random selection. The script saves to `output_dir = "imgs/all_spec_plus_labels"`.
-    2.  Run from the `tweety_bert` root directory:
+    1. Run from the `tweety_bert` root directory, providing the path to an NPZ file from your fold data:
         ```bash
-        python figure_generation_scripts/visualizing_hdb_scan_labels.py
+        # Example: Generate 10 random segments of default length (1000)
+        python figure_generation_scripts/visualizing_hdb_scan_labels.py \
+            files/LLB_Fold_Data_Paper/fold1.npz \
+            --output_dir imgs/all_spec_plus_labels_fig4
+
+        # Example: Generate a specific segment
+        # python figure_generation_scripts/visualizing_hdb_scan_labels.py \
+        #     files/LLB_Fold_Data_Paper/fold1.npz \
+        #     --output_dir imgs/all_spec_plus_labels_fig4 \
+        #     --segment_length 1500 \
+        #     --start_idx 5000
         ```
-        This script generates many spectrogram fragments. You will need to manually select one that clearly shows interesting phrases and mostly aligned labels, similar to the paper's figure.
+       This script generates spectrogram fragments (defaulting to 10 random ones if `--start_idx` is not provided)[cite: 117]. You will need to manually select one that clearly shows interesting phrases and mostly aligned labels, similar to the paper's figure[cite: 118]. Output images are saved in the specified `--output_dir`[cite: 116].
 
 ---
 
 **Figure 5: Comparing Human and Automated Labels for Sequence Analysis**
 
 * **Figure 5A, 5B, 5C (Spectrogram with Spurious Insertions):**
-    Generated similarly to Figure 4C,D,E using `figure_generation_scripts/visualizing_hdb_scan_labels.py`. You'll need to manually find/select a sample NPZ file and segment that exhibits significant spurious insertions.
+    Generated similarly to Figure 4C,D,E using `figure_generation_scripts/visualizing_hdb_scan_labels.py`. You'll need to manually find/select a sample NPZ file and segment that exhibits significant spurious insertions by running the script with appropriate arguments.
+    Example:
+    ```bash
+    # Find a file and start index (e.g., 12345) that shows spurious insertions
+    python figure_generation_scripts/visualizing_hdb_scan_labels.py \
+        files/LLB_Fold_Data_Paper/fold_showing_insertions.npz \
+        --output_dir imgs/spurious_insertion_examples \
+        --start_idx 12345
+    ```
 * **Figure 5D, 5E, 5F (UMAP Evaluation and Smoothing Window Analysis):**
-    1.  Edit `figure_generation_scripts/umap_eval.py`:
-        * Set `folder_path` to your directory containing UMAP fold data (e.g., `"[Path_to_your_data_here]/LLB_Fold_Data"`).
-        * Set `labels_path` argument in `ComputerClusterPerformance` calls if it differs from `folder_path`.
-        * Set `output_dir` (e.g., `"results/proxy_metrics_fig5"`).
-    2.  Run from the `tweety_bert` root directory:
+    1.  Run from the `tweety_bert` root directory, providing the path to the UMAP fold data directory and the desired output directory:
         ```bash
-        python figure_generation_scripts/umap_eval.py
+        python figure_generation_scripts/umap_eval.py \
+            [Path_to_your_data_here]/LLB_Fold_Data \
+            results/proxy_metrics_fig5
         ```
-    * This script will generate:
+        * *(Optional)*: If your ground truth labels are stored in a separate NPZ file (e.g., not within each fold file), you can specify it using `--labels_path`:
+            ```bash
+            # python figure_generation_scripts/umap_eval.py \
+            #    [Path_to_your_data_here]/LLB_Fold_Data \
+            #    results/proxy_metrics_fig5 \
+            #    --labels_path [Path_to_your_data_here]/combined_labels.npz
+            ```
+    2.  This script will generate:
         * `all_windows_summary.txt` in the `output_dir`, containing statistics for each smoothing window and identifying the optimal one.
         * `metrics_by_window.png` (used for Fig 5F) in the `output_dir`.
-        * Plots for Fig 5D and 5E (normalized confusion matrices) will be in the `output_dir/best_window/` subdirectory (e.g., `0X_M_norm_diag.png` and `0X_M_norm_fullreorder.png`).
+        * Plots for Fig 5D and 5E (normalized confusion matrices) will be in the `output_dir/best_window/` subdirectory (e.g., `06_M_norm_fullreorder.png` and `04_M_norm_diag.png` - *note: the exact filenames might vary slightly based on internal plotting choices*).
 
 ---
 
@@ -387,16 +407,16 @@ These are cartoon schematics, and their direct replication from code is not appl
 
 **Figure 7: Seasonal Vocal Plasticity in Canaries**
 
-* **Data:** You need NPZ files containing embeddings for different birds across breeding and non-breeding seasons. Place your equivalent files (e.g., `5494_Seasonality_Final.npz`, `5508_Seasonality_Final.npz`) in a directory like `files/seasonality_embeddings/`.
+* **Data:** You need NPZ files containing embeddings for different birds across breeding and non-breeding seasons (e.g., `5494_Seasonality_Final.npz`, `5508_Seasonality_Final.npz`). Place these files in a suitable location, for example, `files/seasonality_embeddings/`.
 * **Plot Generation:**
-    1.  Edit `figure_generation_scripts/umap_comparison_figure_generation.py`:
-        * In the `if __name__ == "__main__":` block, update the `npz_files` list to point to your two seasonality embedding NPZ files (e.g., `["files/seasonality_embeddings/5494_Seasonality_Final.npz", "files/seasonality_embeddings/5508_Seasonality_Final.npz"]`).
-        * Set `save_dir` to your desired output directory (e.g., `"imgs/seasonality_analysis_fig7"`).
-    2.  Run from the `tweety_bert` root directory:
+    1.  Run the `umap_comparison_figure_generation.py` script from the `tweety_bert` root directory. Provide the desired output directory *first*, followed by the paths to one or more NPZ files containing the seasonality embeddings.
         ```bash
-        python figure_generation_scripts/umap_comparison_figure_generation.py
+        python figure_generation_scripts/umap_comparison_figure_generation.py \
+            imgs/seasonality_analysis_fig7 \
+            files/seasonality_embeddings/5494_Seasonality_Final.npz \
+            files/seasonality_embeddings/5508_Seasonality_Final.npz
         ```
-    * The script will generate various plots in `save_dir/bird_{bird_id}/`. The specific PNG files used for the paper are titled `bird_{bird_id}_all_before_vs_all_after_overlap.png`.
+    2.  The script will generate various plots in the specified output directory (e.g., `imgs/seasonality_analysis_fig7/`), creating subdirectories for each bird ID found in the NPZ filenames (e.g., `bird_5494/`, `bird_5508/`). The specific PNG files used for the paper are titled `bird_{bird_id}_all_before_vs_all_after_overlap.png`.
 
 ---
 

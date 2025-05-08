@@ -2,6 +2,7 @@ import sys
 import os
 import numpy as np
 from glob import glob
+import argparse
 
 # Get the absolute path to the project root directory
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,11 +13,14 @@ sys.path.append(os.path.join(project_root, 'src'))
 
 from src.analysis import ComputerClusterPerformance
 
-# Specify the directory containing the npz files
-npz_directory = "/media/george-vengrovski/Desk SSD/TweetyBERT/LLB_Fold_Data"
+# --- Add argparse setup ---
+parser = argparse.ArgumentParser(description="Calculate V-Measure scores for UMAP folds.")
+parser.add_argument("npz_directory", type=str, help="Directory containing the NPZ files for UMAP folds.")
+args = parser.parse_args()
+# --- End argparse setup ---
 
 # Collect all npz files in the directory
-npz_files = glob(os.path.join(npz_directory, "*.npz"))
+npz_files = glob(os.path.join(args.npz_directory, "*.npz"))
 
 # List to store all V-measures
 all_measures = []
