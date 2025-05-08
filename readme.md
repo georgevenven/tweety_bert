@@ -78,12 +78,20 @@ conda install -c conda-forge \
 pip install soundfile shutil-extra glasbey pyqtgraph PyQt5 hmmlearn
 
 # 4. (Optional) Install PyTorch if not already installed (adjust CUDA version if needed)
+#
+# =====================
+# ⚠️ WARNING: Be VERY careful to match the correct CUDA version to your system and GPU drivers! ⚠️
+#   - If you do NOT have an NVIDIA GPU or do not need GPU acceleration, install the CPU-only version:
+#       pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+#   - If you have a CUDA-capable GPU, install the version matching your CUDA toolkit (see https://pytorch.org/get-started/locally/)
+#   - Mismatched CUDA versions can cause import errors or silent failures.
+# =====================
 # Example for CUDA 12.x:
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu121](https://download.pytorch.org/whl/cu121)
-# For other versions, visit [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/)
+pip install torch torchvision torchaudio
 
 # 5. Clone this repository
-git clone [https://github.com/georgevenven/tweety_bert.git](https://github.com/georgevenven/tweety_bert.git) # Replace with your actual repo URL if different
+git clone https://github.com/georgevenven/tweety_bert.git
+
 cd tweety_bert
 ```
 
@@ -98,7 +106,7 @@ Depending on the size of your audio dataset, storage requirements can range from
 
 ## ⚡ GPU & Training Times
 
-Pretraining can take several hours to days on a single NVIDIA RTX 4090 GPU, depending on your dataset size and hyperparameters.
+Pretraining can take 3-4 hours on a single NVIDIA RTX 4090 GPU, and 100s of hours on a CPU, depending on your dataset size and hyperparameters.
 
 ## 🎶 Song Detection & JSON Format
 
@@ -282,6 +290,7 @@ The following instructions outline how to regenerate the figures presented in th
 These are cartoon schematics, and their direct replication from code is not applicable. Figure 2's masked prediction visualizations can be conceptually generated using `figure_generation_scripts/masked_prediction_figure_generator.py`.
 - **To generate similar masked prediction examples:**
       1. Run the `masked_prediction_figure_generator.py` script from the `tweety_bert` root directory. Provide the paths to your trained model directory, the directory containing spectrogram NPZ files for visualization, and the desired output directory using command-line arguments.
+
          ```bash
          python figure_generation_scripts/masked_prediction_figure_generator.py \
              --model-dir experiments/TweetyBERT_Paper_Yarden_Model \
@@ -289,8 +298,8 @@ These are cartoon schematics, and their direct replication from code is not appl
              --output-dir imgs/masked_predictions_for_figure_2 \
              --num-samples 10 # Optional: specify number of samples
          ```
+
       2. The script will generate visualization images in the specified output directory.
-This completes the refactoring for all figure generation scripts mentioned in the README to use command-line arguments.
 
 ---
 
