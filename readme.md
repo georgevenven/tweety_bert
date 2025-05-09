@@ -392,7 +392,7 @@ These are cartoon schematics, and their direct replication from code is not appl
     1.  Edit `scripts/linear_probe_automated_analysis.py`:
         * Ensure the list `experiment_configs` has the correct `experiment_path` for your pretrained TweetyBERT model (e.g., `"experiments/TweetyBERT_Paper_Yarden_Model"`).
         * Update `train_dir` and `test_dir` within `experiment_configs` to point to your linear probe datasets (e.g., for llb3, llb11, llb16). Adjust paths like `"/media/george-vengrovski/Desk SSD/TweetyBERT/linear_probe_dataset/{dataset}_train"`.
-        * `results_path` is set to `"results"`.
+        * `results_path` is set to `"results"`. If you would like to train the linear probes from scratch, you will have to generate your own linear probe dataset, contact me for more details. 
     2.  Run from the `tweety_bert` root directory:
         ```bash
         python scripts/linear_probe_automated_analysis.py
@@ -412,9 +412,9 @@ These are cartoon schematics, and their direct replication from code is not appl
     1.  Run the `umap_comparison_figure_generation.py` script from the `tweety_bert` root directory. Provide the desired output directory *first*, followed by the paths to one or more NPZ files containing the seasonality embeddings.
         ```bash
         python figure_generation_scripts/umap_comparison_figure_generation.py \
-            imgs/seasonality_analysis_fig7 \
-            files/seasonality_embeddings/5494_Seasonality_Final.npz \
-            files/seasonality_embeddings/5508_Seasonality_Final.npz
+            "imgs/seasonality_analysis_fig7" \
+            "files/seasonality_embeddings/5494_Seasonality_Final.npz" \
+            "files/seasonality_embeddings/5508_Seasonality_Final.npz"
         ```
     2.  The script will generate various plots in the specified output directory (e.g., `imgs/seasonality_analysis_fig7/`), creating subdirectories for each bird ID found in the NPZ filenames (e.g., `bird_5494/`, `bird_5508/`). The specific PNG files used for the paper are titled `bird_{bird_id}_all_before_vs_all_after_overlap.png`.
 
