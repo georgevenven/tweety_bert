@@ -57,13 +57,15 @@ def main(args):
     print(f"Project Root detected as: {project_root}")
 
     wav_folder = Path(args.wav_folder).resolve()
-    song_detection_json_path = Path(args.song_detection_json_path).resolve()
+    song_detection_json_path = None
+    if args.song_detection_json_path:
+        song_detection_json_path = Path(args.song_detection_json_path).resolve()
+        if not song_detection_json_path.is_file():
+            print(f"Error: Song detection JSON '{args.song_detection_json_path}' not found.", file=sys.stderr)
+            sys.exit(1)
 
     if not wav_folder.is_dir():
         print(f"Error: WAV folder '{args.wav_folder}' not found or not a directory.", file=sys.stderr)
-        sys.exit(1)
-    if not song_detection_json_path.is_file():
-        print(f"Error: Song detection JSON '{args.song_detection_json_path}' not found.", file=sys.stderr)
         sys.exit(1)
 
     # --- Define Paths ---
@@ -91,6 +93,9 @@ def main(args):
     # --- Mode-Specific Preparation ---
     if args.mode == 'grouping':
         print("\n--- Mode: Grouping ---")
+        if not song_detection_json_path:
+            print(f"Error: --song_detection_json_path is required for grouping mode.", file=sys.stderr)
+            sys.exit(1)
         # --- 1a. Determine file groupings ---
         # Run the grouping script. NOTE: This script *still copies* WAV files temporarily by default.
         # We will use these temporary directories ONLY to figure out which files belong to which group,
@@ -117,7 +122,7 @@ def main(args):
 
         single_threaded_arg = "true" if args.single_threaded_spec else "false"
         spec_common_args = [
-            "--song_detection_json_path", str(song_detection_json_path),
+            "--song_detection_json_path", str(song_detection_json_path) if song_detection_json_path else "None",
             "--single_threaded", single_threaded_arg
             # Add --step_size, --nfft if needed
         ]
@@ -181,7 +186,7 @@ def main(args):
 
         single_threaded_arg = "true" if args.single_threaded_spec else "false"
         spec_common_args = [
-            "--song_detection_json_path", str(song_detection_json_path),
+            "--song_detection_json_path", str(song_detection_json_path) if song_detection_json_path else "None",
             "--single_threaded", single_threaded_arg
             # Add --step_size, --nfft if needed
         ]
@@ -247,7 +252,7 @@ if __name__ == "__main__":
                         help="Name of the pretrained TweetyBERT experiment folder.")
     parser.add_argument("--wav_folder", type=str, required=True,
                         help="Path to the main directory containing WAV files.")
-    parser.add_argument("--song_detection_json_path", type=str, required=True,
+    parser.add_argument("--song_detection_json_path", type=str, required=False,
                         help="Path to the JSON file containing song detection data.")
 
     # Spectrogram Generation arguments

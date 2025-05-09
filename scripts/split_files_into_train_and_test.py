@@ -5,18 +5,20 @@ from pathlib import Path
 
 def collect_all_files(input_dir):
     """
-    Recursively collects all files in the input directory.
+    Recursively collects all WAV, OGG, and MP3 files in the input directory.
 
     Args:
         input_dir (str): The directory to search for files.
 
     Returns:
-        list: A list of file paths.
+        list: A list of file paths for audio files only.
     """
     file_paths = []
+    audio_extensions = {'.wav', '.ogg', '.mp3'}
     for root, dirs, files in os.walk(input_dir):
         for name in files:
-            file_paths.append(os.path.join(root, name))
+            if os.path.splitext(name)[1].lower() in audio_extensions:
+                file_paths.append(os.path.join(root, name))
     return file_paths
 
 def split_files(input_dir, test_percentage):

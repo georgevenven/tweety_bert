@@ -299,7 +299,7 @@ These are cartoon schematics, and their direct replication from code is not appl
              --num-samples 10 # Optional: specify number of samples
          ```
 
-      2. The script will generate visualization images in the specified output directory. -->
+      2. The script will generate visualization images in the specified output directory.
 
 ---
 

@@ -6,6 +6,7 @@ import sys
 import shutil
 import json
 from pathlib import Path
+from glob import glob # Import glob to find the generated JSON files
 
 # --- Configuration ---
 SONG_DETECTOR_REPO = "https://github.com/georgevenven/tweety_net_song_detector.git"
@@ -47,19 +48,25 @@ def run_command(command, check=True, cwd=None, capture_output=False):
 
 # --- Main Script Logic ---
 def main(args):
-    """Clones detector if needed and runs song detection."""
+    """Clones detector if needed, runs song detection, collects JSON paths, and calls external merge script."""
 
     project_root = Path(__file__).resolve().parent
     print(f"Project Root detected as: {project_root}")
 
-    # Correct argument name from input_dir to wav_dir
     input_dir_path = Path(args.input_dir).resolve()
     output_json_path = Path(args.output_json).resolve()
     song_detector_path = project_root / SONG_DETECTOR_DIR_NAME
+    # Define path to the external merge script
+    merge_script_path = project_root / "scripts" / "merge_output_label_jsons.py" # Path relative to project root
 
     # --- Validate Input Directory ---
     if not input_dir_path.is_dir():
         print(f"Error: Input directory '{args.input_dir}' not found or not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    # --- Validate Merge Script Path ---
+    if not merge_script_path.is_file():
+        print(f"Error: Merge script not found at '{merge_script_path}'.", file=sys.stderr)
         sys.exit(1)
 
     # --- Ensure Output Directory Exists ---
@@ -86,11 +93,6 @@ def main(args):
     print(f"\n--- Running Song Detection on '{input_dir_path}' ---")
     print(f"Output will be saved to: '{output_json_path}'")
 
-    # Note: The TweetyNet song detector script seems to expect '--input' for the directory
-    # and '--output' for the *directory* where results (like JSON per file) are saved.
-    # It doesn't directly output a single combined JSON.
-    # We will create a temporary output dir for the detector and then merge the results.
-
     temp_detector_output_dir = project_root / "temp_song_detection_output"
     if temp_detector_output_dir.exists():
         print(f"Removing existing temporary detector output directory: {temp_detector_output_dir}")
@@ -102,74 +104,56 @@ def main(args):
     detection_cmd = [
         sys.executable,
         str(detector_inference_script),
-        "--mode", "local_dir", # Corrected mode argument
+        "--mode", "local_dir",
         "--input", str(input_dir_path),
-        "--output", str(temp_detector_output_dir)          # Detector saves individual files here
-        # Add other necessary args for the detector if needed (e.g., --threshold)
+        "--output", str(temp_detector_output_dir) # Detector saves individual files here
     ]
     if args.plot_spec:
         detection_cmd.append("--plot_spec")
 
     # Run the detector (allow output to stream)
-    run_command(detection_cmd, cwd=song_detector_path, capture_output=False) # Run from detector's directory
+    run_command(detection_cmd, cwd=song_detector_path, capture_output=False)
 
-    # --- Merge Individual JSONs ---
-    print(f"\n--- Merging individual JSON outputs from '{temp_detector_output_dir}' ---")
-    merged_data = []
-    json_files = list(temp_detector_output_dir.glob('*.json'))
+    # --- Collect the paths of the generated JSON files ---
+    print(f"\n--- Collecting JSON file paths from '{temp_detector_output_dir}' ---")
+    # Use glob to find all .json files and convert them to strings
+    json_file_paths = [str(p.resolve()) for p in temp_detector_output_dir.glob('*.json')] # Use resolve() for absolute paths
 
-    if not json_files:
+    if not json_file_paths:
         print("Warning: No JSON files found in the detector's temporary output directory.", file=sys.stderr)
-    else:
-        print(f"Found {len(json_files)} JSON files to merge.")
-        for json_file in json_files:
-            try:
-                with open(json_file, 'r') as f:
-                    data = json.load(f)
-                    # Assume the detector output format needs slight adjustment
-                    # to match the TweetyBERT expected format if necessary.
-                    # Example: Rename keys or add 'song_present' based on segments
-                    if isinstance(data, dict): # Ensure it's a dictionary
-                        if "segments" in data and data["segments"]:
-                            data["song_present"] = True
-                        else:
-                            data["song_present"] = False
-                            data["segments"] = [] # Ensure segments key exists
-
-                        # Add default spec_parameters if missing
-                        if "spec_parameters" not in data:
-                             data["spec_parameters"] = {"step_size": 119, "nfft": 1024} # Add defaults
-                        # Add empty syllable_labels if missing
-                        if "syllable_labels" not in data:
-                             data["syllable_labels"] = {}
-
-                        merged_data.append(data)
-                    else:
-                        print(f"Warning: Skipping non-dictionary JSON content in {json_file.name}")
-            except json.JSONDecodeError:
-                print(f"Warning: Could not decode JSON from {json_file.name}. Skipping.", file=sys.stderr)
-            except Exception as e:
-                print(f"Warning: Error processing {json_file.name}: {e}. Skipping.", file=sys.stderr)
-
-    # --- Save Merged JSON ---
-    try:
+        # Create an empty output file if no inputs were generated
         with open(output_json_path, 'w') as f:
-            json.dump(merged_data, f, indent=4)
-        print(f"Successfully merged {len(merged_data)} results into '{output_json_path}'")
-    except Exception as e:
-        print(f"Error writing merged JSON to {output_json_path}: {e}", file=sys.stderr)
+            json.dump([], f)
+        print(f"Created empty output file: {output_json_path}")
+    else:
+        # --- Merge Individual JSONs using the external script ---
+        print(f"Found {len(json_file_paths)} JSON files. Merging using '{merge_script_path.name}'...")
+
+        # Build the command for the merge script
+        # The command structure is: python merge_script.py [input_file1 input_file2 ...] output_file
+        merge_cmd = [
+            sys.executable,
+            str(merge_script_path) # Path to the merge script
+        ] + json_file_paths + [ # Add the list of input file paths here
+            str(output_json_path) # Add the final output file path last
+        ]
+
+        # Run the merge script
+        run_command(merge_cmd, cwd=project_root) # Run from project root
 
     # --- Cleanup Temporary Detector Output ---
+    # Optional: Keep the temp dir for debugging if needed by commenting out the next two lines
     print(f"\n--- Cleaning up temporary detector output directory ---")
     shutil.rmtree(temp_detector_output_dir)
     print(f"Deleted temporary directory: {temp_detector_output_dir}")
+    # print(f"Keeping temporary directory for inspection: {temp_detector_output_dir}") # Keep for debugging
 
     print("\n--- Song Detection Script Finished ---")
 
 
 # --- Argument Parsing ---
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run TweetyNet Song Detector on a directory of WAV files.")
+    parser = argparse.ArgumentParser(description="Run TweetyNet Song Detector on a directory of WAV files and merge results using external script.")
 
     parser.add_argument("--input_dir", type=str, required=True,
                         help="Path to the directory containing WAV files to process.")
