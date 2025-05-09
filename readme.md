@@ -78,12 +78,20 @@ conda install -c conda-forge \
 pip install soundfile shutil-extra glasbey pyqtgraph PyQt5 hmmlearn
 
 # 4. (Optional) Install PyTorch if not already installed (adjust CUDA version if needed)
+#
+# =====================
+# ⚠️ WARNING: Be VERY careful to match the correct CUDA version to your system and GPU drivers! ⚠️
+#   - If you do NOT have an NVIDIA GPU or do not need GPU acceleration, install the CPU-only version:
+#       pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+#   - If you have a CUDA-capable GPU, install the version matching your CUDA toolkit (see https://pytorch.org/get-started/locally/)
+#   - Mismatched CUDA versions can cause import errors or silent failures.
+# =====================
 # Example for CUDA 12.x:
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu121](https://download.pytorch.org/whl/cu121)
-# For other versions, visit [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/)
+pip install torch torchvision torchaudio
 
 # 5. Clone this repository
-git clone [https://github.com/georgevenven/tweety_bert.git](https://github.com/georgevenven/tweety_bert.git) # Replace with your actual repo URL if different
+git clone https://github.com/georgevenven/tweety_bert.git
+
 cd tweety_bert
 ```
 
@@ -98,7 +106,7 @@ Depending on the size of your audio dataset, storage requirements can range from
 
 ## ⚡ GPU & Training Times
 
-Pretraining can take several hours to days on a single NVIDIA RTX 4090 GPU, depending on your dataset size and hyperparameters.
+Pretraining can take 3-4 hours on a single NVIDIA RTX 4090 GPU, and 100s of hours on a CPU, depending on your dataset size and hyperparameters.
 
 ## 🎶 Song Detection & JSON Format
 
@@ -219,7 +227,7 @@ python decoding.py \
 ```
 *(Note: The grouping mode currently relies on the interaction with `scripts/copy_files_from_wavdir_to_multiple_event_dirs.py`, which is interactive).*
 
-## 🔍 Inference
+## 🔍 Inference (Not Part of the TweetyBERT Paper)
 
 Run inference on new WAV files using a trained decoder.
 1.  Navigate to the root directory (`tweety_bert/`).
@@ -262,7 +270,7 @@ The `.npz` files used for embeddings and analysis generally contain the followin
 | `dataset_indices`     | `(N,)`               | `int64`     | Index indicating which dataset or group a timebin belongs to (e.g., for seasonality). |
 | `file_map`            | `()` (scalar object) | `object`    | A dictionary mapping integer file indices to actual file path strings.      |
 
-*N = Total number of timebins in the NPZ file (e.g., 1,001,549 in the example).*
+*N = Total number of timebins in the NPZ file.*
 *C_hdbscan = Number of unique HDBSCAN clusters.*
 *C_gt = Number of unique ground truth syllable classes.*
 
@@ -280,8 +288,9 @@ The following instructions outline how to regenerate the figures presented in th
 
 **Figures 1 & 2:**
 These are cartoon schematics, and their direct replication from code is not applicable. Figure 2's masked prediction visualizations can be conceptually generated using `figure_generation_scripts/masked_prediction_figure_generator.py`.
-- **To generate similar masked prediction examples:**
+<!-- - **To generate similar masked prediction examples:**
       1. Run the `masked_prediction_figure_generator.py` script from the `tweety_bert` root directory. Provide the paths to your trained model directory, the directory containing spectrogram NPZ files for visualization, and the desired output directory using command-line arguments.
+
          ```bash
          python figure_generation_scripts/masked_prediction_figure_generator.py \
              --model-dir experiments/TweetyBERT_Paper_Yarden_Model \
@@ -289,8 +298,8 @@ These are cartoon schematics, and their direct replication from code is not appl
              --output-dir imgs/masked_predictions_for_figure_2 \
              --num-samples 10 # Optional: specify number of samples
          ```
-      2. The script will generate visualization images in the specified output directory.
-This completes the refactoring for all figure generation scripts mentioned in the README to use command-line arguments.
+
+      2. The script will generate visualization images in the specified output directory. -->
 
 ---
 
@@ -301,15 +310,15 @@ This completes the refactoring for all figure generation scripts mentioned in th
     1. Run from the `tweety_bert` root directory, providing the input NPZ file and output directory as arguments:
         ```bash
         python figure_generation_scripts/UMAP_plots_from_npz.py \
-            files/LLB_Embedding_Paper/Your_Bird_Embeddings.npz \
-            imgs/umap_plots_fig3
+            "placeholder_input_npz_dir" \
+            "placeholder_output_dir"
         ```
        *(This script may open an interactive window for cropping if processing a single file.)*
 * **Figure 3A (Interactive UMAP region visualization):**
     1. Run from the `tweety_bert` root directory, providing the input NPZ file as an argument:
         ```bash
         python figure_generation_scripts/visualizing_song_cluster_phase.py \
-            files/LLB_Embedding_Paper/Your_Bird_Embeddings.npz
+            "placeholder_embedding_npz_path"
         ```
        This script requires a GUI; use the Lasso tool in the interactive plot to select a UMAP region. Saved images appear in `imgs/selected_regions/`.
        *(Optional arguments like `--collage_mode`, `--max_length`, `--used_group_coloring` can be added.)*
@@ -318,38 +327,34 @@ This completes the refactoring for all figure generation scripts mentioned in th
 
 **Figure 4: Machine-derived vs. Human-derived Clusters**
 
-* **Data:** Prepare NPZ files from UMAP folds (e.g., in `files/LLB_Fold_Data_Paper/`). Each file should contain embeddings and labels for a data fold[cite: 111].
+* **Data:** Prepare NPZ files from UMAP folds (e.g., in `files/LLB_Fold_Data_Paper/`). Each file should contain embeddings and labels for a data fold.
 * **Figure 4A & 4B (V-Measure Calculation and UMAP Plots):**
     1.  **Calculate V-Measure scores:**
         * Run from the `tweety_bert` root directory, providing the path to your fold data:
             ```bash
-            python scripts/fold_v_measure_calculation.py files/LLB_Fold_Data_Paper/
+            python scripts/fold_v_measure_calculation.py "placeholder_dir_for_folds"
             ```
             This will print V-measure scores for each fold[cite: 113].
     2.  **Generate UMAP plots** (will plot both syllable and phrase labels for comparison):
         * Run from the `tweety_bert` root directory, providing the input NPZ file and output directory:
             ```bash
             python figure_generation_scripts/UMAP_plots_from_npz.py \
-                files/LLB_Fold_Data_Paper/fold1.npz \
-                imgs/umap_plots_fig4
+                "placeholder_input_npz_dir" \
+                "placeholder_output_dir"
             ```
-           *(This script may open an interactive window for cropping if processing a single file)*[cite: 114, 115].
+           *(This script may open an interactive window for cropping if processing a single file, you can close it)*.
+
 * **Figure 4C, 4D, 4E (Spectrograms with HDBSCAN and Ground Truth Labels):**
     1. Run from the `tweety_bert` root directory, providing the path to an NPZ file from your fold data:
         ```bash
         # Example: Generate 10 random segments of default length (1000)
         python figure_generation_scripts/visualizing_hdb_scan_labels.py \
-            files/LLB_Fold_Data_Paper/fold1.npz \
-            --output_dir imgs/all_spec_plus_labels_fig4
+            --file_path "npz_file_path" # from which npz file you would like to generate examples \ 
+            --output_dir "imgs/specs_plus_labels"
 
-        # Example: Generate a specific segment
-        # python figure_generation_scripts/visualizing_hdb_scan_labels.py \
-        #     files/LLB_Fold_Data_Paper/fold1.npz \
-        #     --output_dir imgs/all_spec_plus_labels_fig4 \
-        #     --segment_length 1500 \
-        #     --start_idx 5000
         ```
-       This script generates spectrogram fragments (defaulting to 10 random ones if `--start_idx` is not provided)[cite: 117]. You will need to manually select one that clearly shows interesting phrases and mostly aligned labels, similar to the paper's figure[cite: 118]. Output images are saved in the specified `--output_dir`[cite: 116].
+       This script generates spectrogram fragments (defaulting to 100 random ones if `--start_idx` is not provided). You will need to manually select one that clearly shows interesting phrases and mostly aligned labels, similar to the paper's figure. 
+       `--output_dir`.
 
 ---
 
@@ -359,26 +364,21 @@ This completes the refactoring for all figure generation scripts mentioned in th
     Generated similarly to Figure 4C,D,E using `figure_generation_scripts/visualizing_hdb_scan_labels.py`. You'll need to manually find/select a sample NPZ file and segment that exhibits significant spurious insertions by running the script with appropriate arguments.
     Example:
     ```bash
-    # Find a file and start index (e.g., 12345) that shows spurious insertions
+    # add no smoothing parameter
     python figure_generation_scripts/visualizing_hdb_scan_labels.py \
-        files/LLB_Fold_Data_Paper/fold_showing_insertions.npz \
-        --output_dir imgs/spurious_insertion_examples \
-        --start_idx 12345
+        --file_path "npz_file_path" # from which npz file you would like to generate examples \ 
+        --output_dir "imgs/specs_plus_labels" \
+        --no_smoothing
     ```
 * **Figure 5D, 5E, 5F (UMAP Evaluation and Smoothing Window Analysis):**
     1.  Run from the `tweety_bert` root directory, providing the path to the UMAP fold data directory and the desired output directory:
         ```bash
         python figure_generation_scripts/umap_eval.py \
-            [Path_to_your_data_here]/LLB_Fold_Data \
-            results/proxy_metrics_fig5
+            --folder_path "path_to_umap_eval" \
+            --output_dir "/results/test"
+
         ```
-        * *(Optional)*: If your ground truth labels are stored in a separate NPZ file (e.g., not within each fold file), you can specify it using `--labels_path`:
-            ```bash
-            # python figure_generation_scripts/umap_eval.py \
-            #    [Path_to_your_data_here]/LLB_Fold_Data \
-            #    results/proxy_metrics_fig5 \
-            #    --labels_path [Path_to_your_data_here]/combined_labels.npz
-            ```
+
     2.  This script will generate:
         * `all_windows_summary.txt` in the `output_dir`, containing statistics for each smoothing window and identifying the optimal one.
         * `metrics_by_window.png` (used for Fig 5F) in the `output_dir`.

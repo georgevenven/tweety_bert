@@ -929,8 +929,8 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
 if __name__ == "__main__":
     # --- Add argparse setup ---
     parser = argparse.ArgumentParser(description="Evaluate UMAP folds and smoothing windows.")
-    parser.add_argument("folder_path", type=str, help="Directory containing UMAP fold NPZ files.")
-    parser.add_argument("output_dir", type=str, help="Directory to save the output plots and summary files.")
+    parser.add_argument("--folder_path", type=str, help="Directory containing UMAP fold NPZ files.")
+    parser.add_argument("--output_dir", type=str, help="Directory to save the output plots and summary files.")
     parser.add_argument("--labels_path", type=str, default=None,
                         help="Optional path to the specific NPZ file containing labels if different from fold data (used by ComputerClusterPerformance). Defaults to using labels within each fold file.")
     args = parser.parse_args()

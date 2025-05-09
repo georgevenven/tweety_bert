@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import random
 import sys
 import os
+import argparse
 
 # Add the src directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
@@ -15,7 +16,7 @@ from analysis import ComputerClusterPerformance
 # We can pass an empty list since we're only using the method
 cluster_performance = ComputerClusterPerformance([])
 
-def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path):
+def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path, smoothing=True):
     # Load data from the .npz file
     data = np.load(file_path, allow_pickle=True)
     spec = data["s"]  # Spectrogram data
@@ -25,7 +26,8 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
     print(embedding.shape)
 
     # Convert syllable labels to phrase labels using the class method
-    labels = cluster_performance.majority_vote(labels, window_size=150)
+    if smoothing:
+        labels = cluster_performance.majority_vote(labels, window_size=150)
     ground_truth_labels = cluster_performance.syllable_to_phrase_labels(ground_truth_labels, silence=0)
 
     # === HDBSCAN Labels Coloring ===
@@ -53,11 +55,6 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
     ground_truth_colors = list(data["ground_truth_colors"])
     ground_truth_colors[1] = [0.0, 0.0, 0.0, 1.0]  # Set black color for index 1
 
-    # Print debug information
-    print("Original ground truth colors shapes:")
-    for i, color in enumerate(ground_truth_colors):
-        print(f"Color {i}: {np.array(color).shape}, {color}")
-    
     # Convert colors to proper numpy arrays and ensure each has shape (4,)
     ground_truth_colors = []
     for color in data["ground_truth_colors"]:
@@ -73,14 +70,8 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
             raise ValueError(f"Unexpected color format: {color_array}")
         ground_truth_colors.append(color_array)
     
-    # Print debug information after conversion
-    print("\nProcessed ground truth colors shapes:")
-    for i, color in enumerate(ground_truth_colors):
-        print(f"Color {i}: {color.shape}, {color}")
-    
     # Stack all colors into a single numpy array with shape (n_colors, 4)
     ground_truth_colors = np.stack(ground_truth_colors)
-    print("\nFinal ground truth colors shape:", ground_truth_colors.shape)
     
     # Map ground truth labels to colors
     max_label_index = len(ground_truth_colors) - 1
@@ -99,8 +90,6 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
     adjusted_labels_slice = adjusted_labels[start_idx:end_idx]  # Adjusted HDBSCAN labels for the segment
     ground_truth_labels_slice = ground_truth_labels[start_idx:end_idx]  # Ground truth labels for the segment
     spec_slice = spec_slice.T  # Transpose for correct orientation
-    print(spec_slice.shape)
-    print(adjusted_labels_slice.shape)
 
     # Extract the corresponding colors for the sliced data
     hdbscan_label_colors_rgb_slice = hdbscan_label_colors_rgb_full[start_idx:end_idx]
@@ -136,7 +125,7 @@ def plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
 
-def generate_all_spectrograms(file_path, segment_length, step_size, output_dir):
+def generate_all_spectrograms(file_path, segment_length, step_size, output_dir, smoothing=True):
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
     
@@ -155,18 +144,25 @@ def generate_all_spectrograms(file_path, segment_length, step_size, output_dir):
         start_idx = i * step_size
         save_path = os.path.join(output_dir, f"spectrogram_{i:05d}.png")
         print(f"Generating spectrogram {i+1}/{num_segments}", end='\r')
-        plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path)
+        plot_spectrogram_with_labels(file_path, segment_length, start_idx, save_path, smoothing=smoothing)
     
     print("\nDone!")
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "/home/george-vengrovski/Music/llb3_fold1.npz"
-    
-    # Hyperparameters
-    segment_length = 1000  # Length of each spectrogram window
-    step_size = 250      # How much to slide the window by (50% overlap in this case)
-    
-    output_dir = "imgs/all_spec_plus_labels"
-    
-    generate_all_spectrograms(file_path, segment_length, step_size, output_dir)
+    parser = argparse.ArgumentParser(description="Generate spectrograms with HDBSCAN and ground truth labels.")
+    parser.add_argument("--file_path", type=str, required=True, help="Path to the .npz file.")
+    parser.add_argument("--segment_length", type=int, default=1000, help="Length of each spectrogram window.")
+    parser.add_argument("--step_size", type=int, default=250, help="How much to slide the window by.")
+    parser.add_argument("--output_dir", type=str, default="imgs/all_spec_plus_labels", help="Directory to save output images.")
+    parser.add_argument("--no_smoothing", action="store_true", help="Turn off label smoothing (majority vote). Smoothing is ON by default.")
+
+    args = parser.parse_args()
+
+    generate_all_spectrograms(
+        args.file_path,
+        args.segment_length,
+        args.step_size,
+        args.output_dir,
+        smoothing=not args.no_smoothing
+    )
