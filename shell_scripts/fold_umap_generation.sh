@@ -6,7 +6,7 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="raw_llb16"
+BIRD_NAME="llb16"
 MODEL_NAME="TweetyBERT_Paper_Yarden_Model"
 WAV_FOLDER="/media/george-vengrovski/Desk SSD/TweetyBERT/embedding_songs/llb16_songs"
 SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/merged_output.json"

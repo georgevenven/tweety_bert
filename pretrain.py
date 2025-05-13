@@ -64,84 +64,68 @@ def main(args):
     tweetybert_script_path = project_root / "src" / "TweetyBERT.py"
 
     # --- Cleanup ---
-    if temp_dir.exists():
-        print(f"Removing existing temporary directory: {temp_dir}")
-        shutil.rmtree(temp_dir)
+    # if temp_dir.exists():
+    #     print(f"Removing existing temporary directory: {temp_dir}")  # temp comment
+    #     # shutil.rmtree(temp_dir)  # temp comment
 
     # --- Create Temp Directory ---
-    print(f"Creating temporary directory: {temp_dir}")
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    # print(f"Creating temporary directory: {temp_dir}")  # temp comment
+    # temp_dir.mkdir(parents=True, exist_ok=True)  # temp comment
 
     # --- 1. Split files into train and test ---
-    print("\n--- Step 1: Splitting files into train and test ---")
-    split_cmd = [
-        sys.executable, # Use the current python interpreter
-        str(split_script_path),
-        str(input_dir),
-        str(args.test_percentage),
-        "--train_output", str(train_file_list),
-        "--test_output", str(test_file_list),
-        "--full_paths" # Crucial: ensure full paths are written
-    ]
-    run_command(split_cmd)
+    # split_cmd = [  # temp comment
+    #     sys.executable,  # temp comment
+    #     str(split_script_path),  # temp comment
+    #     str(input_dir),  # temp comment
+    #     str(args.test_percentage),  # temp comment
+    #     "--train_output", str(train_file_list),  # temp comment
+    #     "--test_output", str(test_file_list),  # temp comment
+    #     "--full_paths"  # temp comment
+    # ]  # temp comment
+    # run_command(split_cmd)  # temp comment
 
     # --- 2. Print counts ---
-    print("\n--- Step 2: Counting files ---")
-    try:
-        with open(train_file_list, 'r') as f:
-            train_count = sum(1 for _ in f)
-        with open(test_file_list, 'r') as f:
-            test_count = sum(1 for _ in f)
-        print(f"Found {train_count} training files and {test_count} testing files.")
-    except FileNotFoundError:
-        print("Error: Train/Test list files not found after split step.", file=sys.stderr)
-        sys.exit(1)
+    # try:  # temp comment
+    #     with open(train_file_list, 'r') as f:  # temp comment
+    #         train_count = sum(1 for _ in f)  # temp comment
+    #     with open(test_file_list, 'r') as f:  # temp comment
+    #         test_count = sum(1 for _ in f)  # temp comment
+    #     print(f"Found {train_count} training files and {test_count} testing files.")  # temp comment
+    # except FileNotFoundError:  # temp comment
+    #     print("Error: Train/Test list files not found after split step.", file=sys.stderr)  # temp comment
+    #     sys.exit(1)  # temp comment
 
     # --- 3. Create directories for spectrograms ---
-    print("\n--- Step 3: Creating spectrogram directories ---")
-    train_dir_specs.mkdir(exist_ok=True)
-    test_dir_specs.mkdir(exist_ok=True)
-    print(f"Created spectrogram directory: {train_dir_specs}")
-    print(f"Created spectrogram directory: {test_dir_specs}")
+    # train_dir_specs.mkdir(exist_ok=True)  # temp comment
+    # test_dir_specs.mkdir(exist_ok=True)  # temp comment
+    # print(f"Created spectrogram directory: {train_dir_specs}")  # temp comment
+    # print(f"Created spectrogram directory: {test_dir_specs}")  # temp comment
     
     # --- 4. Generate Spectrograms ---
-    print("\n--- Step 4: Generating spectrograms ---")
-    
-    # Convert multi_thread boolean to single_threaded string argument
-    single_threaded_arg = "true" if not args.multi_thread else "false"
-    
-    # Common arguments for spectrogram generation
-    spec_common_args = [
-        "--step_size", str(args.step_size),
-        "--nfft", str(args.nfft),
-        "--single_threaded", single_threaded_arg
-    ]
-    if song_detection_json_path:
-        spec_common_args.extend(["--song_detection_json_path", str(song_detection_json_path)])
-    else:
-        # Pass "None" explicitly if the path is None or was not found
-         spec_common_args.extend(["--song_detection_json_path", "None"])
-
-
-    # Generate training spectrograms
-    print("Generating training spectrograms...")
-    spec_train_cmd = [
-        sys.executable,
-        str(spec_gen_script_path),
-        "--file_list", str(train_file_list),
-        "--dst_dir", str(train_dir_specs),
-    ] + spec_common_args
-    run_command(spec_train_cmd)
-
-    # Generate testing spectrograms
-    print("Generating testing spectrograms...")
-    spec_test_cmd = [
-        sys.executable,
-        str(spec_gen_script_path),
-        "--file_list", str(test_file_list),
-        "--dst_dir", str(test_dir_specs),
-    ] + spec_common_args
-    run_command(spec_test_cmd)
+    # single_threaded_arg = "true" if not args.multi_thread else "false"  # temp comment
+    # spec_common_args = [  # temp comment
+    #     "--step_size", str(args.step_size),  # temp comment
+    #     "--nfft", str(args.nfft),  # temp comment
+    #     "--single_threaded", single_threaded_arg  # temp comment
+    # ]  # temp comment
+    # if song_detection_json_path:  # temp comment
+    #     spec_common_args.extend(["--song_detection_json_path", str(song_detection_json_path)])  # temp comment
+    # else:  # temp comment
+    #      spec_common_args.extend(["--song_detection_json_path", "None"])  # temp comment
+    # spec_train_cmd = [  # temp comment
+    #     sys.executable,  # temp comment
+    #     str(spec_gen_script_path),  # temp comment
+    #     "--file_list", str(train_file_list),  # temp comment
+    #     "--dst_dir", str(train_dir_specs),  # temp comment
+    # ] + spec_common_args  # temp comment
+    # run_command(spec_train_cmd)  # temp comment
+    # spec_test_cmd = [  # temp comment
+    #     sys.executable,  # temp comment
+    #     str(spec_gen_script_path),  # temp comment
+    #     "--file_list", str(test_file_list),  # temp comment
+    #     "--dst_dir", str(test_dir_specs),  # temp comment
+    # ] + spec_common_args  # temp comment
+    # run_command(spec_test_cmd)  # temp comment
 
     # --- 5. Run TweetyBERT Training ---
     print("\n--- Step 5: Running TweetyBERT training ---")
@@ -154,7 +138,11 @@ def main(args):
         "--batch_size", str(args.batch_size),
         "--learning_rate", str(args.learning_rate),
         "--m", str(args.m), # Assuming m=100 from bash script
-        "--context", str(args.context) # Assuming context=250 from bash script
+        "--context", str(args.context),
+        "--continue_training", str(args.continue_training),
+        "--early_stopping", str(args.early_stopping),
+        "--patience", str(args.patience),
+        "--trailing_avg_window", str(args.trailing_avg_window)
         # Add other TweetyBERT arguments if needed
     ]
     run_command(tweetybert_cmd)
@@ -162,13 +150,13 @@ def main(args):
     # --- 6. Save file lists into the experiment folder ---
     print("\n--- Step 6: Saving file lists ---")
     final_experiment_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(train_file_list, final_experiment_dir / "train_files.txt")
-    shutil.copy2(test_file_list, final_experiment_dir / "test_files.txt")
+    # shutil.copy2(train_file_list, final_experiment_dir / "train_files.txt")
+    # shutil.copy2(test_file_list, final_experiment_dir / "test_files.txt")
     print(f"Copied train and test file lists to: {final_experiment_dir}")
 
     # --- 7. Clean up temp directory ---
     print("\n--- Step 7: Cleaning up temporary directory ---")
-    shutil.rmtree(temp_dir)
+    # shutil.rmtree(temp_dir)  # temp comment
     print(f"Deleted temporary directory and its contents: {temp_dir}")
 
     print("\n--- Pretraining Pipeline Completed Successfully! ---")
@@ -205,7 +193,16 @@ if __name__ == "__main__":
                         help="Parameter 'm' for TweetyBERT.")
     parser.add_argument("--context", type=int, default=1000,
                         help="Parameter 'context' for TweetyBERT.")
-
+    parser.add_argument("--early_stopping", type=bool, default=False,
+                        help="Whether to use early stopping. If true, means yes.")
+    parser.add_argument("--patience", type=int, default=8,
+                        help="Number of epochs to wait before early stopping.")
+    parser.add_argument("--trailing_avg_window", type=int, default=200,
+                        help="Number of epochs to consider for trailing average.")
+    
+    # functionality not implemented yet, spec gen process needs to pull the train, test txt files from the experiment folder
+    parser.add_argument("--continue_training", type=bool, default=False,
+                        help="Whether to continue training from a checkpoint. If true, means yes.")
 
     args = parser.parse_args()
 
