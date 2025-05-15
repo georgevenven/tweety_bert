@@ -1,16 +1,14 @@
 #!/bin/bash
 
-### IN THE FUTURE, THE BEHAVIOR OF THIS SHELL SCRIPT AS WELL AS TRAIN DECODER MULTIPLE DIR AND COPY FILES FROM WAVDIR TO MULTIPLE EVENT DIRS SHOULD BE REFACTORED
-
 # Navigate up one directory
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="llb16"
-MODEL_NAME="TweetyBERT_Paper_Yarden_Model"
-WAV_FOLDER="/media/george-vengrovski/Desk SSD/TweetyBERT/embedding_songs/llb16_songs"
-SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/merged_output.json"
-TEST_SET_FILE="experiments/TweetyBERT_Paper_Yarden_Model/test_files.txt"  # Add your test set file path here
+BIRD_NAME="LLB16_NFFT512"
+MODEL_NAME="512NFFT"
+WAV_FOLDER="/media/george-vengrovski/disk2/canary/yarden_data/llb16_data/llb16_songs"
+SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/contains_llb.json"
+TEST_SET_FILE="/home/george-vengrovski/Documents/projects/tweety_bert_paper/experiments/TweetyBERT_Paper_Yarden_Model/test_files.txt"  # Add your test set file path here
 
 # Create temp directory
 TEMP_DIR="./temp"
@@ -46,6 +44,7 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --src_dir "$fold_dir" \
             --dst_dir "$spec_dir" \
             --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
+            --nfft 512 \
             --single_threaded false
         
         # Add removal of empty Yarden data files
@@ -58,8 +57,7 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --experiment_folder "experiments/$MODEL_NAME" \
             --data_dir "$spec_dir" \
             --save_name "$save_name" \
-            --samples 1e6 \
-            --raw_spectogram true
+            --samples 1e6 
     fi
 done
 

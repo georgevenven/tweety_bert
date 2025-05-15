@@ -107,6 +107,7 @@ Depending on the size of your audio dataset, storage requirements can range from
 ## ⚡ GPU & Training Times
 
 Pretraining can take 3-4 hours on a single NVIDIA RTX 4090 GPU, and 100s of hours on a CPU, depending on your dataset size and hyperparameters.
+The speed of training is highly dependent on disk I/O operations; for best performance, keep your data and this repository on the fastest available drive (preferably NVMe or SATA SSD).
 
 ## 🎶 Song Detection & JSON Format
 

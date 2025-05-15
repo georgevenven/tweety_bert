@@ -237,7 +237,7 @@ class WavtoSpec:
             self.skipped_files_count.value += 1
 
     def convert_to_spectrogram(self, file_path, song_detection_json_path, min_length_ms=25,
-                               min_timebins=25, save_npz=True):
+                               min_timebins=250, save_npz=True):
         try:
             # Process audio in chunks instead of loading the entire file
             chunk_size = 10000000  # Process ~10MB chunks at a time
