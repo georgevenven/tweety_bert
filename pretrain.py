@@ -193,7 +193,7 @@ if __name__ == "__main__":
                         help="Parameter 'context' for TweetyBERT.")
     parser.add_argument("--early_stopping", type=bool, default=False,
                         help="Whether to use early stopping. If true, means yes.")
-    parser.add_argument("--patience", type=int, default=16,
+    parser.add_argument("--patience", type=int, default=32,
                         help="Number of epochs to wait before early stopping.")
     parser.add_argument("--trailing_avg_window", type=int, default=200,
                         help="Number of epochs to consider for trailing average.")

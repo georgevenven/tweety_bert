@@ -4,8 +4,8 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="LLB16_NFFT512"
-MODEL_NAME="512NFFT"
+BIRD_NAME="LLB16_psuedo_labels"
+MODEL_NAME="BF_Canary_Joint_Run"
 WAV_FOLDER="/media/george-vengrovski/disk2/canary/yarden_data/llb16_data/llb16_songs"
 SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/contains_llb.json"
 TEST_SET_FILE="/home/george-vengrovski/Documents/projects/tweety_bert_paper/experiments/TweetyBERT_Paper_Yarden_Model/test_files.txt"  # Add your test set file path here
@@ -44,7 +44,7 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --src_dir "$fold_dir" \
             --dst_dir "$spec_dir" \
             --song_detection_json_path "$SONG_DETECTION_JSON_PATH" \
-            --nfft 512 \
+            --nfft 1024 \
             --single_threaded false
         
         # Add removal of empty Yarden data files
@@ -57,7 +57,7 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --experiment_folder "experiments/$MODEL_NAME" \
             --data_dir "$spec_dir" \
             --save_name "$save_name" \
-            --samples 1e6 
+            --samples 5e5 
     fi
 done
 

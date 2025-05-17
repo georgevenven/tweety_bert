@@ -187,8 +187,8 @@ def main(args):
         single_threaded_arg = "true" if args.single_threaded_spec else "false"
         spec_common_args = [
             "--song_detection_json_path", str(song_detection_json_path) if song_detection_json_path else "None",
+            "--nfft", str(args.nfft),
             "--single_threaded", single_threaded_arg
-            # Add --step_size, --nfft if needed
         ]
 
         spec_single_cmd = [
@@ -235,7 +235,6 @@ def main(args):
     print("\n--- Step 4: Cleaning up temporary directory ---")
     shutil.rmtree(temp_dir)
     print(f"Deleted temporary directory and its contents: {temp_dir}")
-
     print("\n--- Decoding Pipeline Completed Successfully! ---")
 
 
@@ -273,6 +272,8 @@ if __name__ == "__main__":
     # Single Mode specific arguments
     parser.add_argument("--num_random_files_spec", type=int, default=1000,
                         help="Number of random WAV files to use for spectrogram generation in 'single' mode.")
+    
+    parser.add_argument("--nfft", type=int, default=1024, help="Number of FFT points for spectrogram generation.")
 
     # Grouping Mode specific arguments (Currently handled by copy script interaction)
     # parser.add_argument("--num_groups", type=int, default=4, help="Number of groups for temporal splitting in 'grouping' mode.")
