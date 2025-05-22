@@ -4,7 +4,7 @@
 cd ..
 
 # Variables for model and bird names
-BIRD_NAME="LLB16_psuedo_labels"
+BIRD_NAME="LLB16_SMOTE_TEST_5000"
 MODEL_NAME="BF_Canary_Joint_Run"
 WAV_FOLDER="/media/george-vengrovski/disk2/canary/yarden_data/llb16_data/llb16_songs"
 SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/contains_llb.json"
@@ -26,7 +26,7 @@ python scripts/copy_files_from_wavdir_to_multiple_event_dirs.py \
     "$SONG_DETECTION_JSON_PATH" \
     "$TEMP_DIR/folds" \
     --test_set_file "$TEST_SET_FILE" \
-    --songs_per_fold 100
+    --songs_per_fold 250
 
 # Process each fold
 echo "Looking for folds in: $TEMP_DIR/folds"
@@ -57,7 +57,7 @@ for fold_dir in "$TEMP_DIR/folds"/group_*; do
             --experiment_folder "experiments/$MODEL_NAME" \
             --data_dir "$spec_dir" \
             --save_name "$save_name" \
-            --samples 5e5 
+            --samples 1e6 
     fi
 done
 

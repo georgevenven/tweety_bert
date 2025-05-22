@@ -4,10 +4,10 @@
 cd ..
 
 # variable for model name 
-BIRD_NAME="LLB16_order_randomized"
-MODEL_NAME="TweetyBERT_Pretrain_LLB_AreaX_FallSong"
+BIRD_NAME="LLB16_SMOTE_TEST"
+MODEL_NAME="LLB_Model_For_Paper"
 WAV_FOLDER="/media/george-vengrovski/disk2/canary/yarden_data/llb16_data/llb16_songs"
-SONG_DETECTION_JSON_PATH="/media/george-vengrovski/Desk SSD/TweetyBERT/contains_llb.json"
+SONG_DETECTION_JSON_PATH="/home/george-vengrovski/Documents/projects/tweety_bert_paper/files/contains_llb.json"
 
 # generate spectrograms for UMAP
 TEMP_DIR="./temp"
@@ -31,9 +31,9 @@ python figure_generation_scripts/dim_reduced_birdsong_plots.py \
     --experiment_folder "experiments/$MODEL_NAME" \
     --data_dir "$UMAP_FILES" \
     --save_name "$BIRD_NAME" \
-    --samples 5e5 \
+    --samples 3e4 \
     --raw_spectogram false \
-    --state_finding_algorithm "HDBSCAN" \
+    --state_finding_algorithm "HDBSCAN-SMOTE" \
     --context 1000
 
 # Train and save Decoder 

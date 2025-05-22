@@ -87,65 +87,39 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
    print(f"discovered labels {np.unique(labels)}")
    return labels
 
-
-def generate_ghmm_labels(array):
-    from hmmlearn import hmm
-
-    print(array.shape)
-
-    # normalize the array
-    array = (array - np.mean(array)) / np.std(array)
-
-    # define GHMM w/ 2 hidden states
-    model = hmm.GaussianHMM(n_components=20, covariance_type='full')
-    # train (EM)
-    model.fit(array)
-
-    # predict hidden states
-    states = model.predict(array)
-
-    print("means:", model.means_)
-    print("covariances:", model.covars_)
-
-    print(states.shape)
-    return states
-
-def _gaussian_kernel(radius: int, peak: float, sigma_divisor: float = 3.0):
+def perform_smote(predictions, hdbscan_labels, samples):
     """
-    build a symmetric 1-D gaussian kernel with height = `peak`.
+    Accepts HDBSCAN labels, and correspond to predictions (neural states)
+    Interpolates neural states, and produces the same quantity of each state
+    Divides samples by the number of classes, and collects that many samples of synthetic predictions from each hdbscan class
 
-    radius :   how many neighbours on each side (e.g. 1000)
-    peak   :   kernel[0] after scaling (e.g. 0.05 or 0.1)
+    Returns:
+    synthetic points: numpy array of shape (n_samples, n_features)
     """
-    x     = np.arange(-radius, radius + 1)
-    sigma = radius / sigma_divisor
-    k     = np.exp(-0.5 * (x / sigma) ** 2)
-    k    *= peak / k[radius]          # scale so centre == peak
-    return k.astype(np.float32)       # save RAM
 
-def smooth_predictions(pred, *, radius=1000, peak=0.05, include_self=True):
-    """
-    pred : (T, F) ndarray      (T ≈ 1e6, F ≈ 196)
-    returns smoothed + residual-added predictions
-    """
-    kernel = _gaussian_kernel(radius, peak)
-    if not include_self:
-        kernel[radius] = 0.0          # don't double-count self
+    rng = np.random.RandomState(42)
+    synthetic_predictions = []
 
-    # fft-based convolution along time axis for every feature at once
-    if fftconvolve is not None:
-        smoothed = fftconvolve(pred, kernel[:, None], mode='same', axes=0)
-    else:                             # fallback: plain np.convolve (slower)
-        smoothed = np.empty_like(pred)
-        for f in range(pred.shape[1]):
-            smoothed[:, f] = np.convolve(pred[:, f], kernel, mode='same')
+    unique_labels = np.unique(hdbscan_labels)
+    n_classes = len(unique_labels)
+    samples_per_class = int(samples) // n_classes
 
-    return pred + smoothed
+    for lbl in unique_labels:
+        X_cls = predictions[hdbscan_labels == lbl]
+        n_to_gen = samples_per_class
+        for _ in range(n_to_gen):
+            i1, i2 = rng.choice(len(X_cls), size=2, replace=False)
+            alpha = rng.random()
+            new_pt = X_cls[i1] + alpha * (X_cls[i2] - X_cls[i1])
+            synthetic_predictions.append(new_pt[None, :])
+
+    synthetic_predictions = np.vstack(synthetic_predictions)
+    return synthetic_predictions
 
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                     layer_index=None, dict_key=None,
                     context=1000, save_name=None, raw_spectogram=False, save_dict_for_analysis=True,
-                    remove_non_vocalization=True, min_cluster_size=500, state_finding_algorithm="HDBSCAN", psuedo_labels=True):
+                    remove_non_vocalization=True, min_cluster_size=500, state_finding_algorithm="HDBSCAN", SMOTE_Ratio=3):
     """
     parameters:
     - data_dirs: list of data directories to analyze
@@ -351,38 +325,44 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         spec_arr = spec_arr[vocalization_indices]
         file_indices = file_indices[vocalization_indices]
         dataset_indices = dataset_indices[vocalization_indices]
+    
     # fit the umap reducer with more conservative parameters
     print("initializing umap reducer...")
     # Try with more conservative parameters
     reducer = umap.UMAP(
-        n_neighbors=200,  
-        min_dist=0.1,  
+        n_neighbors=30,  
+        min_dist=0.0,  
         n_components=2,
-        metric='cosine', 
-        random_state=42 
+        metric='euclidean', 
+        low_memory=True,
+        n_jobs=-1
     )
-    print("umap reducer initialized.")
+    print("umap reducer (2 dims for visualization) initialized.")
 
-    # Convert to float32 to reduce memory usage
-    predictions_float32 = predictions.astype(np.float32)
+    reducer_6d = umap.UMAP(
+        n_neighbors=30,  
+        min_dist=0.0,  
+        n_components=6,
+        metric='euclidean', 
+        low_memory=True,
+        n_jobs=-1
+    )
+    print("umap reducer (6 dims for clustering) initialized.")
 
-    # Check for and handle any remaining NaN values
-    if np.isnan(predictions_float32).any():
+   
+    if np.isnan(predictions).any():
         print("Warning: NaN values found. Replacing with zeros.")
-        predictions_float32 = np.nan_to_num(predictions_float32)
+        predictions = np.nan_to_num(predictions)
 
-    embedding_outputs = reducer.fit_transform(predictions_float32)
-    print("umap fitting complete. shape of embedding outputs:", embedding_outputs.shape)
+    embedding_outputs = reducer.fit_transform(predictions)
+    print("umap fitting for visualization complete. shape of embedding outputs:", embedding_outputs.shape)
 
-    if state_finding_algorithm == "HDBSCAN":
-        print("generating hdbscan labels...")
-        try:
-            hdbscan_labels = generate_hdbscan_labels(embedding_outputs, min_samples=1, min_cluster_size=5000)
-            print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
-        except Exception as e:
-            print(f"HDBSCAN error: {e}")
-            return
+    embedding_outputs_6d = reducer_6d.fit_transform(predictions)
+    print("umap 6d fitting for clustering complete. shape of embedding outputs:", embedding_outputs_6d.shape)
 
+    hdbscan_labels = generate_hdbscan_labels(embedding_outputs_6d, min_samples=1, min_cluster_size=5000)
+    print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
+   
     # get unique labels and create color palettes
     unique_clusters = np.unique(hdbscan_labels)
     unique_ground_truth_labels = np.unique(ground_truth_labels)
@@ -411,12 +391,10 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     # make the first color in the hdbscan palette black
     hdbscan_colors[0] = (0, 0, 0)
 
-
     # create experiment-specific directory for images
     experiment_dir = os.path.join("imgs", "umap_plots", save_name)
     if not os.path.exists(experiment_dir):
         os.makedirs(experiment_dir)
-
 
     # plot hdbscan labels
     fig1, ax1 = plt.subplots(figsize=(16, 16), facecolor='white')
@@ -434,7 +412,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 facecolor=fig1.get_facecolor(), edgecolor='none')
     plt.close(fig1)
 
-
     # plot ground truth labels
     fig2, ax2 = plt.subplots(figsize=(16, 16), facecolor='white')
     ax2.set_facecolor('white')
@@ -451,89 +428,76 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 facecolor=fig2.get_facecolor(), edgecolor='none')
     plt.close(fig2)
 
-    # ───────────────────────────── second-pass: balanced core  ─────────────────────────────
-    # build a core with equal samples per pseudo-label cluster (skip noise = −1)
-    pseudo_mask            = hdbscan_labels != -1
-    clusters, counts       = np.unique(hdbscan_labels[pseudo_mask], return_counts=True)
-    if len(clusters) >= 2:                                  # ensure at least 2 clusters to balance
-        quota              = counts.min()
-        rng                = np.random.default_rng(0)
-        core_idx           = np.hstack([
-            rng.choice(np.where(hdbscan_labels == c)[0], size=quota, replace=False)
-            for c in clusters
-        ])
-        # Instead of UMAPing the predictions again, UMAP the original UMAP embedding (embedding_outputs)
-        X_core             = embedding_outputs[core_idx]
+    if state_finding_algorithm == "HDBSCAN-SMOTE":
+        print("\n=== Starting SMOTE UMAP Process ===")
+        print(f"Original predictions shape: {predictions.shape}")
+        print(f"Original hdbscan labels shape: {hdbscan_labels.shape}")
+        print(f"Unique hdbscan labels: {np.unique(hdbscan_labels)}")
 
-        reducer_pass_2 = umap.UMAP(
-            n_neighbors=200,
-            min_dist=0.1,
-            n_components=2,
-            metric="euclidean",  # UMAP on UMAP, so use euclidean
-        ).fit(X_core)
+        print("\nGenerating synthetic points with SMOTE...")
+        synthetic_predictions = perform_smote(predictions, hdbscan_labels, samples)
+        print(f"Synthetic predictions shape: {synthetic_predictions.shape}")
+        
+        rng = np.random.RandomState(42)
 
-        embedding_outputs_pass_2 = reducer_pass_2.transform(embedding_outputs)
-        print("balanced umap complete. shape:", embedding_outputs_pass_2.shape)
+        # sample subset of originals and synthetic for tighter UMAP
+        n_real = predictions.shape[0]
+        n_smote = synthetic_predictions.shape[0]
+        print(f"\nNumber of real points: {n_real}")
+        print(f"Number of synthetic points: {n_smote}")
+        
+        # choose a random number of points from smote, that is the same length as n_real
+        n_samples = min(n_real, n_smote)
+        print(f"Number of samples to select: {n_samples}")
+        
+        smote_idx = rng.choice(n_smote, size=n_samples, replace=False)
+        print(f"Selected indices shape: {smote_idx.shape}")
+        
+        # subset smote_idx
+        synthetic_predictions = synthetic_predictions[smote_idx]
+        print(f"Subset synthetic predictions shape: {synthetic_predictions.shape}")
 
-        # run HDBSCAN again on the balanced embedding
-        print("generating hdbscan labels (pass-2)…")
-        try:
-            hdbscan_labels_2 = generate_hdbscan_labels(
-                embedding_outputs_pass_2,
-                min_samples=1,
-                min_cluster_size=5000
-            )
-            print("hdbscan-2 labels generated. unique:", np.unique(hdbscan_labels_2))
-        except Exception as e:
-            print(f"HDBSCAN-2 error: {e}")
-            hdbscan_labels_2 = np.full(len(embedding_outputs_pass_2), -1)
+        print("\nFitting UMAP on synthetic points...")
+        umap_syn = umap.UMAP(n_neighbors=30, min_dist=0.0, metric="correlation", low_memory=True, n_jobs=-1)
+        umap_syn.fit(synthetic_predictions)
+        print("UMAP fit complete")
 
-        # colour map for pass-2 (size may differ)
-        unique_clusters_2  = np.unique(hdbscan_labels_2)
-        hdbscan_colors_2   = create_color_palette(len(unique_clusters_2))
-        hdbscan_colors_2[0] = (0, 0, 0)                       # make noise black
+        print("\nTransforming real points using UMAP fit on synthetic points...")
+        embedding_outputs_smote = umap_syn.transform(predictions)
+        print(f"Transformed real predictions shape: {embedding_outputs_smote.shape}")
+        print("=== SMOTE UMAP Process Complete ===\n")
 
-        # plots for second pass
-        fig3, ax3 = plt.subplots(figsize=(16, 16), facecolor='white')
-        ax3.set_facecolor('white')
-        ax3.scatter(embedding_outputs_pass_2[:, 0], embedding_outputs_pass_2[:, 1],
-                    c=hdbscan_labels_2, s=10, alpha=0.1,
-                    cmap=mcolors.ListedColormap(hdbscan_colors_2))
-        ax3.set_title("hdbscan labels (balanced umap)", fontsize=48)
-        ax3.axis("off")
-        plt.tight_layout()
-        plt.savefig(os.path.join(experiment_dir, "hdbscan_labels_bal.png"),
-                    facecolor=fig3.get_facecolor(), edgecolor='none')
-        plt.close(fig3)
+        # hdbscan on smote
+        hdbscan_labels_smote = generate_hdbscan_labels(embedding_outputs_smote, min_samples=1, min_cluster_size=5000)
 
-        fig4, ax4 = plt.subplots(figsize=(16, 16), facecolor='white')
-        ax4.set_facecolor('white')
-        ax4.scatter(embedding_outputs_pass_2[:, 0], embedding_outputs_pass_2[:, 1],
-                    c=ground_truth_labels, s=10, alpha=0.1,
-                    cmap=mcolors.ListedColormap(ground_truth_colors))
-        ax4.set_title("ground truth (balanced umap)", fontsize=48)
-        ax4.axis("off")
-        plt.tight_layout()
-        plt.savefig(os.path.join(experiment_dir, "ground_truth_bal.png"),
-                    facecolor=fig4.get_facecolor(), edgecolor='none')
-        plt.close(fig4)
-    else:
-        print("balancing skipped: need ≥2 clusters after first HDBSCAN.")
-        embedding_outputs_pass_2 = None
-        hdbscan_labels_2        = None
+        # save figures of smote, g truth, and hdbscan labels
+        plt.figure(figsize=(16, 16))
+        plt.scatter(embedding_outputs_smote[:, 0], embedding_outputs_smote[:, 1], c=ground_truth_labels, s=10, alpha=0.1, cmap=mcolors.ListedColormap(ground_truth_colors))
+        plt.savefig(os.path.join(experiment_dir, "smote_umap.png"), facecolor=plt.gcf().get_facecolor(), edgecolor='none')
+        plt.close()
 
+        plt.figure(figsize=(16, 16))
+        plt.scatter(embedding_outputs_smote[:, 0], embedding_outputs_smote[:, 1], c=hdbscan_labels_smote, s=10, alpha=0.1, cmap=mcolors.ListedColormap(hdbscan_colors))
+        plt.savefig(os.path.join(experiment_dir, "smote_hdbscan_labels.png"), facecolor=plt.gcf().get_facecolor(), edgecolor='none')
+        plt.close()
+    
+    
+    # if NOT SMOTE, then hdbscan_labels_smote is the same as hdbscan_labels, and embedding_outputs_smote is the same as embedding_outputs
+    if state_finding_algorithm != "HDBSCAN-SMOTE":
+        hdbscan_labels_smote = hdbscan_labels
+        embedding_outputs_smote = embedding_outputs
+    
     # save the data
     np.savez(
         f"files/{save_name}",
         embedding_outputs=embedding_outputs,
-        embedding_outputs_pass_2=embedding_outputs_pass_2,
+        embedding_outputs_smote=embedding_outputs_smote,
         hdbscan_labels=hdbscan_labels,
-        hdbscan_labels_2=hdbscan_labels_2,
+        hdbscan_labels_smote=hdbscan_labels_smote,
         ground_truth_labels=ground_truth_labels,
         predictions=predictions,
         s=spec_arr,
         hdbscan_colors=hdbscan_colors,
-        hdbscan_colors_2=hdbscan_colors_2 if 'hdbscan_colors_2' in locals() else None,
         ground_truth_colors=ground_truth_colors,
         original_spectogram=original_spec_arr,
         vocalization=vocalization_arr,

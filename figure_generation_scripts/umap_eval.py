@@ -388,7 +388,7 @@ def process_all_folds(files: List[str],
                          List[float], List[float],  # phrase-level lengths
                          List[str],   List[str],    # phrase-level bird/fold IDs
                          List[int],                 # phrase-level counts
-                         float, float,              # overall FER (mapped-only), overall FER (-1=error)
+                         float, float, float,       # overall FER (mapped-only), overall FER (-1=error), macro FER
                          Dict[Tuple[str,int], float], # (bird, gt_label): FER (mapped-only)
                          Counter                    # predicted label frequencies
                      ]:
@@ -508,22 +508,31 @@ def process_all_folds(files: List[str],
         
         mismatch_any = np.sum(mapped_gt != pred_smooth)
         
+        # Calculate macro FER for this fold
+        macro_fer_fold = 0.0
+        valid_labels = 0
+        for gt_lbl in np.unique(gt_phrase):
+            if gt_lbl == -1 or gt_lbl not in mapping:
+                continue
+            mask = (gt_phrase == gt_lbl)
+            if np.sum(mask) > 0:
+                macro_fer_fold += np.mean(mapped_gt[mask] != pred_smooth[mask])
+                valid_labels += 1
+        macro_fer_fold = 100.0 * (macro_fer_fold / valid_labels) if valid_labels > 0 else 0.0
+        
         total_frames_global_mapped   += frames_mapped
         total_mismatch_global_mapped += mismatch_mapped
         total_frames_global_any      += total_frames
         total_mismatch_global_any    += mismatch_any
         
-        # per-bird mismatch
-        for i in range(total_frames):
-            gt_lbl  = gt_phrase[i]
-            pred_lbl= pred_smooth[i]
-            if gt_lbl == -1:
+        # Track macro FER components
+        for gt_lbl in np.unique(gt_phrase):
+            if gt_lbl == -1 or gt_lbl not in mapping:
                 continue
-            if mapping[gt_lbl] == -1:
-                continue
-            per_bird_label_counts[(bird_id, gt_lbl)] += 1
-            if mapped_gt[i] != pred_lbl:
-                per_bird_label_mismatches[(bird_id, gt_lbl)] += 1
+            mask = (gt_phrase == gt_lbl)
+            if np.sum(mask) > 0:
+                per_bird_label_counts[(bird_id, gt_lbl)] += np.sum(mask)
+                per_bird_label_mismatches[(bird_id, gt_lbl)] += np.sum((mapped_gt[mask] != pred_smooth[mask]))
         
         # 4) phrase-level entropies & lengths
         uniq_mapped = np.unique(mapped_gt)
@@ -615,6 +624,15 @@ def process_all_folds(files: List[str],
     else:
         overall_fer_any = np.nan
     
+    # Calculate global macro FER
+    macro_fer = 0.0
+    valid_labels = 0
+    for (_, gt_lbl), count in per_bird_label_counts.items():
+        if count > 0:
+            macro_fer += 100.0 * (per_bird_label_mismatches[(_, gt_lbl)] / count)
+            valid_labels += 1
+    macro_fer = macro_fer / valid_labels if valid_labels > 0 else np.nan
+    
     # 7) per-bird phrase FER
     per_bird_phrase_fer = {}
     for (b,lbl), tcount in per_bird_label_counts.items():
@@ -629,7 +647,8 @@ def process_all_folds(files: List[str],
             f.write(f"=== Summary for Smoothing Window = {smoothing_window} ===\n\n")
             f.write(" -- Overall Frame Error Rates --\n")
             f.write(f"    1) Mapped-Only FER  : {overall_fer_mapped:.2f}%\n")
-            f.write(f"    2) Include -1 in FER: {overall_fer_any:.2f}%\n\n")
+            f.write(f"    2) Include -1 in FER: {overall_fer_any:.2f}%\n")
+            f.write(f"    3) Macro FER        : {macro_fer:.2f}%\n\n")
             
             f.write(" -- Per-Bird Phrase FER (mapped only) --\n")
             birds_in_dict = sorted({k[0] for k in per_bird_phrase_fer.keys()})
@@ -644,7 +663,7 @@ def process_all_folds(files: List[str],
     return (ground_truth_entropies, hdbscan_entropies,
             ground_truth_lengths, hdbscan_lengths,
             bird_ids, fold_ids, phrase_counts,
-            overall_fer_mapped, overall_fer_any, per_bird_phrase_fer,
+            overall_fer_mapped, overall_fer_any, macro_fer, per_bird_phrase_fer,
             pred_label_freq)
 
 
@@ -876,16 +895,20 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
     LINE_WIDTH = 4
     
     # Plot correlations on left axis with larger markers and lines
-    ax1.plot(ws, re, 's-', color='#2ecc71', linewidth=LINE_WIDTH, markersize=MARKER_SIZE)
-    ax1.plot(ws, rl, '^-', color='#3498db', linewidth=LINE_WIDTH, markersize=MARKER_SIZE)
+    ax1.plot(ws, re, 's-', color='#2ecc71', linewidth=LINE_WIDTH, markersize=MARKER_SIZE, label='Entropy r')
+    ax1.plot(ws, rl, '^-', color='#3498db', linewidth=LINE_WIDTH, markersize=MARKER_SIZE, label='Length r')
     
-    # Plot V-measure on right axis
-    ax2.plot(ws, vs, 'o-', color='#e74c3c', linewidth=LINE_WIDTH, markersize=MARKER_SIZE)
+    # Plot V-measure and Macro FER on right axis
+    ax2.plot(ws, vs, 'o-', color='#e74c3c', linewidth=LINE_WIDTH, markersize=MARKER_SIZE, label='V-measure')
+    
+    # Get macro FER from all_results
+    macro_fer = [x[6] for x in all_results]  # Index 6 is macro FER
+    ax2.plot(ws, macro_fer, 'd-', color='#9b59b6', linewidth=LINE_WIDTH, markersize=MARKER_SIZE, label='Macro FER')
     
     # Set labels with larger font
     ax1.set_xlabel("Smoothing Window Size", fontsize=FONT_SIZE)
     ax1.set_ylabel("Correlation (r)", fontsize=FONT_SIZE)
-    ax2.set_ylabel("V-measure", fontsize=FONT_SIZE)
+    ax2.set_ylabel("V-measure / FER (%)", fontsize=FONT_SIZE)
     
     # Increase tick label sizes
     ax1.tick_params(axis='both', which='major', labelsize=FONT_SIZE-2)
@@ -898,10 +921,12 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
     mean_v = np.nanmean(vs) if len(vs)>0 else 0.0
     mean_re = np.nanmean(re) if len(re)>0 else 0.0
     mean_rl = np.nanmean(rl) if len(rl)>0 else 0.0
+    mean_macro_fer = np.nanmean(macro_fer) if len(macro_fer)>0 else 0.0
     
     text_str = (f'Mean V-score: {mean_v:.3f}\n'
                 f'Mean Entropy r: {mean_re:.3f}\n'
-                f'Mean Duration r: {mean_rl:.3f}')
+                f'Mean Duration r: {mean_rl:.3f}\n'
+                f'Mean Macro FER: {mean_macro_fer:.1f}%')
     
     # Add text to the top axis with larger font
     ax_text.text(0.02, 0.5, text_str,
@@ -909,7 +934,10 @@ def plot_v_measure_by_window(window_results, entropy_results, length_results, ou
                 verticalalignment='center',
                 fontsize=FONT_SIZE-4)
     
-    # Removed legend
+    # Add legend
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=FONT_SIZE-4)
     
     # Adjust layout
     plt.tight_layout()
@@ -985,7 +1013,7 @@ if __name__ == "__main__":
         
         (gt_e, hd_e, gt_l, hd_l, 
          birds, folds, counts,
-         overall_fer_mapped, overall_fer_any, bird_phrase_fer,
+         overall_fer_mapped, overall_fer_any, macro_fer, bird_phrase_fer,
          pred_label_freq) = process_all_folds(
              all_npz_files, wsize, labels_path=labels_path_arg,
              output_dir=current_window_dir,
@@ -1012,7 +1040,7 @@ if __name__ == "__main__":
         else:
             v_score = 0.0
         
-        all_results.append((wsize, r_e, r_l, v_score, overall_fer_mapped, overall_fer_any))
+        all_results.append((wsize, r_e, r_l, v_score, overall_fer_mapped, overall_fer_any, macro_fer))
         v_measure_results.append((wsize, v_score))
         entropy_results.append((wsize, r_e))
         length_results.append((wsize, r_l))
@@ -1028,7 +1056,7 @@ if __name__ == "__main__":
     best_window_corr_dir = window_dirs[best_wsize]
     (gt_e_best, hd_e_best, gt_l_best, hd_l_best,
      birds_best, folds_best, counts_best,
-     overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
+     overall_fer_mapped_best, overall_fer_any_best, macro_fer_best, bird_phrase_fer_best,
      best_window_pred_label_freq) = \
          process_all_folds(
              all_npz_files, best_wsize, labels_path=labels_path_arg,
@@ -1051,15 +1079,15 @@ if __name__ == "__main__":
         f.write("============================================================\n\n")
         
         header = (
-            "Window |   r_e   |   r_l   | v_score |   FER(mapped)%  |   FER(-1)%  \n"
-            "-------+---------+---------+---------+-----------------+------------\n"
+            "Window |   r_e   |   r_l   | v_score |   FER(mapped)%  |   FER(-1)%  | Macro FER%  \n"
+            "-------+---------+---------+---------+-----------------+------------+---------\n"
         )
         f.write(header)
         
-        for i, (wsize, re_, rl_, v_, fer_map, fer_any) in enumerate(all_results):
+        for i, (wsize, re_, rl_, v_, fer_map, fer_any, macro_fer) in enumerate(all_results):
             f.write(
                 f"{wsize:6d} | {re_:7.3f} | {rl_:7.3f} | {v_:7.3f} |"
-                f"     {fer_map:7.2f}%      |   {fer_any:7.2f}%   \n"
+                f"     {fer_map:7.2f}%      |   {fer_any:7.2f}%   |   {macro_fer:7.2f}%\n"
             )
         
         f.write("\n\n--- BEST WINDOW SELECTION ---\n\n")
@@ -1068,7 +1096,8 @@ if __name__ == "__main__":
         f.write("=== FINAL RESULTS for BEST WINDOW ===\n")
         f.write(f"Window = {best_wsize}\n")
         f.write(f"Overall FER (mapped only) : {overall_fer_mapped_best:.2f}%\n")
-        f.write(f"Overall FER (with -1 err) : {overall_fer_any_best:.2f}%\n\n")
+        f.write(f"Overall FER (with -1 err) : {overall_fer_any_best:.2f}%\n")
+        f.write(f"Macro FER                  : {macro_fer_best:.2f}%\n\n")
 
         # Add frequency reports for each window
         for wsize in window_sizes:
@@ -1096,7 +1125,7 @@ if __name__ == "__main__":
     # The function process_all_folds returns the data needed for the scatter plots
     (gt_e_best, hd_e_best, gt_l_best, hd_l_best,
      birds_best, folds_best, counts_best,
-     overall_fer_mapped_best, overall_fer_any_best, bird_phrase_fer_best,
+     overall_fer_mapped_best, overall_fer_any_best, macro_fer_best, bird_phrase_fer_best,
      best_window_pred_label_freq) = \
          process_all_folds(
              all_npz_files, best_wsize, labels_path=labels_path_arg,
