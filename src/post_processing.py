@@ -102,8 +102,6 @@ def syllable_to_phrase_labels(arr, silence=-1):
 
     return new_arr
 
-
-
 def majority_vote(data, window_size=1):
     """
     Return an array of the same length as 'data',
@@ -134,7 +132,7 @@ def majority_vote(data, window_size=1):
     
     return output
 
-def fill_noise_with_nearest_label(self, labels):
+def fill_noise_with_nearest_label(labels):
     """
     For each noise point (labeled -1), find the nearest non-noise
     label to the left or right and assign it to this point. If no

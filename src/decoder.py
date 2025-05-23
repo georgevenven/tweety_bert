@@ -9,16 +9,8 @@ from utils import load_model, get_device
 from linear_probe import LinearProbeModel, LinearProbeTrainer
 import argparse
 import matplotlib.pyplot as plt
-from scipy.stats import mode
 from tqdm import tqdm
-
-def majority_vote(arr, window_size):
-    result = np.zeros_like(arr)
-    for i in range(len(arr)):
-        start = max(0, i - window_size // 2)
-        end = min(len(arr), i + window_size // 2)
-        result[i] = mode(arr[start:end])[0]
-    return result
+from post_processing import majority_vote, fill_noise_with_nearest_label
 
 class TweetyBertClassifier:
     def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
@@ -51,19 +43,8 @@ class TweetyBertClassifier:
 
         vocalization = labels  # temporary lazy solution
 
-        # Replace noise labels (-1) with the closest non-noise label
-        for i in range(len(labels)):
-            if labels[i] == -1:
-                left = right = i
-                while left >= 0 or right < len(labels):
-                    if left >= 0 and labels[left] != -1:
-                        labels[i] = labels[left]
-                        break
-                    if right < len(labels) and labels[right] != -1:
-                        labels[i] = labels[right]
-                        break
-                    left -= 1
-                    right += 1
+        # Replace noise labels (-1) with the closest non-noise label using post_processing
+        labels = fill_noise_with_nearest_label(labels)
 
         self.num_classes = len(np.unique(labels))
         print(f"Number of classes: {self.num_classes}")
@@ -149,9 +130,9 @@ class TweetyBertClassifier:
 
         print(f"Decoder state saved in {save_dir}")
 
-    def generate_specs(self, num_specs=100):
-        spec_generator = SpecGenerator(self.classifier_model, self.test_dir, self.context_length, num_classes=self.num_classes)
-        spec_generator.generate_specs(num_specs)
+    # def generate_specs(self, num_specs=100):
+    #     spec_generator = SpecGenerator(self.classifier_model, self.test_dir, self.context_length, num_classes=self.num_classes)
+    #     spec_generator.generate_specs(num_specs)
 
 
 class SpecGenerator:

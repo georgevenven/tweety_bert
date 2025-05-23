@@ -115,7 +115,8 @@ class LinearProbeModel(nn.Module):
                 nn.GELU(),
                 nn.Linear(64, self.logits_dim)
             )
-            self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
+            # self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
+            self.freeze_all_but_classifier(self.model)
         elif classifier_type == "linear_probe":
             self.classifier = nn.Linear(TweetyBERT_readout_dims, self.logits_dim)
 

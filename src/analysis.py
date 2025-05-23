@@ -70,9 +70,9 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
    Parameters:
    - array: ndarray of shape (n_samples, n_features)
      The input data to cluster.
-   - min_samples: int, default=5
+   - min_samples: int, default=1
      The number of samples in a neighborhood for a point to be considered as a core point.
-   - min_cluster_size: int, default=5
+   - min_cluster_size: int, default=5000
      The minimum number of points required to form a cluster.
 
    Returns:
