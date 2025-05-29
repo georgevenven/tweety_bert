@@ -13,7 +13,7 @@ from tqdm import tqdm
 from post_processing import majority_vote, fill_noise_with_nearest_label
 
 class TweetyBertClassifier:
-    def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
+    def __init__(self, model_dir, linear_decoder_dir, context_length=1000, weight=None):
         self.device = get_device()
         self.tweety_bert_model = self.load_tweety_bert(model_dir)
         self.linear_decoder_dir = linear_decoder_dir
@@ -23,6 +23,7 @@ class TweetyBertClassifier:
         self.model_dir = model_dir
         self.data_file = None
         self.context_length = context_length
+        self.weight = weight
 
         # Delete existing decoder directory if it exists
         if os.path.exists(linear_decoder_dir):
@@ -92,7 +93,8 @@ class TweetyBertClassifier:
             layer_num=-1, 
             layer_id="attention_output", 
             TweetyBERT_readout_dims=196,
-            classifier_type="decoder"
+            classifier_type="decoder",
+            weight=self.weight
         ).to(self.device)
 
     def train_classifier(self, lr=1e-4, batches_per_eval=10, desired_total_batches=200, patience=4, generate_loss_plot=False):
@@ -105,7 +107,8 @@ class TweetyBertClassifier:
             plotting=generate_loss_plot,
             batches_per_eval=batches_per_eval, 
             desired_total_batches=desired_total_batches, 
-            patience=patience
+            patience=patience,
+            weight=self.weight
         )
         trainer.train()
 

@@ -14,87 +14,8 @@ import os
 import time  # Add this import at the top of the file
 from utils import get_device
 
-# class ModifiedCrossEntropyLoss(nn.Module):
-#     def __init__(self, similarity_penalty_weight=0.1, entropy_weight=0.01, temperature=1.0):
-#         super().__init__()
-#         self.ce_loss = nn.CrossEntropyLoss()
-#         self.similarity_penalty_weight = similarity_penalty_weight
-#         self.entropy_weight = entropy_weight
-#         self.temperature = temperature
-
-#     def forward(self, predictions, targets):
-#         # predictions shape: [batch_size, num_classes, sequence_length]
-#         # targets shape: [batch_size, sequence_length]
-#         batch_size, num_classes, seq_length = predictions.shape
-        
-#         # Apply temperature scaling
-#         scaled_predictions = predictions / self.temperature
-        
-#         # Reshape predictions to [batch_size * sequence_length, num_classes]
-#         predictions_reshaped = scaled_predictions.permute(0, 2, 1).reshape(-1, num_classes)
-        
-#         # Reshape targets to [batch_size * sequence_length]
-#         targets_reshaped = targets.reshape(-1)
-
-#         # Calculate cross-entropy loss
-#         ce_loss = self.ce_loss(predictions_reshaped, targets_reshaped)
-
-#         # Calculate pairwise cosine similarity between consecutive prediction vectors
-#         predictions_norm = F.normalize(scaled_predictions, p=2, dim=1)
-#         cosine_sim = F.cosine_similarity(predictions_norm[:, :, :-1].unsqueeze(2), 
-#                                          predictions_norm[:, :, 1:].unsqueeze(1), 
-#                                          dim=3)
-        
-#         # Average similarity across batch, classes, and sequence
-#         avg_similarity = cosine_sim.mean()
-
-#         # Penalty is inverse of similarity (1 - similarity) to encourage dissimilarity
-#         similarity_penalty = 1 - avg_similarity
-
-#         # Calculate entropy
-#         probs = F.softmax(scaled_predictions, dim=1)
-#         entropy = -torch.sum(probs * torch.log(probs + 1e-10), dim=1).mean()
-
-#         # Combine losses
-#         total_loss = ce_loss + self.similarity_penalty_weight * similarity_penalty - self.entropy_weight * entropy
-
-#         return total_loss, ce_loss, similarity_penalty
-
-
-
-    # def forward(self, predictions, targets):
-    #     # predictions shape: [batch_size, num_classes, sequence_length]
-    #     # targets shape: [batch_size, sequence_length]
-
-    #     batch_size, num_classes, seq_length = predictions.shape
-        
-    #     # Reshape predictions to [batch_size * sequence_length, num_classes]
-    #     predictions_reshaped = predictions.permute(0, 2, 1).reshape(-1, num_classes)
-        
-    #     # Reshape targets to [batch_size * sequence_length]
-    #     targets_reshaped = targets.reshape(-1)
-
-    #     # Calculate cross-entropy loss
-    #     ce_loss = self.ce_loss(predictions_reshaped, targets_reshaped)
-
-    #     # Calculate state switching penalty based on argmax logits
-    #     argmax_predictions = torch.argmax(predictions, dim=1)
-
-    #     # Calculate the number of switches using vectorized operations
-    #     switches = (argmax_predictions[:, 1:] != argmax_predictions[:, :-1]).sum().item()
-    
-    #     switching_penalty = switches / (batch_size * seq_length)
-
-    #     # Combine losses
-    #     total_loss = ce_loss + self.switching_penalty_weight * switching_penalty
-
-    #     total_loss = ce_loss 
-
-    #     return total_loss, ce_loss, switching_penalty
-
-
 class LinearProbeModel(nn.Module):
-    def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", TweetyBERT_readout_dims=2, classifier_type="decoder"):
+    def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", TweetyBERT_readout_dims=2, classifier_type="decoder", weight=None):
         super(LinearProbeModel, self).__init__()
         # Define these first
         self.num_classes = num_classes
@@ -105,6 +26,7 @@ class LinearProbeModel(nn.Module):
         self.layer_id = layer_id
         self.model = model
         self.TweetyBERT_readout_dims = TweetyBERT_readout_dims
+        self.weight = weight
 
         # Now create the classifier
         if classifier_type == "decoder":
@@ -117,6 +39,7 @@ class LinearProbeModel(nn.Module):
             )
             # self.freeze_transformer_blocks(self.model, freeze_up_to_block=2)
             self.freeze_all_but_classifier(self.model)
+            
         elif classifier_type == "linear_probe":
             self.classifier = nn.Linear(TweetyBERT_readout_dims, self.logits_dim)
 
@@ -172,13 +95,15 @@ class LinearProbeModel(nn.Module):
 
         return logits
         
-    def cross_entropy_loss(self, predictions, targets):
+    def cross_entropy_loss(self, predictions, targets, weight=None):
         if self.num_classes == 1:
             predictions = predictions.squeeze(1)
             targets = targets.float()
             loss_fn = torch.nn.BCEWithLogitsLoss()
         else:
-            loss_fn = torch.nn.CrossEntropyLoss()
+            # Use the provided weight if given, otherwise use self.weight
+            use_weight = weight if weight is not None else self.weight
+            loss_fn = torch.nn.CrossEntropyLoss(weight=use_weight)
         unique_labels = torch.unique(targets)
         total_loss = loss_fn(predictions, targets)
         return total_loss
@@ -231,7 +156,7 @@ class LinearProbeModel(nn.Module):
         return super(LinearProbeModel, self).to(device)
 
 class LinearProbeTrainer():
-    def __init__(self, model, train_loader, test_loader, device=None, lr=1e-2, plotting=False, batches_per_eval=200, desired_total_batches=1e4, patience=8, use_tqdm=True, moving_avg_window=1):
+    def __init__(self, model, train_loader, test_loader, device=None, lr=1e-2, plotting=False, batches_per_eval=200, desired_total_batches=1e4, patience=8, use_tqdm=True, moving_avg_window=1, weight=None):
         self.device = device if device is not None else get_device()
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -245,6 +170,7 @@ class LinearProbeTrainer():
         self.moving_avg_window = moving_avg_window  # Window size for moving average
         self.scaler = GradScaler()  # Initialize GradScaler for mixed precision
         self.train_loss_buffer = []  # Add this line to store recent training losses
+        self.weight = weight
 
     def frame_error_rate(self, y_pred, y_true):
         if y_pred.shape[1] == 1:  # Binary classification
@@ -276,7 +202,7 @@ class LinearProbeTrainer():
                 output = self.model.forward(spectrogram)
                 label = label.argmax(dim=-1)
                 output = output.permute(0, 2, 1)
-                loss = self.model.cross_entropy_loss(predictions=output, targets=label)
+                loss = self.model.cross_entropy_loss(predictions=output, targets=label, weight=self.weight)
 
             total_val_loss = loss.item()
             total_frame_error = self.frame_error_rate(output, label).item()
@@ -311,7 +237,7 @@ class LinearProbeTrainer():
                 output = self.model.forward(spectrogram)
                 label = label.argmax(dim=-1)
                 output = output.permute(0, 2, 1)
-                loss = self.model.cross_entropy_loss(predictions=output, targets=label)
+                loss = self.model.cross_entropy_loss(predictions=output, targets=label, weight=self.weight)
 
             # Use the scaler for backward pass and optimization
             self.scaler.scale(loss).backward()
