@@ -28,3 +28,7 @@ song_detector
 /temp_pretrain
 /temp_song_detection_output
 /temp_decoding
+/grid_search_reports_reuse_umap_1M
+/grid_search_reports_reuse_umap_250k
+/adaptive_search_V4_1M
+/adaptive_search_V4_1M_final
