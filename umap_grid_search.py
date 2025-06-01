@@ -64,18 +64,18 @@ OUTPUT_BASE_DIR.mkdir(parents=True, exist_ok=True)
 # --- Parameter Grids (Core config for pruning = UMAP + HDBSCAN + Smoothing) ---
 UMAP_PARAM_GRID_CONFIG = {
     'n_components': [2, 8, 32],
-    'n_neighbors': [15, 100, 200], # Max 150 for n_neighbors
+    'n_neighbors': [15, 50, 100], 
     'min_dist': [0.1, 0.25],
     'metric': ["euclidean", "cosine"],  # euclidean on raw data, cosine via unit-norm + euclidean
     'random_state': [42],  # Added to ensure brute_force_knn algorithm is used consistently
 }
 HDBSCAN_PARAM_GRID_CONFIG = {
     'min_cluster_size': [500, 2500, 5000],
-    'min_samples': [1, 50, 250]
+    'min_samples': [5, 50]
 }
 # Smoothing is now part of the core config, not applied to results afterwards
 SMOOTHING_PARAM_GRID_CONFIG = {
-    'smoothing_window': [100, 200]
+    'smoothing_window': [0, 100, 200]
 }
 
 # --- Adaptive Search Strategy Parameters ---
@@ -384,8 +384,10 @@ smoothing_windows = [dict(zip(smoothing_param_names, vals)) for vals in smoothin
 CORE_CONFIG_PARAM_NAMES = umap_param_names + hdbscan_param_names  # Only UMAP+HDBSCAN for core configs
 active_core_configs_keys = {config_to_key(cfg, CORE_CONFIG_PARAM_NAMES) for cfg in initial_core_configs_dicts}
 initial_num_core_configs = len(active_core_configs_keys)
+total_results_per_fold = initial_num_core_configs * len(smoothing_windows)
 print(f"Generated {initial_num_core_configs} CORE (UMAP+HDBSCAN) configurations.")
 print(f"Will evaluate {len(smoothing_windows)} smoothing windows for each successful clustering: {[sw['smoothing_window'] for sw in smoothing_windows]}")
+print(f"Total results per fold: {initial_num_core_configs} configs × {len(smoothing_windows)} smoothing = {total_results_per_fold} results")
 
 # --- CSV Checkpointing Setup ---
 checkpoint_csv_path = OUTPUT_BASE_DIR / f"adaptive_search_ALL_RESULTS_{N_DATA_POINTS//1000}k.csv"
@@ -417,21 +419,20 @@ if checkpoint_csv_path.exists():
                         fold_path_str = str(row['fold_path_str'])
                         
                         # Add to performance tracker
-                        if config_key in active_core_configs_keys:  # Only track configs that are still active
-                            core_config_performance_tracker[config_key]['folds_evaluated'].add(fold_path_str)
-                            
-                            # Add score for ranking if it's valid
-                            opt_metric_value = row.get(OPTIMIZATION_METRIC)
-                            if pd.notna(opt_metric_value) and opt_metric_value not in [float('inf'), float('-inf')]:
-                                core_config_performance_tracker[config_key]['scores_for_ranking'].append(float(opt_metric_value))
-                            else:
-                                # Add bad score for failed evaluations
-                                core_config_performance_tracker[config_key]['scores_for_ranking'].append(
-                                    float('inf') if OPTIMIZATION_DIRECTION == 'minimize' else float('-inf')
-                                )
-                            
-                            core_config_performance_tracker[config_key]['folds_evaluated_count'] += 1
-                            configs_resumed += 1
+                        core_config_performance_tracker[config_key]['folds_evaluated'].add(fold_path_str)
+                        
+                        # Add score for ranking if it's valid
+                        opt_metric_value = row.get(OPTIMIZATION_METRIC)
+                        if pd.notna(opt_metric_value) and opt_metric_value not in [float('inf'), float('-inf')]:
+                            core_config_performance_tracker[config_key]['scores_for_ranking'].append(float(opt_metric_value))
+                        else:
+                            # Add bad score for failed evaluations
+                            core_config_performance_tracker[config_key]['scores_for_ranking'].append(
+                                float('inf') if OPTIMIZATION_DIRECTION == 'minimize' else float('-inf')
+                            )
+                        
+                        core_config_performance_tracker[config_key]['folds_evaluated_count'] += 1
+                        configs_resumed += 1
                 
                 except Exception as e_resume:
                     # Skip malformed rows
@@ -544,163 +545,232 @@ for rung_idx, checkpoint_after_this_many_units in enumerate(CHECKPOINT_AFTER_N_U
             print(f"\n      --- Processing Fold: {data_fpath.name} (Unit {current_multi_bird_eval_unit_idx}) ---")
             
             X_gpu_file_for_current_fold = None; current_fold_results_buffer = []
+            fold_results_saved_count = 0  # Track results saved for this fold
             try:
                 data=np.load(data_fpath); X_full=data["predictions"]; gt_full=data["ground_truth_labels"]
                 n_pts=min(N_DATA_POINTS,X_full.shape[0]); X_hd=X_full[:n_pts].astype(np.float32,copy=False); gt_eval=gt_full[:n_pts]
                 ds_indices_smooth=np.zeros(len(gt_eval),dtype=int)
                 X_gpu_file_for_current_fold=cp.asarray(X_hd)
                 
-                # Loop through unique UMAP configurations first
-                # This requires restructuring how active_core_configs_keys are iterated
-                # The existing structure (iterating core_configs, then UMAP, then HDBSCAN) is fine if UMAP model caching per fold is handled
-                # For now, simpler: iterate core configs, UMAP might be re-run if multiple core_configs share UMAP part. This is what script already does.
+                # Add this right after line 556 to debug:
+                print(f"        DEBUG: Current fold path: '{str(data_fpath)}'")
+                print(f"        DEBUG: Sample tracked paths: {list(list(core_config_performance_tracker.values())[0]['folds_evaluated'])[:3] if core_config_performance_tracker else 'None'}")
+
+                # Group active configs by unique UMAP parameters to avoid redundant UMAP computations
+                active_configs_for_this_fold = []
+                for key in active_core_configs_keys:
+                    fold_path_variations = [
+                        str(data_fpath),
+                        data_fpath.name,  # Just filename
+                        str(data_fpath.relative_to(pathlib.Path.cwd())) if data_fpath.is_absolute() else str(data_fpath)
+                    ]
+                    # Check if this config has already been evaluated on this fold
+                    # Look in performance tracker (which includes completed configs from CSV)
+                    if key in core_config_performance_tracker:
+                        already_evaluated = any(path_var in core_config_performance_tracker[key]['folds_evaluated'] for path_var in fold_path_variations)
+                        if not already_evaluated:
+                            active_configs_for_this_fold.append(key)
+                    else:
+                        # Config not in tracker yet, so it needs to be evaluated
+                        active_configs_for_this_fold.append(key)
                 
-                active_configs_for_this_fold = list(active_core_configs_keys) # Process all active configs on this fold
+                # Group configs by UMAP parameters
+                umap_groups = defaultdict(list)
+                for core_config_key in active_configs_for_this_fold:
+                    core_config_dict = dict(core_config_key)
+                    umap_params = {k:v for k,v in core_config_dict.items() if k in UMAP_PARAM_GRID_CONFIG}
+                    umap_key = config_to_key(umap_params, list(UMAP_PARAM_GRID_CONFIG.keys()))
+                    umap_groups[umap_key].append(core_config_key)
+                
                 num_total_configs_for_fold = len(active_configs_for_this_fold)
-
-                for config_idx, core_config_key_to_eval in enumerate(active_configs_for_this_fold):
-                    core_config_dict = dict(core_config_key_to_eval)
-                    current_umap_params = {k:v for k,v in core_config_dict.items() if k in UMAP_PARAM_GRID_CONFIG}
-                    current_hdbscan_params = {k:v for k,v in core_config_dict.items() if k in HDBSCAN_PARAM_GRID_CONFIG}
-
-                    if str(data_fpath) in core_config_performance_tracker[core_config_key_to_eval]['folds_evaluated']:
-                        continue # Already processed this config on this fold in a previous (potentially resumed) run
+                num_unique_umap_configs = len(umap_groups)
+                print(f"        Processing {num_total_configs_for_fold} configs with {num_unique_umap_configs} unique UMAP configurations")
+                
+                config_idx = 0  # Track overall progress
+                
+                # Process each unique UMAP configuration
+                for umap_idx, (umap_key, core_configs_for_this_umap) in enumerate(umap_groups.items()):
+                    umap_params_dict = dict(umap_key)
+                    print(f"\n        UMAP Config {umap_idx+1}/{num_unique_umap_configs}: {umap_params_dict}")
                     
-                    print(f"\n        Processing Core Config {config_idx+1}/{num_total_configs_for_fold} on {data_fpath.name}...")
-                    print(f"          UMAP: {current_umap_params}")
-                    print(f"          HDBSCAN: {current_hdbscan_params}")
-
                     # Prepare data based on metric: normalize for cosine, use raw for euclidean
-                    metric = current_umap_params['metric']
+                    metric = umap_params_dict['metric']
                     if metric == 'cosine':
                         # Use unit-normalized data with euclidean metric (equivalent to cosine)
                         norms = cp.linalg.norm(X_gpu_file_for_current_fold, axis=1, keepdims=True)
                         norms = cp.where(norms == 0, 1, norms)  # Avoid division by zero
                         X_for_umap = X_gpu_file_for_current_fold / norms
-                        umap_params_adjusted = current_umap_params.copy()
+                        umap_params_adjusted = umap_params_dict.copy()
                         umap_params_adjusted['metric'] = 'euclidean'  # Use euclidean on normalized data
                     else:
                         # Use raw data with euclidean metric
                         X_for_umap = X_gpu_file_for_current_fold
-                        umap_params_adjusted = current_umap_params.copy()
+                        umap_params_adjusted = umap_params_dict.copy()
 
-                    t_umap, t_hdb, eval_block_duration_all_smooth = float('nan'), float('nan'), float('nan')
-                    emb_gpu, hdb_labels_np = None, None
+                    # Run UMAP once for this parameter set
+                    t_umap = float('nan')
+                    emb_gpu = None
+                    oom_umap_flag = False
+                    umap_error_msg = None
                     
-                    oom_umap_flag, oom_hdbscan_flag = False, False
-                    current_config_error_msg = None
-                    
-                    try: # UMAP
-                        # Let cuML automatically choose the algorithm (brute force for ≤50K, nn-descent for >50K)
+                    try:
                         n_neighbors_val = umap_params_adjusted['n_neighbors']
-                        print(f"          n_neighbors={n_neighbors_val}, using cuML auto algorithm selection")
+                        print(f"          Running UMAP with n_neighbors={n_neighbors_val}")
                         
                         umap_model = cuml.UMAP(**umap_params_adjusted, init="spectral", n_epochs=200)
-                        
                         t_s=time.time(); emb_gpu=umap_model.fit_transform(X_for_umap); t_umap=time.time()-t_s
                         cumulative_umap_time += t_umap; num_umap_runs_timed += 1
-                        del umap_model; gc.collect()  # Explicit cleanup of UMAP model
+                        del umap_model; gc.collect()
+                        print(f"          UMAP completed in {t_umap:.1f}s")
                     except Exception as e_umap:
                         error_str=str(e_umap); oom_umap_flag="out_of_memory" in error_str.lower() or "bad_alloc" in error_str.lower()
-                        current_config_error_msg = f"UMAP Error{' (OOM)' if oom_umap_flag else ''}: {error_str}"
-                        print(f"          {current_config_error_msg}")
-                        if 'umap_model' in locals(): del umap_model; gc.collect()  # Cleanup even on error
-                        if emb_gpu is not None: del emb_gpu; cp.get_default_memory_pool().free_all_blocks() # Should be None here
-
-                    if current_config_error_msg is None: # Only proceed to HDBSCAN if UMAP was successful
-                        try: # HDBSCAN
-                            hdb_model=cuml.HDBSCAN(**current_hdbscan_params, metric='euclidean',prediction_data=False)
-                            t_s=time.time(); hdb_labels_gpu=hdb_model.fit_predict(emb_gpu); hdb_labels_np=cp.asnumpy(hdb_labels_gpu); t_hdb=time.time()-t_s
-                            del hdb_labels_gpu
-                            cumulative_hdbscan_time += t_hdb; num_hdbscan_runs_timed += 1
-                            del hdb_model; gc.collect()  # Explicit cleanup of HDBSCAN model
-                        except Exception as e_hdb:
-                            error_str=str(e_hdb); oom_hdbscan_flag="out_of_memory" in error_str.lower() or "bad_alloc" in error_str.lower()
-                            current_config_error_msg = f"HDBSCAN Error{' (OOM)' if oom_hdbscan_flag else ''}: {error_str}"
-                            print(f"          {current_config_error_msg}")
-                            if 'hdb_model' in locals(): del hdb_model; gc.collect()  # Cleanup even on error
+                        umap_error_msg = f"UMAP Error{' (OOM)' if oom_umap_flag else ''}: {error_str}"
+                        print(f"          {umap_error_msg}")
+                        if 'umap_model' in locals(): del umap_model; gc.collect()
+                        if emb_gpu is not None: del emb_gpu; cp.get_default_memory_pool().free_all_blocks()
+                        emb_gpu = None
                     
-                    if emb_gpu is not None: del emb_gpu; cp.get_default_memory_pool().free_all_blocks()
-
-                    # --- Evaluate ALL smoothing windows for this UMAP+HDBSCAN combination ---
-                    if current_config_error_msg is None and hdb_labels_np is not None:
-                        eval_block_start_time = time.time()
+                    # Process all HDBSCAN configs that use this UMAP embedding
+                    for core_config_key_to_eval in core_configs_for_this_umap:
+                        config_idx += 1
+                        core_config_dict = dict(core_config_key_to_eval)
+                        current_hdbscan_params = {k:v for k,v in core_config_dict.items() if k in HDBSCAN_PARAM_GRID_CONFIG}
                         
-                        # Try all smoothing windows on the same clustering results
-                        for smoothing_config in smoothing_windows:
-                            sm_win_val = smoothing_config['smoothing_window']
-                            smoothed_preds = basic_majority_vote(hdb_labels_np, sm_win_val) if sm_win_val > 0 else hdb_labels_np.copy()
-                            cm = ClusteringMetrics(gt=gt_eval, pred=smoothed_preds, silence=SILENCE_LABEL_VALUE)
-                            stats = cm.stats()
-                            opt_metric_val = getattr(cm, OPTIMIZATION_METRIC.lower().replace(" ", "_"))()
+                        print(f"\n          Processing Core Config {config_idx}/{num_total_configs_for_fold}")
+                        print(f"            HDBSCAN: {current_hdbscan_params}")
+
+                        t_hdb, eval_block_duration_all_smooth = float('nan'), float('nan')
+                        hdb_labels_np = None
+                        oom_hdbscan_flag = False
+                        current_config_error_msg = umap_error_msg  # Inherit UMAP error if any
+                        
+                        if current_config_error_msg is None and emb_gpu is not None:
+                            try: # HDBSCAN
+                                hdb_model=cuml.HDBSCAN(**current_hdbscan_params, metric='euclidean',prediction_data=False)
+                                t_s=time.time(); hdb_labels_gpu=hdb_model.fit_predict(emb_gpu); hdb_labels_np=cp.asnumpy(hdb_labels_gpu); t_hdb=time.time()-t_s
+                                del hdb_labels_gpu
+                                cumulative_hdbscan_time += t_hdb; num_hdbscan_runs_timed += 1
+                                del hdb_model; gc.collect()
+                            except Exception as e_hdb:
+                                error_str=str(e_hdb); oom_hdbscan_flag="out_of_memory" in error_str.lower() or "bad_alloc" in error_str.lower()
+                                current_config_error_msg = f"HDBSCAN Error{' (OOM)' if oom_hdbscan_flag else ''}: {error_str}"
+                                print(f"            {current_config_error_msg}")
+                                if 'hdb_model' in locals(): del hdb_model; gc.collect()
+
+                        # --- Evaluate ALL smoothing windows for this UMAP+HDBSCAN combination ---
+                        if current_config_error_msg is None and hdb_labels_np is not None:
+                            eval_block_start_time = time.time()
                             
-                            # Create full config dict including smoothing window
-                            full_config_dict = {**core_config_dict, **smoothing_config}
+                            # Try all smoothing windows on the same clustering results
+                            for smoothing_config in smoothing_windows:
+                                sm_win_val = smoothing_config['smoothing_window']
+                                smoothed_preds = basic_majority_vote(hdb_labels_np, sm_win_val) if sm_win_val > 0 else hdb_labels_np.copy()
+                                cm = ClusteringMetrics(gt=gt_eval, pred=smoothed_preds, silence=SILENCE_LABEL_VALUE)
+                                stats = cm.stats()
+                                opt_metric_val = getattr(cm, OPTIMIZATION_METRIC.lower().replace(" ", "_"))()
+                                
+                                # Create full config dict including smoothing window
+                                full_config_dict = {**core_config_dict, **smoothing_config}
+                                
+                                # Create result record
+                                result_record = {
+                                    "fold_path_str": str(data_fpath), **full_config_dict,
+                                    OPTIMIZATION_METRIC: opt_metric_val,
+                                    "v_measure": cm.v_measure(), "total_fer": cm.total_fer(), "matched_fer": cm.matched_fer(), "macro_fer": cm.macro_fer(),
+                                    "n_gt_types":stats['n_gt_types'], "n_pred_clusters":stats['n_pred_types'], "pct_types_mapped":stats['pct_types_mapped'], "pct_frames_mapped":stats['pct_frames_mapped'],
+                                    "time_umap":t_umap, "time_hdbscan":t_hdb, "time_eval_block_all_smoothing":float('nan'), # Will be filled after all smoothing
+                                    "oom_flag_umap":oom_umap_flag, "oom_flag_hdbscan":oom_hdbscan_flag, "error_message": None }
+                                
+                                # Print result to terminal
+                                print(f"            ✓ Smoothing {sm_win_val}: {OPTIMIZATION_METRIC}={opt_metric_val:.4f}, v_measure={cm.v_measure():.4f}, clusters={stats['n_pred_types']}")
+                                
+                                # Add to buffer for timing update and ranking
+                                current_fold_results_buffer.append(result_record)
                             
-                            current_fold_results_buffer.append({
-                                "fold_path_str": str(data_fpath), **full_config_dict,
-                                OPTIMIZATION_METRIC: opt_metric_val,
-                                "v_measure": cm.v_measure(), "total_fer": cm.total_fer(), "matched_fer": cm.matched_fer(), "macro_fer": cm.macro_fer(),
-                                "n_gt_types":stats['n_gt_types'], "n_pred_clusters":stats['n_pred_types'], "pct_types_mapped":stats['pct_types_mapped'], "pct_frames_mapped":stats['pct_frames_mapped'],
-                                "time_umap":t_umap, "time_hdbscan":t_hdb, "time_eval_block_all_smoothing":float('nan'), # Will be filled after all smoothing
-                                "oom_flag_umap":oom_umap_flag, "oom_flag_hdbscan":oom_hdbscan_flag, "error_message": None })
-                        
-                        eval_block_duration_all_smooth = time.time() - eval_block_start_time
-                        # Update timing for all smoothing window results from this config
-                        for i in range(len(smoothing_windows)):
-                            current_fold_results_buffer[-(i+1)]['time_eval_block_all_smoothing'] = eval_block_duration_all_smooth
-                        
-                        cumulative_eval_block_time += eval_block_duration_all_smooth; num_eval_blocks_timed += 1
-                        
-                        # For ranking, use the best smoothing window result for this core config
-                        best_metric_for_ranking = min([current_fold_results_buffer[-(i+1)][OPTIMIZATION_METRIC] for i in range(len(smoothing_windows))]) if OPTIMIZATION_DIRECTION == 'minimize' else max([current_fold_results_buffer[-(i+1)][OPTIMIZATION_METRIC] for i in range(len(smoothing_windows))])
-                        core_config_performance_tracker[core_config_key_to_eval]['scores_for_ranking'].append(best_metric_for_ranking)
+                            eval_block_duration_all_smooth = time.time() - eval_block_start_time
+                            # Update timing for all smoothing window results from this config
+                            for i in range(len(smoothing_windows)):
+                                current_fold_results_buffer[-(i+1)]['time_eval_block_all_smoothing'] = eval_block_duration_all_smooth
+                            
+                            # Save all smoothing results for this config immediately
+                            save_results_to_csv(current_fold_results_buffer[-len(smoothing_windows):], checkpoint_csv_path, not has_csv_header_been_written)
+                            has_csv_header_been_written = True
+                            fold_results_saved_count += len(smoothing_windows)
+                            
+                            cumulative_eval_block_time += eval_block_duration_all_smooth; num_eval_blocks_timed += 1
+                            
+                            # For ranking, use the best smoothing window result for this core config
+                            best_metric_for_ranking = min([current_fold_results_buffer[-(i+1)][OPTIMIZATION_METRIC] for i in range(len(smoothing_windows))]) if OPTIMIZATION_DIRECTION == 'minimize' else max([current_fold_results_buffer[-(i+1)][OPTIMIZATION_METRIC] for i in range(len(smoothing_windows))])
+                            core_config_performance_tracker[core_config_key_to_eval]['scores_for_ranking'].append(best_metric_for_ranking)
 
-                    else: # UMAP or HDBSCAN error, or HDBSCAN produced no labels
-                        if hdb_labels_np is None and current_config_error_msg is None : current_config_error_msg = "HDBSCAN produced no labels"
+                        else: # UMAP or HDBSCAN error, or HDBSCAN produced no labels
+                            if hdb_labels_np is None and current_config_error_msg is None : current_config_error_msg = "HDBSCAN produced no labels"
+                            
+                            # Log error for all smoothing windows
+                            error_results = []
+                            for smoothing_config in smoothing_windows:
+                                full_config_dict = {**core_config_dict, **smoothing_config}
+                                error_record = {
+                                    "fold_path_str": str(data_fpath), **full_config_dict,
+                                    OPTIMIZATION_METRIC: float('inf') if OPTIMIZATION_DIRECTION == 'minimize' else float('-inf'),
+                                    "v_measure": float('nan'), "total_fer": float('nan'), "matched_fer": float('nan'), "macro_fer": float('nan'),
+                                    "n_gt_types":float('nan'), "n_pred_clusters":float('nan'), "pct_types_mapped":float('nan'), "pct_frames_mapped":float('nan'),
+                                    "time_umap":t_umap, "time_hdbscan":t_hdb, "time_eval_block_all_smoothing":float('nan'),
+                                    "oom_flag_umap":oom_umap_flag, "oom_flag_hdbscan":oom_hdbscan_flag, "error_message": current_config_error_msg }
+                                
+                                # Print error to terminal
+                                print(f"            ✗ Smoothing {smoothing_config['smoothing_window']}: ERROR - {current_config_error_msg}")
+                                
+                                error_results.append(error_record)
+                                current_fold_results_buffer.append(error_record)
+                            
+                            # Save error results immediately
+                            save_results_to_csv(error_results, checkpoint_csv_path, not has_csv_header_been_written)
+                            has_csv_header_been_written = True
+                            fold_results_saved_count += len(error_results)
+                            
+                            core_config_performance_tracker[core_config_key_to_eval]['scores_for_ranking'].append(float('inf') if OPTIMIZATION_DIRECTION == 'minimize' else float('-inf'))
                         
-                        # Log error for all smoothing windows
-                        for smoothing_config in smoothing_windows:
-                            full_config_dict = {**core_config_dict, **smoothing_config}
-                            current_fold_results_buffer.append({
-                                "fold_path_str": str(data_fpath), **full_config_dict,
-                                OPTIMIZATION_METRIC: float('inf') if OPTIMIZATION_DIRECTION == 'minimize' else float('-inf'),
-                                "v_measure": float('nan'), "total_fer": float('nan'), "matched_fer": float('nan'), "macro_fer": float('nan'),
-                                "n_gt_types":float('nan'), "n_pred_clusters":float('nan'), "pct_types_mapped":float('nan'), "pct_frames_mapped":float('nan'),
-                                "time_umap":t_umap, "time_hdbscan":t_hdb, "time_eval_block_all_smoothing":float('nan'),
-                                "oom_flag_umap":oom_umap_flag, "oom_flag_hdbscan":oom_hdbscan_flag, "error_message": current_config_error_msg })
-                        
-                        core_config_performance_tracker[core_config_key_to_eval]['scores_for_ranking'].append(float('inf') if OPTIMIZATION_DIRECTION == 'minimize' else float('-inf'))
+                        core_config_performance_tracker[core_config_key_to_eval]['folds_evaluated_count'] += 1
+                        core_config_performance_tracker[core_config_key_to_eval]['folds_evaluated'].add(str(data_fpath))
                     
-                    core_config_performance_tracker[core_config_key_to_eval]['folds_evaluated_count'] += 1
-                    core_config_performance_tracker[core_config_key_to_eval]['folds_evaluated'].add(str(data_fpath)) # Track specific fold path
+                    # Clean up UMAP embedding after processing all HDBSCAN configs for this UMAP
+                    if emb_gpu is not None: 
+                        del emb_gpu; cp.get_default_memory_pool().free_all_blocks()
+                        emb_gpu = None
                     
-                    # --- Per-config Time Estimation Update & Print ---
-                    if num_eval_blocks_timed > 0 : # Check if we have any successful full evaluations yet
+                    # Print summary for this UMAP group
+                    configs_in_this_group = len(core_configs_for_this_umap)
+                    results_in_this_group = configs_in_this_group * len(smoothing_windows)
+                    print(f"          ✓ UMAP group completed: {configs_in_this_group} configs × {len(smoothing_windows)} smoothing = {results_in_this_group} results saved")
+                    print(f"          Progress: {fold_results_saved_count}/{num_total_configs_for_fold * len(smoothing_windows)} results saved for {data_fpath.name}")
+                    
+                    # --- Per-UMAP-group Time Estimation Update & Print ---
+                    if num_eval_blocks_timed > 0:
                         avg_t_u_current = (cumulative_umap_time / num_umap_runs_timed) if num_umap_runs_timed > 0 else DEFAULT_AVG_T_UMAP
                         avg_t_h_current = (cumulative_hdbscan_time / num_hdbscan_runs_timed) if num_hdbscan_runs_timed > 0 else DEFAULT_AVG_T_HDBSCAN
                         avg_t_s_current = (cumulative_eval_block_time / num_eval_blocks_timed) if num_eval_blocks_timed > 0 else DEFAULT_AVG_T_SMOOTHING_BLOCK
-                        avg_total_per_cfg_fold = avg_t_u_current + avg_t_h_current + avg_t_s_current
                         
-                        remaining_cfgs_this_fold = num_total_configs_for_fold - (config_idx + 1)
-                        est_time_remaining_this_fold_sec = remaining_cfgs_this_fold * avg_total_per_cfg_fold
+                        remaining_umap_groups = len(umap_groups) - (umap_idx + 1)
+                        remaining_configs_this_fold = num_total_configs_for_fold - config_idx
                         
-                        # Estimate for remaining folds in *this multi-bird unit*
+                        # Estimate remaining time for this fold
+                        est_time_remaining_this_fold_sec = remaining_umap_groups * avg_t_u_current + remaining_configs_this_fold * (avg_t_h_current + avg_t_s_current)
+                        
+                        # Estimate for remaining folds in this multi-bird unit
                         remaining_folds_in_unit = len(current_batch_of_folds) - (current_batch_of_folds.index(data_fpath) + 1)
-                        est_time_remaining_unit_sec = remaining_folds_in_unit * num_total_configs_for_fold * avg_total_per_cfg_fold
+                        est_time_remaining_unit_sec = remaining_folds_in_unit * (num_unique_umap_configs * avg_t_u_current + num_total_configs_for_fold * (avg_t_h_current + avg_t_s_current))
                         
                         total_rem_sec = est_time_remaining_this_fold_sec + est_time_remaining_unit_sec
-                        print(f"          Est. time remaining for current batch of {len(current_batch_of_folds)} folds: {total_rem_sec / 60:.1f} mins")
-
+                        print(f"          Est. time remaining for current batch: {total_rem_sec / 60:.1f} mins")
 
             finally: # For the fold processing try-block
                 if X_gpu_file_for_current_fold is not None: del X_gpu_file_for_current_fold; X_gpu_file_for_current_fold = None
                 cp.get_default_memory_pool().free_all_blocks()
                 gc.collect() # More aggressive garbage collection
-                if current_fold_results_buffer:
-                    save_results_to_csv(current_fold_results_buffer, checkpoint_csv_path, not has_csv_header_been_written)
-                    has_csv_header_been_written = True
-                    current_fold_results_buffer = [] # Clear after saving
+                # Results are now saved immediately after each config, no need for fold-level batching
+                current_fold_results_buffer = [] # Clear buffer
+                print(f"      ✓ Fold {data_fpath.name} completed: {fold_results_saved_count} total results saved to CSV")
 
         # Update fold indices for the folds processed in this unit
         if current_multi_bird_eval_unit_idx <= N_INITIAL_BURN_IN_UNITS:
