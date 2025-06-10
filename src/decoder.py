@@ -4,16 +4,16 @@ import shutil
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from data_class import SongDataSet_Image, CollateFunction
-from utils import load_model, get_device
-from linear_probe import LinearProbeModel, LinearProbeTrainer
+from .data_class import SongDataSet_Image, CollateFunction
+from .utils import load_model, get_device
+from .linear_probe import LinearProbeModel, LinearProbeTrainer
 import argparse
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from post_processing import majority_vote, fill_noise_with_nearest_label
+from .post_processing import majority_vote, fill_noise_with_nearest_label
 
 class TweetyBertClassifier:
-    def __init__(self, model_dir, linear_decoder_dir, context_length=1000, weight=None):
+    def __init__(self, model_dir, linear_decoder_dir, context_length=1000, weight=None, classifier_type="decoder"):
         self.device = get_device()
         self.tweety_bert_model = self.load_tweety_bert(model_dir)
         self.linear_decoder_dir = linear_decoder_dir
@@ -24,6 +24,7 @@ class TweetyBertClassifier:
         self.data_file = None
         self.context_length = context_length
         self.weight = weight
+        self.classifier_type = classifier_type
 
         # Delete existing decoder directory if it exists
         if os.path.exists(linear_decoder_dir):
@@ -47,8 +48,8 @@ class TweetyBertClassifier:
         # Replace noise labels (-1) with the closest non-noise label using post_processing
         labels = fill_noise_with_nearest_label(labels)
 
-        self.num_classes = len(np.unique(labels))
-        print(f"Number of classes: {self.num_classes}")
+        # to account for one hot encoding
+        self.num_classes = np.max(labels) + 1
 
         list_of_data = [
             (labels[i:i+self.context_length], specs[i:i+self.context_length], vocalization[i:i+self.context_length])
@@ -93,7 +94,7 @@ class TweetyBertClassifier:
             layer_num=-1, 
             layer_id="attention_output", 
             TweetyBERT_readout_dims=196,
-            classifier_type="decoder",
+            classifier_type=self.classifier_type,
             weight=self.weight
         ).to(self.device)
 
@@ -299,6 +300,7 @@ if __name__ == "__main__":
     parser.add_argument("--experiment_name", type=str, required=True, help="Name of the experiment")
     parser.add_argument("--bird_name", type=str, required=True, help="Name of the bird")
     parser.add_argument("--generate_loss_plot", action="store_true", default=False, help="Generate loss plot during training")
+    parser.add_argument("--classifier_type", type=str, default="decoder", choices=["decoder", "linear_probe"], help="Type of classifier to use")
 
     args = parser.parse_args()
 
@@ -308,7 +310,7 @@ if __name__ == "__main__":
     linear_decoder_dir = f"experiments/{bird_name}_linear_decoder"
     data_file = f"files/{bird_name}.npz"
 
-    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir)
+    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir, classifier_type=args.classifier_type)
     classifier.prepare_data(data_file)
     classifier.create_dataloaders()
     classifier.create_classifier()

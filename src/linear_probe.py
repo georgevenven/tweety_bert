@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import time  # Add this import at the top of the file
-from utils import get_device
+from .utils import get_device
 
 class LinearProbeModel(nn.Module):
     def __init__(self, num_classes, model_type="neural_net", model=None, freeze_layers=True, layer_num=-1, layer_id="feed_forward_output_relu", TweetyBERT_readout_dims=2, classifier_type="decoder", weight=None):

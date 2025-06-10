@@ -32,7 +32,7 @@ class npz_info:
             print(f"Error loading NPZ file: {str(e)}")
             raise
 
-info = npz_info('/media/george-vengrovski/Desk SSD/TweetyBERT_Zenedo/seasonality_npz_files/5494_Seasonality_Final.npz')
+info = npz_info('/home/george-vengrovski/Documents/projects/tweety_bert_paper/files_with_teacher_labels/llb3_fold1.npz')
 
 
 
