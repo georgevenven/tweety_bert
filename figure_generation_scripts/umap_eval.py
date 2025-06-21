@@ -974,8 +974,8 @@ if __name__ == "__main__":
     
     # Smoothing windows to test
     # (Example range: 0, 252, 504, etc.)
-    #window_sizes = list(range(0, 501, 25))
-    window_sizes = list(range(200, 201, 1))
+    window_sizes = list(range(0, 501, 25))
+  
     
     for wsize in window_sizes:
         window_dirs[wsize] = os.path.join(output_dir, f'window_{wsize}')

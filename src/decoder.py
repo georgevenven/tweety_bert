@@ -91,7 +91,7 @@ class TweetyBertClassifier:
             model_type="neural_net", 
             model=self.tweety_bert_model, 
             freeze_layers=True, 
-            layer_num=-1, 
+            layer_num=-2, 
             layer_id="attention_output", 
             TweetyBERT_readout_dims=196,
             classifier_type=self.classifier_type,
