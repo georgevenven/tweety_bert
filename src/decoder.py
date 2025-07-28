@@ -21,16 +21,22 @@ def majority_vote(arr, window_size):
     return result
 
 class TweetyBertClassifier:
-    def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
+    def __init__(self, model_dir, linear_decoder_dir, context_length=None):
         self.device = get_device()
         self.tweety_bert_model = self.load_tweety_bert(model_dir)
+        
+        # Use the model's context length if not explicitly provided
+        if context_length is None:
+            self.context_length = self.tweety_bert_model.context
+        else:
+            self.context_length = context_length
+            
         self.linear_decoder_dir = linear_decoder_dir
         self.train_dir = os.path.join(linear_decoder_dir, "train")
         self.test_dir = os.path.join(linear_decoder_dir, "test")
         self.num_classes = None
         self.model_dir = model_dir
         self.data_file = None
-        self.context_length = context_length
 
         # Delete existing decoder directory if it exists
         if os.path.exists(linear_decoder_dir):
