@@ -6,6 +6,7 @@ import shutil
 import sys
 import random
 import glob
+import json
 from pathlib import Path
 import multiprocessing # To determine nproc for spectrogram generation
 
@@ -72,7 +73,7 @@ def main(args):
     temp_dir = project_root / "temp_decode"
     # Define experiment dir path using model name
     experiment_dir = project_root / "experiments" / args.model_name
-
+    
     # Script paths
     copy_script_path = project_root / "scripts" / "copy_files_from_wavdir_to_multiple_event_dirs.py"
     spec_gen_script_path = project_root / "src" / "spectogram_generator.py"
@@ -227,7 +228,8 @@ def main(args):
         sys.executable,
         str(decoder_script_path),
         "--experiment_name", args.model_name,
-        "--bird_name", args.bird_name
+        "--bird_name", args.bird_name,
+        "--context_length", str(args.context_umap)
     ]
     run_command(decoder_cmd)
 
@@ -267,7 +269,9 @@ if __name__ == "__main__":
     parser.add_argument("--state_finding_algorithm_umap", type=str, default="HDBSCAN",
                         help="Algorithm for state finding in UMAP (e.g., HDBSCAN).")
     parser.add_argument("--context_umap", type=int, default=1000,
-                        help="Context size used for UMAP generation.")
+                        help="Context size used for UMAP generation and decoder training.")
+    # TODO: Rename --context_umap to --context_length for clarity, as this parameter 
+    # is used for both UMAP generation and decoder sequence length
 
     # Single Mode specific arguments
     parser.add_argument("--num_random_files_spec", type=int, default=1000,
