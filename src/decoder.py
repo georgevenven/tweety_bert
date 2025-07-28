@@ -21,22 +21,16 @@ def majority_vote(arr, window_size):
     return result
 
 class TweetyBertClassifier:
-    def __init__(self, model_dir, linear_decoder_dir, context_length=None):
+    def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
         self.device = get_device()
         self.tweety_bert_model = self.load_tweety_bert(model_dir)
-        
-        # Use the model's context length if not explicitly provided
-        if context_length is None:
-            self.context_length = self.tweety_bert_model.context
-        else:
-            self.context_length = context_length
-            
         self.linear_decoder_dir = linear_decoder_dir
         self.train_dir = os.path.join(linear_decoder_dir, "train")
         self.test_dir = os.path.join(linear_decoder_dir, "test")
         self.num_classes = None
         self.model_dir = model_dir
         self.data_file = None
+        self.context_length = context_length
 
         # Delete existing decoder directory if it exists
         if os.path.exists(linear_decoder_dir):
@@ -321,6 +315,7 @@ if __name__ == "__main__":
     parser.add_argument("--experiment_name", type=str, required=True, help="Name of the experiment")
     parser.add_argument("--bird_name", type=str, required=True, help="Name of the bird")
     parser.add_argument("--generate_loss_plot", action="store_true", default=False, help="Generate loss plot during training")
+    parser.add_argument("--context_length", type=int, default=1000, help="Context length for sequence processing")
 
     args = parser.parse_args()
 
@@ -330,7 +325,7 @@ if __name__ == "__main__":
     linear_decoder_dir = f"experiments/{bird_name}_linear_decoder"
     data_file = f"files/{bird_name}.npz"
 
-    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir)
+    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir, context_length=args.context_length)
     classifier.prepare_data(data_file)
     classifier.create_dataloaders()
     classifier.create_classifier()

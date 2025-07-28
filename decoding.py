@@ -6,6 +6,7 @@ import shutil
 import sys
 import random
 import glob
+import json
 from pathlib import Path
 import multiprocessing # To determine nproc for spectrogram generation
 
@@ -37,6 +38,23 @@ def run_command(command, check=True, cwd=None):
     except Exception as e:
         print(f"An unexpected error occurred: {e}", file=sys.stderr)
         sys.exit(1)
+
+# --- Function to load model context length from config ---
+def get_model_context_length(experiment_dir):
+    """Load the model's context length from the config.json file."""
+    config_path = experiment_dir / "config.json"
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        context_length = config.get('context', 1000)  # Default to 1000 if not found
+        print(f"Loaded model context length: {context_length}")
+        return context_length
+    except FileNotFoundError:
+        print(f"Warning: Config file not found at {config_path}. Using default context length 1000.")
+        return 1000
+    except Exception as e:
+        print(f"Warning: Error reading config file {config_path}: {e}. Using default context length 1000.")
+        return 1000
 
 # --- Function to collect all files (needed for single mode random selection) ---
 def collect_all_files(input_dir, extension=".wav"):
@@ -72,6 +90,9 @@ def main(args):
     temp_dir = project_root / "temp_decode"
     # Define experiment dir path using model name
     experiment_dir = project_root / "experiments" / args.model_name
+    
+    # Load model context length from config
+    model_context_length = get_model_context_length(experiment_dir)
 
     # Script paths
     copy_script_path = project_root / "scripts" / "copy_files_from_wavdir_to_multiple_event_dirs.py"
@@ -227,7 +248,8 @@ def main(args):
         sys.executable,
         str(decoder_script_path),
         "--experiment_name", args.model_name,
-        "--bird_name", args.bird_name
+        "--bird_name", args.bird_name,
+        "--context_length", str(model_context_length)
     ]
     run_command(decoder_cmd)
 
