@@ -266,7 +266,7 @@ if __name__ == "__main__":
                         help="Use raw spectrograms for UMAP instead of model embeddings.")
     parser.add_argument("--state_finding_algorithm_umap", type=str, default="HDBSCAN",
                         help="Algorithm for state finding in UMAP (e.g., HDBSCAN).")
-    parser.add_argument("--context_umap", type=int, default=1000,
+    parser.add_argument("--context_umap", type=int, default=500,
                         help="Context size used for UMAP generation.")
 
     # Single Mode specific arguments

@@ -46,7 +46,7 @@ class CustomMultiHeadAttention(nn.Module):
         if self.pos_enc_type == "relative":
             seq_len = Q.size(1)
             if seq_len > self.max_len:
-                raise ValueError("Sequence length exceeds model capacity")
+                raise ValueError(f"Sequence length ({seq_len}) exceeds model capacity ({self.max_len}). Use --context_umap {self.max_len} or smaller.")
 
             # Compute relative positional encodings with skew operation
             Er = self.Er[:seq_len, :]
