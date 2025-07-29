@@ -11,6 +11,7 @@ from glob import glob # Import glob to find the generated JSON files
 # --- Configuration ---
 SONG_DETECTOR_REPO = "https://github.com/georgevenven/tweety_net_song_detector.git"
 SONG_DETECTOR_DIR_NAME = "song_detector" # Local directory name for the repo
+DEFAULT_MODEL = "canary_fall_nerve_llb-.01" # Default model to use for song detection
 
 # --- Helper Function to Run Commands ---
 def run_command(command, check=True, cwd=None, capture_output=False):
@@ -69,6 +70,19 @@ def main(args):
         print(f"Error: Merge script not found at '{merge_script_path}'.", file=sys.stderr)
         sys.exit(1)
 
+    # --- Validate Model Path ---
+    model_path = song_detector_path / "files" / args.model
+    if not model_path.is_dir():
+        print(f"Error: Model directory '{args.model}' not found at '{model_path}'.", file=sys.stderr)
+        print(f"Available models in {song_detector_path}/files/:", file=sys.stderr)
+        if song_detector_path.is_dir():
+            files_dir = song_detector_path / "files"
+            if files_dir.is_dir():
+                for model_dir in files_dir.iterdir():
+                    if model_dir.is_dir():
+                        print(f"  - {model_dir.name}", file=sys.stderr)
+        sys.exit(1)
+
     # --- Ensure Output Directory Exists ---
     output_json_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -91,6 +105,7 @@ def main(args):
 
     # --- Run Song Detection ---
     print(f"\n--- Running Song Detection on '{input_dir_path}' ---")
+    print(f"Using model: '{args.model}'")
     print(f"Output will be saved to: '{output_json_path}'")
 
     temp_detector_output_dir = project_root / "temp_song_detection_output"
@@ -106,7 +121,8 @@ def main(args):
         str(detector_inference_script),
         "--mode", "local_dir",
         "--input", str(input_dir_path),
-        "--output", str(temp_detector_output_dir) # Detector saves individual files here
+        "--output", str(temp_detector_output_dir), # Detector saves individual files here
+        "--model", str(song_detector_path / "files" / args.model) # Add model path
     ]
     if args.plot_spec:
         detection_cmd.append("--plot_spec")
@@ -159,6 +175,8 @@ if __name__ == "__main__":
                         help="Path to the directory containing WAV files to process.")
     parser.add_argument("--output_json", type=str, default="files/song_detection.json",
                         help="Path to save the final merged JSON output file.")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL,
+                        help="Model to use for detection (e.g., 'bengalese_finch_test', 'canary_fall_nerve_llb-.01').")
     parser.add_argument("--plot_spec", action="store_true",
                         help="If set, plot spectrograms during detection.")
 
