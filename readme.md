@@ -39,6 +39,9 @@ tweety_bert/
 ├── imgs/                         # Stores generated images, plots, and visualizations [Output directory]
 └── results/                      # Stores output data from model computations and analysis [Output directory]
 ├── detect_song.py                # Python script for running song detection
+├── detect_song_all_birds.py      # Python script for batch song detection on multiple birds
+├── full_tweetybert_processing.py # Complete pipeline wrapper (song detection → training → decoding)
+├── config_files/                 # Configuration files for the full pipeline
 ```
 * **Root Directory:** Contains the main workflow scripts (`pretrain.py`, `decoding.py`, `run_inference.py`) and this README.
 * **`figure_generation_scripts/`**: Contains Python scripts specifically designed to reproduce the figures shown in the associated publication. Edit paths within these scripts as needed.
@@ -50,6 +53,8 @@ tweety_bert/
 * **`imgs/`**: Default output directory for generated images, such as UMAP plots, spectrogram visualizations, and other figures.
 * **`results/`**: Default output directory for non-image results, like performance metrics (`.txt`, `.csv`).
 * **`detect_song.py`**: Python script for running song detection.
+* **`detect_song_all_birds.py`**: Python script for batch song detection on multiple birds.
+* **`full_tweetybert_processing.py`**: Complete pipeline wrapper that orchestrates the entire TweetyBERT workflow using YAML configuration files.
 
 ## 🚀 Installation & Environment Setup
 
@@ -161,6 +166,127 @@ python detect_song.py --input_dir "/path/to/your/wav/files"
 * It will then process all `.wav` files found in the specified `--input_dir` (including subdirectories).
 * The output is a single JSON file (defaulting to `files/song_detection.json`) containing entries for each processed WAV file, indicating detected song segments.
 * **Use the path to this generated JSON file** for the `--song_detection_json_path` argument when running `pretrain.py`, `decoding.py`, or `run_inference.py`.
+
+### Batch Song Detection for Multiple Birds
+
+For processing multiple birds at once, use `detect_song_all_birds.py`:
+
+**Example:**
+```bash
+python detect_song_all_birds.py --parent_dir "/path/to/bird/folders" --output_dir "files"
+```
+
+**Features:**
+* **Automatic bird folder detection**: Finds all folders containing letters and numbers (e.g., USA5288, LLB16) in the parent directory
+* **Individual JSON files**: Creates separate song detection JSON files for each bird (e.g., `USA5288_song_detection.json`, `LLB16_song_detection.json`)
+* **Comprehensive logging**: Logs all operations with timestamps to `logging/detect_song_all_birds_YYYYMMDD_HHMMSS.log`
+* **Skip existing files**: By default, skips birds that already have song detection JSON files (use `--overwrite_song` to force regeneration)
+* **Progress tracking**: Shows real-time progress and summary statistics
+* **Error handling**: Continues processing other birds if one fails, with detailed error reporting
+
+**Additional options:**
+* `--plot_spec`: Generate spectrogram plots during detection
+* `--overwrite_song`: Force regeneration of existing song detection JSON files
+* `--output_dir`: Specify output directory (default: `files/`)
+
+**Example with options:**
+```bash
+python detect_song_all_birds.py \
+    --parent_dir "/path/to/bird/folders" \
+    --output_dir "files" \
+    --plot_spec \
+    --overwrite_song
+```
+
+### **`full_tweetybert_processing.py` - Complete Pipeline Wrapper**
+
+This script orchestrates the **entire TweetyBERT pipeline** from song detection through model training and decoding. It uses YAML configuration files to manage all parameters, making it easy to run experiments with different settings.
+
+**Features:**
+* **Single Mode**: Process one folder (all songs recursively from that folder)
+  - Useful for training models with multiple birds' data for robustness
+  - Creates one song detection JSON for all songs in the folder
+* **Batch Mode**: Process parent folder with multiple child folders (each child folder separately)
+  - Useful for processing multiple birds individually
+  - Creates separate song detection JSON for each child folder
+* **YAML Configuration**: All parameters managed through easy-to-edit YAML files
+* **Smart Overwrite/Skip**: Automatically skips steps if outputs already exist (configurable)
+* **Comprehensive Logging**: Detailed logging with timestamps for each step
+* **Error Handling**: Robust error handling with detailed error messages
+* **Summary Reports**: Generates summary JSON files with experiment results
+
+**Usage:**
+```bash
+python full_tweetybert_processing.py --config config_files/full_pipeline_config.yaml
+```
+
+**Configuration File Structure:**
+The script uses YAML configuration files located in the `config_files/` directory. Here's an example configuration:
+
+```yaml
+# Processing mode: 'single' for one folder (all songs recursively), 'batch' for parent folder with child folders
+mode: "single"  # or "batch"
+
+# Input paths
+# For single mode:
+bird_folder: "/path/to/USA5288"  # Path to a single folder (processes all songs recursively)
+
+# For batch mode:
+parent_dir: "/path/to/bird/folders"  # Path to parent directory containing child folders (processes each separately)
+
+# Output configuration
+experiment_name: "MyExperiment"
+output_dir: "files"
+
+# Song detection options
+song_detection:
+  plot_spec: false
+  overwrite_song: false
+
+# Overwrite/skip options for existing outputs
+overwrite_options:
+  overwrite_song_detection: false  # Skip song detection if JSON already exists
+  overwrite_pretraining: false     # Skip pretraining if model already exists
+  overwrite_decoding: false        # Skip decoding if UMAP/decoder already exists
+
+# Pretraining options
+pretraining:
+  test_percentage: 20.0
+  batch_size: 42
+  learning_rate: 3e-4
+  context: 1000
+  m: 250
+  multi_thread: false
+
+# Decoding options
+decoding:
+  num_random_files_spec: 100
+  num_samples_umap: "5e5"
+```
+
+**Pipeline Steps:**
+1. **Song Detection**: Runs `detect_song.py` or `detect_song_all_birds.py` based on mode
+2. **Model Training**: Runs `pretrain.py` with the specified parameters
+3. **Decoding & UMAP**: Runs `decoding.py` to generate UMAP visualizations
+
+**Outputs:**
+* Song detection JSON files (one per folder in single mode, one per child folder in batch mode)
+* Trained models (one per folder in single mode, one per child folder in batch mode)
+* UMAP visualizations and decoding results
+* Comprehensive log files with timestamps
+* Summary JSON files with experiment results
+
+**Example Configurations:**
+* **Single Mode**: Edit `config_files/full_pipeline_config.yaml` and set `mode: "single"` with your folder path (processes all songs recursively)
+* **Batch Processing**: Set `mode: "batch"` with your parent directory path to process each child folder separately
+* **Custom Parameters**: Modify the YAML file to adjust any parameters for your experiment
+
+**Overwrite/Skip Options:**
+The script intelligently checks for existing outputs and can skip or overwrite them:
+* **Song Detection**: Checks for existing `{bird_name}_song_detection.json` files
+* **Pretraining**: Checks for existing model directories in `experiments/{experiment_name}`
+* **Decoding**: Checks for existing decoder (`.pkl`) and UMAP (`.npz`) files
+* **Control**: Set `overwrite_options` in the YAML config to control this behavior
 
 
 ## 🏋️ Training the Model (Pretraining)
