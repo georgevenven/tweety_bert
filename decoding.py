@@ -227,7 +227,8 @@ def main(args):
         sys.executable,
         str(decoder_script_path),
         "--experiment_name", args.model_name,
-        "--bird_name", args.bird_name
+        "--bird_name", args.bird_name,
+        "--context_length", str(args.context_umap)
     ]
     run_command(decoder_cmd)
 

@@ -314,17 +314,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="TweetyBert Classifier")
     parser.add_argument("--experiment_name", type=str, required=True, help="Name of the experiment")
     parser.add_argument("--bird_name", type=str, required=True, help="Name of the bird")
+    parser.add_argument("--context_length", type=int, default=1000, help="Context length for the classifier")
     parser.add_argument("--generate_loss_plot", action="store_true", default=False, help="Generate loss plot during training")
 
     args = parser.parse_args()
 
     experiment_name = args.experiment_name
     bird_name = args.bird_name
+    context_length = args.context_length
     model_dir = f"experiments/{experiment_name}"
     linear_decoder_dir = f"experiments/{bird_name}_linear_decoder"
     data_file = f"files/{bird_name}.npz"
 
-    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir)
+    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir, context_length=context_length)
     classifier.prepare_data(data_file)
     classifier.create_dataloaders()
     classifier.create_classifier()
