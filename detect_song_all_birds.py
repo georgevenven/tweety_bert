@@ -52,7 +52,10 @@ def setup_logging(log_file_path):
 def run_detect_song_for_bird(bird_folder, output_dir, logger, plot_spec=False, overwrite_song=False, model=DEFAULT_MODEL):
     """Run song detection for a single bird folder."""
     bird_name = bird_folder.name
-    output_json_path = output_dir / f"{bird_name}_song_detection.json"
+    
+    # Create unique filename based on model to avoid conflicts
+    model_suffix = f"_{model}" if model != DEFAULT_MODEL else ""
+    output_json_path = output_dir / f"{bird_name}_song_detection{model_suffix}.json"
     
     # Check if output file already exists
     if output_json_path.exists() and not overwrite_song:

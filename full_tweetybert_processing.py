@@ -123,7 +123,10 @@ def run_command_with_logging(cmd, logger, description, cwd=None):
 def run_song_detection_single(bird_folder, output_dir, logger, plot_spec=False, overwrite_song=False, model=DEFAULT_MODEL):
     """Run song detection for a single folder (processes all songs recursively)."""
     bird_name = Path(bird_folder).name
-    output_json = output_dir / f"{bird_name}_song_detection.json"
+    
+    # Create unique filename based on model to avoid conflicts
+    model_suffix = f"_{model}" if model != DEFAULT_MODEL else ""
+    output_json = output_dir / f"{bird_name}_song_detection{model_suffix}.json"
     
     # Check if output file already exists
     if output_json.exists() and not overwrite_song:
@@ -260,6 +263,11 @@ def find_bird_folders(parent_dir):
     
     return sorted(bird_folders)
 
+def create_unique_experiment_name(base_name, model=DEFAULT_MODEL):
+    """Create a unique experiment name that includes the model name to avoid conflicts."""
+    model_suffix = f"_{model}" if model != DEFAULT_MODEL else ""
+    return f"{base_name}{model_suffix}"
+
 def main():
     """Main function to orchestrate the full TweetyBERT pipeline.
     
@@ -368,8 +376,13 @@ def main():
             # Step 2: Pretraining
             logger.info(f"\n--- Step 2: Model Pretraining ---")
             pretraining_config = config.get('pretraining', {})
+            
+            # Create unique experiment name based on model
+            song_detection_model = song_detection_config.get('model', DEFAULT_MODEL)
+            unique_experiment_name = create_unique_experiment_name(config['experiment_name'], song_detection_model)
+            
             pretraining_success = run_pretraining(
-                bird_folder, song_detection_json, config['experiment_name'], logger,
+                bird_folder, song_detection_json, unique_experiment_name, logger,
                 overwrite_pretraining=overwrite_options.get('overwrite_pretraining', False),
                 test_percentage=pretraining_config.get('test_percentage', 20.0),
                 batch_size=pretraining_config.get('batch_size', 42),
@@ -386,7 +399,7 @@ def main():
             logger.info(f"\n--- Step 3: Decoding and UMAP Generation ---")
             decoding_config = config.get('decoding', {})
             decoding_success = run_decoding(
-                bird_folder, song_detection_json, config['experiment_name'], bird_name, logger,
+                bird_folder, song_detection_json, unique_experiment_name, bird_name, logger,
                 overwrite_decoding=overwrite_options.get('overwrite_decoding', False),
                 num_random_files_spec=decoding_config.get('num_random_files_spec', 100),
                 num_samples_umap=decoding_config.get('num_samples_umap', '5e5')
@@ -423,7 +436,11 @@ def main():
             
             for i, bird_folder in enumerate(bird_folders, 1):
                 bird_name = bird_folder.name
-                song_detection_json = output_dir / f"{bird_name}_song_detection.json"
+                
+                # Create model-specific JSON filename
+                song_detection_model = song_detection_config.get('model', DEFAULT_MODEL)
+                model_suffix = f"_{song_detection_model}" if song_detection_model != DEFAULT_MODEL else ""
+                song_detection_json = output_dir / f"{bird_name}_song_detection{model_suffix}.json"
                 
                 logger.info(f"\n{'='*60}")
                 logger.info(f"Processing child folder {i}/{len(bird_folders)}: {bird_name}")
@@ -438,8 +455,12 @@ def main():
                 # Step 2: Pretraining
                 logger.info(f"\n--- Step 2: Model Pretraining for {bird_name} ---")
                 pretraining_config = config.get('pretraining', {})
+                
+                # Create unique experiment name based on model
+                unique_experiment_name = create_unique_experiment_name(f"{config['experiment_name']}_{bird_name}", song_detection_model)
+                
                 pretraining_success = run_pretraining(
-                    bird_folder, song_detection_json, f"{config['experiment_name']}_{bird_name}", logger,
+                    bird_folder, song_detection_json, unique_experiment_name, logger,
                     overwrite_pretraining=overwrite_options.get('overwrite_pretraining', False),
                     test_percentage=pretraining_config.get('test_percentage', 20.0),
                     batch_size=pretraining_config.get('batch_size', 42),
@@ -457,7 +478,7 @@ def main():
                 logger.info(f"\n--- Step 3: Decoding and UMAP Generation for {bird_name} ---")
                 decoding_config = config.get('decoding', {})
                 decoding_success = run_decoding(
-                    bird_folder, song_detection_json, f"{config['experiment_name']}_{bird_name}", bird_name, logger,
+                    bird_folder, song_detection_json, unique_experiment_name, bird_name, logger,
                     overwrite_decoding=overwrite_options.get('overwrite_decoding', False),
                     num_random_files_spec=decoding_config.get('num_random_files_spec', 100),
                     num_samples_umap=decoding_config.get('num_samples_umap', '5e5')

@@ -242,6 +242,7 @@ output_dir: "files"
 song_detection:
   plot_spec: false
   overwrite_song: false
+  model: "canary_fall_nerve_llb-.01"  # TweetyNET model to use (optional, uses default if not specified)
 
 # Overwrite/skip options for existing outputs
 overwrite_options:
@@ -283,10 +284,17 @@ decoding:
 
 **Overwrite/Skip Options:**
 The script intelligently checks for existing outputs and can skip or overwrite them:
-* **Song Detection**: Checks for existing `{bird_name}_song_detection.json` files
-* **Pretraining**: Checks for existing model directories in `experiments/{experiment_name}`
+* **Song Detection**: Checks for existing `{bird_name}_song_detection.json` files (or `{bird_name}_song_detection_{model}.json` if using custom model)
+* **Pretraining**: Checks for existing model directories in `experiments/{experiment_name}` (or `experiments/{experiment_name}_{model}` if using custom model)
 * **Decoding**: Checks for existing decoder (`.pkl`) and UMAP (`.npz`) files
 * **Control**: Set `overwrite_options` in the YAML config to control this behavior
+
+**Model-Specific Naming:**
+When using different TweetyNET models for song detection, the script automatically creates unique filenames and experiment names to avoid conflicts:
+* **Song Detection JSON**: `{bird_name}_song_detection_{model}.json` (e.g., `USA5288_song_detection_canary_fall_nerve_llb-.01.json`)
+* **Experiment Names**: `{experiment_name}_{model}` (e.g., `MyExperiment_canary_fall_nerve_llb-.01`)
+* **Default Model**: If using the default model, no suffix is added to maintain backward compatibility
+* **Batch Processing**: Both single and batch modes support model-specific naming
 
 
 ## 🏋️ Training the Model (Pretraining)

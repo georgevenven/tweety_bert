@@ -6,10 +6,10 @@ mode: "single"  # or "batch"
 
 # Input paths
 # For single mode:
-bird_folder: "/home/hunter/Documents/bird-conv-data/ZF"  # Path to a single folder (processes all songs recursively)
+bird_folder: "/home/hunter/Documents/bird-song-data/ZF"  # Path to a single folder (processes all songs recursively)
 
 # For batch mode:
-parent_dir: "/home/hunter/Documents/bird-conv-data/all_bird_data"  # Path to parent directory containing child folders (processes each separately)
+parent_dir: "/home/hunter/Documents/bird-song-data/all_bird_data"  # Path to parent directory containing child folders (processes each separately)
 
 # Output configuration
 experiment_name: "ZF_test"
@@ -19,6 +19,7 @@ output_dir: "files"
 song_detection:
   plot_spec: false
   overwrite_song: false
+  model: "bengalese_finch_test"  # TweetyNET model to use (optional, uses default if not specified)
 
 # Overwrite/skip options for existing outputs
 overwrite_options:
