@@ -1,0 +1,39 @@
+# Full TweetyBERT Pipeline Configuration for Labeled ZF Data
+# This file contains all the parameters for running the complete pipeline
+
+# Processing mode: 'single' for one folder (all songs recursively), 'batch' for parent folder with child folders
+mode: "single"  # Process all songs recursively from one folder
+
+# Input paths
+# For single mode:
+bird_folder: "/home/hunter/Documents/bird-song-data/labeled_ZF_data"  # Path to a single folder (processes all songs recursively)
+
+# Output configuration
+experiment_name: "labeled_ZF_model"
+output_dir: "files"
+
+# Song detection options
+song_detection:
+  plot_spec: false
+  overwrite_song: false
+  model: "canary_fall_nerve_llb-.01"  # Default TweetyNET model
+  skip_song_detection: true  # Skip song detection and use existing JSON file
+
+# Overwrite/skip options for existing outputs
+overwrite_options:
+  overwrite_song_detection: false  # Skip song detection if JSON already exists
+  overwrite_pretraining: false     # Skip pretraining if model already exists
+  overwrite_decoding: false        # Skip decoding if UMAP/decoder already exists
+
+# Pretraining options
+pretraining:
+  test_percentage: 20.0
+  batch_size: 42
+  learning_rate: 3e-4
+  context: 1000
+  m: 250
+
+# Decoding options
+decoding:
+  num_random_files_spec: 100
+  num_samples_umap: "5e5" 

@@ -20,8 +20,9 @@ def run_command(command, check=True, cwd=None, capture_output=False):
                      print("Error Output:", result.stderr, file=sys.stderr)
         else:
             # Print the last line of tqdm status to stderr
-            last_line = result.stderr.strip().split('\n')[-1]
-            print(last_line, file=sys.stderr) # Print tqdm status concisely
+            if result.stderr and result.stderr.strip():
+                last_line = result.stderr.strip().split('\n')[-1]
+                print(last_line, file=sys.stderr) # Print tqdm status concisely
         return result
     except subprocess.CalledProcessError as e:
         print(f"Command failed: {' '.join(command)}", file=sys.stderr)

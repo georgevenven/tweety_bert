@@ -29,7 +29,7 @@ def get_creation_date(path):
 def tweety_net_detector_inference(input_file, return_json=True, mode="local_file"):
    os.environ["MKL_THREADING_LAYER"] = "GNU"
    command = [
-       'python', '/home/george-vengrovski/Documents/projects/tweety_net_song_detector/src/inference.py',
+       'python', 'song_detector/src/inference.py',
        '--mode', mode,
        '--input', input_file
    ]

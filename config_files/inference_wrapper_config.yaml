@@ -1,0 +1,37 @@
+# Configuration file for decoding_and_inference_batch.py
+# Change the values below to configure your inference run
+
+# Mode selection
+# Set to true for batch processing of multiple birds, false for single bird
+batch_mode: true
+
+# .wav data paths
+# For batch mode (batch_mode: true):
+parent_dir: "/media/hunter/GLABSSD/Gardner_447D_Comp1_Comp2_and_laptop_SONGS_24June2025/2025_baseline/"
+# For single mode (batch_mode: false):
+bird_folder: "/home/hunter/Documents/bird-song-data/CAN/USA5288"
+
+# Song detection JSON files directory
+song_detection_dir: "files"
+
+# Pipeline control
+skip_decoder_creation: false
+overwrite_existing_decoders: false
+
+# Decoder creation settings (used when creating new decoders)
+decoding_inputs:
+  # bird_name: This will automatically input this name into decoding.py: {model_name}_{bird_name}
+  mode: "single"  # 'single' or 'grouping'
+  model_name: TweetyBERT_Pretrain_LLB_AreaX_FallSong # Model configuration - change this to use a different pretrained model
+  # wav_folder: This will automatically input this directory into decoding.py: parent_dir/{bird_name} or bird_folder
+  # song_detection_json: This will automatically input this file into decoding.py: {song_detection_dir}
+  num_samples_umap: 5e5
+  num_random_files_spec: 100
+
+# Inference settings
+run_inference_inputs:
+  # bird_name: This will automatically input this name into inference.py: {model_name}_{bird_name}
+  # wav_folder: This will automatically input this directory into inference.py: parent_dir/{bird_name} or bird_folder
+  # song_detection_json: This will automatically input this file into inference.py: {song_detection_dir}
+  apply_post_processing: true
+  visualize: false
