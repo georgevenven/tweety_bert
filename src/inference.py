@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from post_processing import majority_vote
 
+
 def get_creation_date(path):
     stat = path.stat()
     if hasattr(stat, 'st_birthtime'):
@@ -23,6 +24,7 @@ def get_creation_date(path):
         return stat.st_ctime      # windows
     else:
         return stat.st_mtime      # linux/unix fallback
+
 
 def tweety_net_detector_inference(input_file, return_json=True, mode="local_file"):
    os.environ["MKL_THREADING_LAYER"] = "GNU"
@@ -33,7 +35,8 @@ def tweety_net_detector_inference(input_file, return_json=True, mode="local_file
    ]
    if return_json:
        command.append('--return_json')
-   result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+   result = subprocess.run(command, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, text=True)
    if result.returncode == 0:
        try:
            output_json = json.loads(result.stdout)
@@ -44,6 +47,7 @@ def tweety_net_detector_inference(input_file, return_json=True, mode="local_file
    else:
        print(f"Error executing command: {result.stderr}")
        return None
+
 
 class TweetyBertInference:
   def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False, dump_interval=500, apply_post_processing=True, window_size=50):
@@ -85,13 +89,15 @@ class TweetyBertInference:
       self.context_length = config["context"]
       tweety_bert_model = load_model(self.model_dir, device='cpu')
       self.create_classifier(tweety_bert_model)
-      model = self.classifier_model.load_state_dict(torch.load(os.path.join(save_dir, "decoder_weights.pth"), map_location=self.device))
+      model = self.classifier_model.load_state_dict(torch.load(
+          os.path.join(save_dir, "decoder_weights.pth"), map_location=self.device))
       print(f"Decoder state loaded from {save_dir}")
       return model
 
   def create_classifier(self, tweety_bert_model):
       if self.num_classes is None:
-          raise ValueError("Number of classes is not set. Run prepare_data first.")
+          raise ValueError(
+              "Number of classes is not set. Run prepare_data first.")
       self.classifier_model = LinearProbeModel(
           num_classes=self.num_classes,
           model_type="neural_net",
@@ -104,132 +110,91 @@ class TweetyBertInference:
       ).to(self.device)
 
   def setup_wav_to_spec(self, folder, csv_file_dir=None):
-      self.wav_to_spec = WavtoSpec(folder, self.spec_dst_folder, song_detection_json_path=self.song_detection_json)
+      self.wav_to_spec = WavtoSpec(
+          folder, self.spec_dst_folder, song_detection_json_path=self.song_detection_json)
 
   def smooth_labels(self, labels, window_size=50):
       return majority_vote(labels, window_size=window_size)
-
+  
   def process_file(self, file_path):
-      # Print detection method being used
-      if self.song_detection_data is None:
-          print(f"Using TweetyNET detection for {os.path.basename(file_path)}")
-      else:
-          print(f"Using pre-designated JSON for {os.path.basename(file_path)}")
+    # Print detection method being used
+    if self.song_detection_data is None:
+        print(f"Using TweetyNET detection for {os.path.basename(file_path)}")
+    else:
+        print(f"Using pre-designated JSON for {os.path.basename(file_path)}")
 
-      file_creation_timestamp = get_creation_date(Path(file_path))
-      creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
+    file_creation_timestamp = get_creation_date(Path(file_path))
+    creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
 
-      # Ensure WavtoSpec instance exists
-      if self.wav_to_spec is None:
-           print(f"Error: WavtoSpec not initialized before processing {os.path.basename(file_path)}. Skipping.")
-           # Return an empty/error structure
-           return {"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": "WavtoSpec not initialized", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+    # Ensure WavtoSpec instance exists
+    if self.wav_to_spec is None:
+        print(f"Error: WavtoSpec not initialized before processing {os.path.basename(file_path)}. Skipping.")
+        return [{"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": "WavtoSpec not initialized", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
 
-      try:
-          spec_data_tuple = self.wav_to_spec.multiprocess_process_file(
-              file_path,
-              song_detection_json_path=self.song_detection_json, # Pass the path here
-              save_npz=False
-          )
-      except Exception as e:
-          print(f"ERROR [{os.path.basename(file_path)}]: Exception during spec generation! Error: {e}")
-          return {"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": f"Spec gen exception: {e}", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+    spec_data_tuple = self.wav_to_spec.multiprocess_process_file(
+        file_path,
+        song_detection_json_path=self.song_detection_json,
+        save_npz=False
+    )
 
-      # --- Unpack the spectrogram data ---
-      # Expecting (Sxx_log, results, labels) or (None, None, None)
-      if spec_data_tuple is None or spec_data_tuple[0] is None:
-            print(f"Spectrogram generation failed or skipped for {os.path.basename(file_path)}")
-            return {
-                "file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False,
-                "error": "Spectrogram generation failed or skipped",
-                "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}
-            }
-      # Assign the actual spectrogram array (first element of the tuple)
-      spec = spec_data_tuple[0]
-      # We might not need vocalization_segments_info or labels_from_specgen directly here
-      # vocalization_segments_info = spec_data_tuple[1]
-      # labels_from_specgen = spec_data_tuple[2]
-      # --- End Unpacking ---
+    if spec_data_tuple is None or spec_data_tuple[0] is None:
+        print(f"Spectrogram generation failed or skipped for {os.path.basename(file_path)}")
+        return [{"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": "Spectrogram generation failed or skipped", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
 
-      if self.song_detection_data is None:
-          vocalization_data = tweety_net_detector_inference(input_file=file_path)
-          if not vocalization_data or vocalization_data.get('segments') == []:
-              return {
-                  "file_name": os.path.basename(file_path),
-                  "creation_date": creation_date_str,
-                  "song_present": False,
-                  "syllable_onsets_offsets_ms": {},
-                  "syllable_onsets_offsets_timebins": {}
-              }
-      else:
-          file_name = os.path.basename(file_path)
-          vocalization_data = next((item for item in self.song_detection_data if item["filename"] == file_name), None)
-          if vocalization_data is None:
-              vocalization_data = tweety_net_detector_inference(input_file=file_path)
-          if vocalization_data is not None and not vocalization_data.get("song_present", False):
-              return {
-                  "file_name": file_name,
-                  "creation_date": creation_date_str,
-                  "song_present": False,
-                  "syllable_onsets_offsets_ms": {},
-                  "syllable_onsets_offsets_timebins": {}
-              }
-      # --- DEBUG: Check the segment being used and spec_data ---
-      # Use the first segment for now, assuming single segment processing logic
-      segment_to_process = vocalization_data['segments'][0]
-      print(f"DEBUG [{file_name}]: Segment used for slicing: Type={type(segment_to_process)}, Value={segment_to_process}")
-      print(f"DEBUG [{file_name}]: spec (spectrogram array) before slicing: Type={type(spec)}, Shape={spec.shape if isinstance(spec, np.ndarray) else 'N/A'}")
-      # --- END DEBUG ---
-      try:
-          # Slice the unpacked 'spec' array, not the original tuple 'spec_data'
-          song_spec = spec[:, segment_to_process['onset_timebin']:segment_to_process['offset_timebin']]
-      except TypeError as e:
-          print(f"ERROR [{file_name}]: TypeError during slicing! Error: {e}")
-          print(f"  spec type: {type(spec)}") # Print type of spec array
-          print(f"  segment_to_process type: {type(segment_to_process)}")
-          print(f"  segment_to_process value: {segment_to_process}")
-          # Handle error, e.g., return an error dict or skip
-          return {"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "error": f"TypeError slicing: {e}", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
-      except IndexError as e:
-           print(f"ERROR [{file_name}]: IndexError during slicing! Error: {e}")
-           print(f"  spec shape: {spec.shape if isinstance(spec, np.ndarray) else 'N/A'}") # Print shape of spec array
-           print(f"  Indices attempted: {segment_to_process.get('onset_timebin', 'N/A')}:{segment_to_process.get('offset_timebin', 'N/A')}")
-           return {"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "error": f"IndexError slicing: {e}", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
+    spec = spec_data_tuple[0]
 
-      spectogram, pad_amount = self.inference_data_class(song_spec)
-      # Handle potential None return from inference_data_class
-      if spectogram is None:
-           print(f"Warning: inference_data_class returned None for {file_name}. Skipping inference.")
-           return {"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "error": "Data class preparation failed", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}
-      spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
-      logits = self.classifier_model(spec_tensor.permute(0,1,3,2))
-      logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
-      predicted_labels = torch.argmax(logits, dim=1).detach().cpu().numpy()
-      if self.apply_post_processing:
-          post_processed_labels = self.smooth_labels(predicted_labels, window_size=self.window_size)
-          post_processed_labels[-pad_amount:] = -1
-          post_processed_labels = post_processed_labels[:-pad_amount]
-      else:
-          post_processed_labels = predicted_labels
-      onsets_offsets_ms, onsets_offsets_timebins = self.convert_to_onset_offset(post_processed_labels)
-      song_present = bool(onsets_offsets_ms) # Song is present if any non -1 labels resulted in segments
+    if self.song_detection_data is None:
+        vocalization_data = tweety_net_detector_inference(input_file=file_path)
+        if not vocalization_data or vocalization_data.get('segments') == []:
+            return [{"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
+    else:
+        file_name = os.path.basename(file_path)
+        vocalization_data = next((item for item in self.song_detection_data if item["filename"] == file_name), None)
+        if vocalization_data is None:
+            vocalization_data = tweety_net_detector_inference(input_file=file_path)
+        if vocalization_data is not None and not vocalization_data.get("song_present", False):
+            return [{"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
 
-      # --- Visualize ---
-      if self.visualize:
-          # Ensure spec is a 2D numpy array before passing
-          spec_np = spec if isinstance(spec, np.ndarray) else spec.cpu().numpy()
-          labels_np = post_processed_labels if isinstance(post_processed_labels, np.ndarray) else post_processed_labels.cpu().numpy()
-          if spec_np.ndim == 2: # Only visualize if spec is 2D
-              self.visualize_spectrogram(spec_np, labels_np, os.path.basename(file_path))
-          else:
-              print(f"Warning: Skipping visualization for {os.path.basename(file_path)} due to unexpected spec shape: {spec_np.shape}")
-      return {
-          "file_name": os.path.basename(file_path),
-          "creation_date": creation_date_str,
-          "song_present": song_present,
-          "syllable_onsets_offsets_ms": onsets_offsets_ms,
-          "syllable_onsets_offsets_timebins": onsets_offsets_timebins
-      }
+    song_segments = vocalization_data['segments']
+    results = []
+
+    for i, seg in enumerate(song_segments):
+        song_spec = spec[:, seg['onset_timebin']:seg['offset_timebin']]
+        spectogram, pad_amount = self.inference_data_class(song_spec)
+
+        if spectogram is None:
+            results.append({"file_name": f"{os.path.splitext(os.path.basename(file_path))[0]}_{i}", "creation_date": creation_date_str, "song_present": False, "error": "Data class preparation failed", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}})
+            continue
+        
+        spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
+        logits = self.classifier_model(spec_tensor.permute(0, 1, 3, 2))
+        logits = logits.reshape(logits.shape[0] * logits.shape[1], -1)
+        predicted_labels = torch.argmax(logits, dim=1).detach().cpu().numpy()
+        
+        if self.apply_post_processing:
+            post_processed_labels = self.smooth_labels(predicted_labels, window_size=self.window_size)
+            post_processed_labels[-pad_amount:] = -1
+            post_processed_labels = post_processed_labels[:-pad_amount]
+        else:
+            post_processed_labels = predicted_labels
+            
+        onsets_offsets_ms, onsets_offsets_timebins = self.convert_to_onset_offset(post_processed_labels)
+        song_present = bool(onsets_offsets_ms)
+
+        if self.visualize:
+            spec_np = spec if isinstance(spec, np.ndarray) else spec.cpu().numpy()
+            labels_np = post_processed_labels if isinstance(post_processed_labels, np.ndarray) else post_processed_labels.cpu().numpy()
+            self.visualize_spectrogram(spec_np, labels_np, f"{os.path.splitext(os.path.basename(file_path))[0]}_{i}")
+
+        results.append({
+            "file_name": f"{os.path.splitext(os.path.basename(file_path))[0]}_{i}",
+            "creation_date": creation_date_str,
+            "song_present": song_present,
+            "syllable_onsets_offsets_ms": onsets_offsets_ms,
+            "syllable_onsets_offsets_timebins": onsets_offsets_timebins
+        })
+
+    return results
 
   def process_folder(self, folder_path, save_interval=100):
       results = []
@@ -246,14 +211,11 @@ class TweetyBertInference:
       for file_path in tqdm(wav_files, desc="Processing files"):
           if os.path.basename(file_path) in processed_files:
               continue
-          try:
-              result = self.process_file(file_path)
-              results.append(result)
-              file_count += 1
-              if file_count % self.dump_interval == 0:
-                  self.save_results(results, self.output_path)
-          except Exception as e:
-              print(f"Error processing {file_path}: {e}")
+          file_results = self.process_file(file_path)
+          results.extend(file_results)
+          file_count += len(file_results)
+          if file_count % self.dump_interval == 0:
+              self.save_results(results, self.output_path)
       self.save_results(results, self.output_path)
       return results
 
