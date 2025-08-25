@@ -41,6 +41,7 @@ tweety_bert/
 ├── detect_song.py                # Python script for running song detection
 ├── detect_song_all_birds.py      # Python script for batch song detection on multiple birds
 ├── full_tweetybert_processing.py # Complete pipeline wrapper (song detection → training → decoding)
+├── run_inference_all_birds.py    # Python script for batch inference on multiple birds
 ├── config_files/                 # Configuration files for the full pipeline
 ```
 * **Root Directory:** Contains the main workflow scripts (`pretrain.py`, `decoding.py`, `run_inference.py`) and this README.
@@ -384,6 +385,48 @@ python run_inference.py \
     --visualize True
 ```
 The output will be a JSON database (`files/<bird_name>_decoded_database.json`) summarizing detected syllables. Visualizations (if enabled) are saved in `imgs/inference_specs_<bird_name>/`.
+
+### Batch Inference for Multiple Birds
+
+For processing multiple birds at once, use `run_inference_all_birds.py`:
+
+**Example:**
+```bash
+python run_inference_all_birds.py \
+    --parent_dir "/path/to/bird/folders" \
+    --bird_name_decoder "my_canary_decoder"
+```
+
+**Features:**
+* **Automatic bird folder detection**: Finds all folders containing letters and numbers (e.g., USA5288, LLB16) in the parent directory
+* **Automatic song detection JSON lookup**: Automatically finds and uses the appropriate song detection JSON file for each bird (e.g., `USA5288_song_detection.json`)
+* **Comprehensive logging**: Logs all operations with timestamps to `logging/run_inference_all_birds_YYYYMMDD_HHMMSS.log`
+* **Progress tracking**: Shows real-time progress and summary statistics
+* **Error handling**: Continues processing other birds if one fails, with detailed error reporting
+* **Summary reports**: Generates summary JSON files with inference results
+
+**Additional options:**
+* `--song_detection_dir`: Directory containing song detection JSON files (default: `files/`)
+* `--apply_post_processing`: Apply smoothing post-processing (True/False, default: True)
+* `--window_size`: Smoothing window size for post-processing (default: 200)
+* `--visualize`: Generate output plots (True/False, default: False)
+
+**Example with options:**
+```bash
+python run_inference_all_birds.py \
+    --parent_dir "/path/to/bird/folders" \
+    --bird_name_decoder "my_canary_decoder" \
+    --song_detection_dir "files" \
+    --apply_post_processing True \
+    --window_size 200 \
+    --visualize False
+```
+
+**Outputs:**
+* JSON database files: `files/{bird_name}_decoded_database.json` for each bird
+* Visualizations (if enabled): `imgs/inference_specs_{bird_name}/` for each bird
+* Summary JSON: `files/run_inference_all_birds_summary.json` with overall results
+* Log file: `logging/run_inference_all_birds_YYYYMMDD_HHMMSS.log` with detailed logs
 
 
 ## 🗄️ NPZ File Format

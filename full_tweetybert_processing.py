@@ -120,9 +120,40 @@ def run_command_with_logging(cmd, logger, description, cwd=None):
         logger.error(f"✗ Unexpected error in {description} after {duration:.2f} seconds: {str(e)}")
         return False
 
-def run_song_detection_single(bird_folder, output_dir, logger, plot_spec=False, overwrite_song=False, model=DEFAULT_MODEL):
+def find_existing_song_detection_json(bird_folder, output_dir, logger):
+    """Find existing song detection JSON file for the bird folder."""
+    bird_name = Path(bird_folder).name
+    
+    # Look for existing song detection JSON files
+    possible_files = [
+        output_dir / f"{bird_name}_song_detection.json",
+        output_dir / f"labeled_ZF_song_detection_fixed.json",  # The fixed one we created for curated data
+        output_dir / f"labeled_ZF_song_detection.json",  # The original one we created for curated data
+        output_dir / f"{bird_name}_song_detection_canary_fall_nerve_llb-.01.json"
+    ]
+    
+    for json_file in possible_files:
+        if json_file.exists():
+            logger.info(f"Found existing song detection JSON: {json_file}")
+            return json_file
+    
+    logger.error(f"No existing song detection JSON found for {bird_name}")
+    logger.error(f"Looked for: {[str(f) for f in possible_files]}")
+    return None
+
+def run_song_detection_single(bird_folder, output_dir, logger, plot_spec=False, overwrite_song=False, model=DEFAULT_MODEL, skip_detection=False):
     """Run song detection for a single folder (processes all songs recursively)."""
     bird_name = Path(bird_folder).name
+    
+    # If skipping song detection, find existing JSON file
+    if skip_detection:
+        logger.info(f"Skipping song detection for folder {bird_name} - using existing JSON file")
+        existing_json = find_existing_song_detection_json(bird_folder, output_dir, logger)
+        if existing_json:
+            return True, existing_json
+        else:
+            logger.error("No existing song detection JSON found. Cannot skip detection.")
+            return False, None
     
     # Create unique filename based on model to avoid conflicts
     model_suffix = f"_{model}" if model != DEFAULT_MODEL else ""
@@ -168,11 +199,22 @@ def run_song_detection_batch(parent_dir, output_dir, logger, plot_spec=False, ov
 
 def run_pretraining(bird_folder, song_detection_json, experiment_name, logger, overwrite_pretraining=False, **kwargs):
     """Run model pretraining."""
-    # Check if model already exists
+    # Check if model already exists and training completed successfully
     model_dir = Path("experiments") / experiment_name
-    if model_dir.exists() and not overwrite_pretraining:
-        logger.info(f"Skipping pretraining for {experiment_name} - model already exists: {model_dir}")
+    model_weights = model_dir / "model_weights.pth"
+    training_loss_plot = model_dir / "training_loss.png"
+    
+    # Check if model directory exists AND has the required files
+    if model_dir.exists() and model_weights.exists() and training_loss_plot.exists() and not overwrite_pretraining:
+        logger.info(f"Skipping pretraining for {experiment_name} - model already exists and training completed: {model_dir}")
+        logger.info(f"  - Model weights: {model_weights}")
+        logger.info(f"  - Training loss plot: {training_loss_plot}")
         return True
+    elif model_dir.exists() and (not model_weights.exists() or not training_loss_plot.exists()):
+        logger.warning(f"Model directory exists but training appears incomplete for {experiment_name}")
+        logger.warning(f"  - Model weights exist: {model_weights.exists()}")
+        logger.warning(f"  - Training loss plot exists: {training_loss_plot.exists()}")
+        logger.warning(f"Will re-run pretraining to ensure completion")
     
     cmd = [
         sys.executable,
@@ -362,11 +404,17 @@ def main():
             logger.info(f"\n--- Step 1: Song Detection ---")
             song_detection_config = config.get('song_detection', {})
             overwrite_options = config.get('overwrite_options', {})
+            skip_detection = song_detection_config.get('skip_song_detection', False)
+            
+            if skip_detection:
+                logger.info("Song detection is SKIPPED - using existing JSON file")
+            
             song_detection_success, song_detection_json = run_song_detection_single(
                 bird_folder, output_dir, logger, 
                 song_detection_config.get('plot_spec', False),
                 overwrite_options.get('overwrite_song_detection', False),
-                song_detection_config.get('model', DEFAULT_MODEL)
+                song_detection_config.get('model', DEFAULT_MODEL),
+                skip_detection
             )
             
             if not song_detection_success:
