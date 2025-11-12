@@ -20,13 +20,8 @@ import warnings
 from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
 from scipy.signal import fftconvolve      
 
-
-
 warnings.filterwarnings("ignore", category=NumbaDeprecationWarning)
 warnings.filterwarnings("ignore", category=NumbaPendingDeprecationWarning)
-
-
-
 
 def average_colors_per_sample(ground_truth_labels, cmap):
    """
@@ -62,7 +57,6 @@ def load_data( data_dir, context=1000):
    loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=16)
    return loader
 
-
 def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
    """
    Generate labels for data points using the HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise) clustering algorithm.
@@ -86,35 +80,6 @@ def generate_hdbscan_labels(array, min_samples=1, min_cluster_size=5000):
    labels = hdbscan_model.fit_predict(array)
    print(f"discovered labels {np.unique(labels)}")
    return labels
-
-def perform_smote(predictions, hdbscan_labels, samples):
-    """
-    Accepts HDBSCAN labels, and correspond to predictions (neural states)
-    Interpolates neural states, and produces the same quantity of each state
-    Divides samples by the number of classes, and collects that many samples of synthetic predictions from each hdbscan class
-
-    Returns:
-    synthetic points: numpy array of shape (n_samples, n_features)
-    """
-
-    rng = np.random.RandomState(42)
-    synthetic_predictions = []
-
-    unique_labels = np.unique(hdbscan_labels)
-    n_classes = len(unique_labels)
-    samples_per_class = int(samples) // n_classes
-
-    for lbl in unique_labels:
-        X_cls = predictions[hdbscan_labels == lbl]
-        n_to_gen = samples_per_class
-        for _ in range(n_to_gen):
-            i1, i2 = rng.choice(len(X_cls), size=2, replace=False)
-            alpha = rng.random()
-            new_pt = X_cls[i1] + alpha * (X_cls[i2] - X_cls[i1])
-            synthetic_predictions.append(new_pt[None, :])
-
-    synthetic_predictions = np.vstack(synthetic_predictions)
-    return synthetic_predictions
 
 def plot_umap_projection(model, device, data_dirs, category_colors_file="test_llb16", samples=1e6, file_path='category_colors.pkl',
                     layer_index=None, dict_key=None,
@@ -330,24 +295,24 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     print("initializing umap reducer...")
     # Try with more conservative parameters
     reducer = umap.UMAP(
-        n_neighbors=30,  
+        n_neighbors=50,  
         min_dist=0.0,  
         n_components=2,
-        metric='euclidean', 
+        metric='cosine', 
         low_memory=True,
         n_jobs=-1
     )
     print("umap reducer (2 dims for visualization) initialized.")
 
-    reducer_6d = umap.UMAP(
-        n_neighbors=30,  
+    reducer_cluster = umap.UMAP(
+        n_neighbors=50,  
         min_dist=0.0,  
-        n_components=6,
-        metric='euclidean', 
+        n_components=8,
+        metric='cosine', 
         low_memory=True,
         n_jobs=-1
     )
-    print("umap reducer (6 dims for clustering) initialized.")
+    print("umap reducer (8 dims for clustering) initialized.")
 
    
     if np.isnan(predictions).any():
@@ -357,10 +322,10 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     embedding_outputs = reducer.fit_transform(predictions)
     print("umap fitting for visualization complete. shape of embedding outputs:", embedding_outputs.shape)
 
-    embedding_outputs_6d = reducer_6d.fit_transform(predictions)
-    print("umap 6d fitting for clustering complete. shape of embedding outputs:", embedding_outputs_6d.shape)
+    embedding_outputs_cluster = reducer_cluster.fit_transform(predictions)
+    print("umap cluster fitting for clustering complete. shape of embedding outputs:", embedding_outputs_cluster.shape)
 
-    hdbscan_labels = generate_hdbscan_labels(embedding_outputs_6d, min_samples=1, min_cluster_size=5000)
+    hdbscan_labels = generate_hdbscan_labels(embedding_outputs_cluster, min_samples=1, min_cluster_size=5000)
     print("hdbscan labels generated. unique labels found:", np.unique(hdbscan_labels))
    
     # get unique labels and create color palettes
@@ -427,73 +392,13 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
     plt.savefig(os.path.join(experiment_dir, "ground_truth_labels.png"),
                 facecolor=fig2.get_facecolor(), edgecolor='none')
     plt.close(fig2)
-
-    if state_finding_algorithm == "HDBSCAN-SMOTE":
-        print("\n=== Starting SMOTE UMAP Process ===")
-        print(f"Original predictions shape: {predictions.shape}")
-        print(f"Original hdbscan labels shape: {hdbscan_labels.shape}")
-        print(f"Unique hdbscan labels: {np.unique(hdbscan_labels)}")
-
-        print("\nGenerating synthetic points with SMOTE...")
-        synthetic_predictions = perform_smote(predictions, hdbscan_labels, samples)
-        print(f"Synthetic predictions shape: {synthetic_predictions.shape}")
-        
-        rng = np.random.RandomState(42)
-
-        # sample subset of originals and synthetic for tighter UMAP
-        n_real = predictions.shape[0]
-        n_smote = synthetic_predictions.shape[0]
-        print(f"\nNumber of real points: {n_real}")
-        print(f"Number of synthetic points: {n_smote}")
-        
-        # choose a random number of points from smote, that is the same length as n_real
-        n_samples = min(n_real, n_smote)
-        print(f"Number of samples to select: {n_samples}")
-        
-        smote_idx = rng.choice(n_smote, size=n_samples, replace=False)
-        print(f"Selected indices shape: {smote_idx.shape}")
-        
-        # subset smote_idx
-        synthetic_predictions = synthetic_predictions[smote_idx]
-        print(f"Subset synthetic predictions shape: {synthetic_predictions.shape}")
-
-        print("\nFitting UMAP on synthetic points...")
-        umap_syn = umap.UMAP(n_neighbors=30, min_dist=0.0, metric="correlation", low_memory=True, n_jobs=-1)
-        umap_syn.fit(synthetic_predictions)
-        print("UMAP fit complete")
-
-        print("\nTransforming real points using UMAP fit on synthetic points...")
-        embedding_outputs_smote = umap_syn.transform(predictions)
-        print(f"Transformed real predictions shape: {embedding_outputs_smote.shape}")
-        print("=== SMOTE UMAP Process Complete ===\n")
-
-        # hdbscan on smote
-        hdbscan_labels_smote = generate_hdbscan_labels(embedding_outputs_smote, min_samples=1, min_cluster_size=5000)
-
-        # save figures of smote, g truth, and hdbscan labels
-        plt.figure(figsize=(16, 16))
-        plt.scatter(embedding_outputs_smote[:, 0], embedding_outputs_smote[:, 1], c=ground_truth_labels, s=10, alpha=0.1, cmap=mcolors.ListedColormap(ground_truth_colors))
-        plt.savefig(os.path.join(experiment_dir, "smote_umap.png"), facecolor=plt.gcf().get_facecolor(), edgecolor='none')
-        plt.close()
-
-        plt.figure(figsize=(16, 16))
-        plt.scatter(embedding_outputs_smote[:, 0], embedding_outputs_smote[:, 1], c=hdbscan_labels_smote, s=10, alpha=0.1, cmap=mcolors.ListedColormap(hdbscan_colors))
-        plt.savefig(os.path.join(experiment_dir, "smote_hdbscan_labels.png"), facecolor=plt.gcf().get_facecolor(), edgecolor='none')
-        plt.close()
     
-    
-    # if NOT SMOTE, then hdbscan_labels_smote is the same as hdbscan_labels, and embedding_outputs_smote is the same as embedding_outputs
-    if state_finding_algorithm != "HDBSCAN-SMOTE":
-        hdbscan_labels_smote = hdbscan_labels
-        embedding_outputs_smote = embedding_outputs
     
     # save the data
     np.savez(
         f"files/{save_name}",
         embedding_outputs=embedding_outputs,
-        embedding_outputs_smote=embedding_outputs_smote,
         hdbscan_labels=hdbscan_labels,
-        hdbscan_labels_smote=hdbscan_labels_smote,
         ground_truth_labels=ground_truth_labels,
         predictions=predictions,
         s=spec_arr,
@@ -505,227 +410,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
         dataset_indices=dataset_indices,
         file_map=file_map
     )
-
-# def apply_windowing(arr, window_size, stride, flatten_predictions=False):
-#     """
-#     Apply windowing to the input array.
-
-
-#     Parameters:
-#     - arr: The input array to window, expected shape (num_samples, features) for predictions and (num_samples,) for labels.
-#     - window_size: The size of each window.
-#     - stride: The stride between windows.
-#     - flatten_predictions: A boolean indicating whether to flatten the windowed predictions.
-
-
-#     Returns:
-#     - windowed_arr: The windowed version of the input array.
-#     """
-#     num_samples, features = arr.shape if len(arr.shape) > 1 else (arr.shape[0], 1)
-#     num_windows = (num_samples - window_size) // stride + 1
-#     windowed_arr = np.lib.stride_tricks.as_strided(
-#         arr,
-#         shape=(num_windows, window_size, features),
-#         strides=(arr.strides[0] * stride, arr.strides[0], arr.strides[-1]),
-#         writeable=False
-#     )
-
-
-#     if flatten_predictions and features > 1:
-#         # Flatten each window for predictions
-#         windowed_arr = windowed_arr.reshape(num_windows, -1)
-  
-#     return windowed_arr
-
-
-
-
-# def sliding_window_umap(model, device, data_dir="test_llb16",
-#                          remove_silences=False, samples=100, category_colors_file='category_colors.pkl',
-#                          layer_index=None, dict_key=None, time_bins_per_umap_point=100,
-#                          context=1000, save_dir=None, raw_spectogram=False, save_dict_for_analysis=False, compute_svm=False, color_scheme="Syllable", window_size=100, stride=1):
-#     predictions_arr = []
-#     ground_truth_labels_arr = []
-#     spec_arr = []
-
-
-#     # Reset Figure
-#     plt.figure(figsize=(8, 6))
-
-
-#     # to allow sci notation
-#     samples = int(samples)
-#     total_samples = 0
-
-
-#     data_loader = load_data(data_dir=data_dir, context=context)
-#     data_loader_iter = iter(data_loader)
-
-
-#     while total_samples < samples:
-#         try:
-#             # Retrieve the next batch
-#             data, ground_truth_label = next(data_loader_iter)
-          
-#             # if smaller than context window, go to next song
-#             if data.shape[-2] < context:
-#                 continue
-
-
-#             # because network is made to work with batched data, we unsqueeze a dim and transpose the last two dims (usually handled by collate fn)
-#             data = data.unsqueeze(0).permute(0,1,3,2)
-
-
-#             # calculate the number of times a song
-#             num_times = data.shape[-1] // context
-          
-#             # removing left over timebins that do not fit in context window
-#             shave_index = num_times * context
-#             data = data[:,:,:,:shave_index]
-
-
-#             batch, channel, freq, time_bins = data.shape
-
-
-#             # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches
-#             data = data.permute(0,-1, 1, 2)
-#             data = data.reshape(num_times, context, channel, freq)
-#             data = data.permute(0,2,3,1)
-
-
-#             # reshaping g truth labels to be consistent
-#             batch, time_bins, labels = ground_truth_label.shape
-
-
-#             # shave g truth labels
-#             ground_truth_label = ground_truth_label.permute(0,2,1)
-#             ground_truth_label = ground_truth_label[:,:,:shave_index]
-
-
-#             # cheeky reshaping operation to reshape the length of the song that is larger than the context window into multiple batches
-#             ground_truth_label = ground_truth_label.permute(0,2,1)
-#             ground_truth_label = ground_truth_label.reshape(num_times, context, labels)
-          
-#         except StopIteration:
-#             # if test set is exhausted, print the number of samples collected and stop the collection process
-#             print(f"samples collected {len(ground_truth_labels_arr) * context}")
-#             break
-
-
-#         if raw_spectogram == False:
-#             _, layers = model.inference_forward(data.to(device))
-
-
-#             layer_output_dict = layers[layer_index]
-#             output = layer_output_dict.get(dict_key, None)
-
-
-#             if output is None:
-#                 print(f"Invalid key: {dict_key}. Skipping this batch.")
-#                 continue
-
-
-#             batches, time_bins, features = output.shape
-#             # data shape [0] is the number of batches,
-#             predictions = output.reshape(batches, time_bins, features)
-#             # combine the batches and number of samples per context window
-#             predictions = predictions.flatten(0,1)
-#             predictions_arr.append(predictions.detach().cpu().numpy())
-
-
-#         # remove channel dimension
-#         data = data.squeeze(1)
-#         spec = data
-
-
-#         # set the features (freq axis to be the last dimension)
-#         spec = spec.permute(0, 2, 1)
-#         # combine batches and timebins
-#         spec = spec.flatten(0, 1)
-
-
-#         ground_truth_label = ground_truth_label.flatten(0, 1)
-#         ground_truth_label = torch.argmax(ground_truth_label, dim=-1)
-
-
-#         spec_arr.append(spec.cpu().numpy())
-#         ground_truth_labels_arr.append(ground_truth_label.cpu().numpy())
-      
-#         total_samples += spec.shape[0]
-
-
-#     # convert the list of batch * samples * features to samples * features
-#     ground_truth_labels = np.concatenate(ground_truth_labels_arr, axis=0)
-#     spec_arr = np.concatenate(spec_arr, axis=0)
-
-
-#     if not raw_spectogram:
-#         predictions = np.concatenate(predictions_arr, axis=0)
-#     else:
-#         predictions = spec_arr
-
-
-#     # razor off any extra datapoints
-#     if samples > len(predictions):
-#         samples = len(predictions)
-#     else:
-#         predictions = predictions[:samples]
-#         ground_truth_labels = ground_truth_labels[:samples]
-
-
-#     print(predictions.shape)
-
-
-#     # Ensure predictions are in the correct shape (num_samples, features) before windowing
-#     predictions = apply_windowing(predictions, window_size, stride=stride, flatten_predictions=True)
-#     ground_truth_labels = apply_windowing(ground_truth_labels.reshape(-1, 1), window_size, stride=stride, flatten_predictions=False)
-
-
-#     ground_truth_labels = ground_truth_labels.squeeze()
-  
-#     # Fit the UMAP reducer      
-#     reducer = umap.UMAP(n_neighbors=200, min_dist=0, n_components=2, metric='cosine')
-
-
-#     embedding_outputs = reducer.fit_transform(predictions)
-#     hdbscan_labels = generate_hdbscan_labels(embedding_outputs)
-
-
-#     np.savez(f"save_dir", embedding_outputs=embedding_outputs, hdbscan_labels=hdbscan_labels, ground_truth_labels=ground_truth_labels, s=spec_arr)
-  
-#     # Assuming 'glasbey' is a predefined object with a method 'extend_palette'
-#     cmap = glasbey.extend_palette(["#000000"], palette_size=30)
-#     cmap = mcolors.ListedColormap(cmap)   
-
-
-#     ground_truth_labels = average_colors_per_sample(ground_truth_labels, cmap)
-
-
-#     fig, axes = plt.subplots(1, 2, figsize=(16, 6))  # Create a figure and a 1x2 grid of subplots
-
-
-#     axes[0].scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=hdbscan_labels, s=10, alpha=.1, cmap=cmap)
-#     axes[0].set_title("HDBSCAN")
-
-
-#     # Plot with the original color scheme
-#     axes[1].scatter(embedding_outputs[:, 0], embedding_outputs[:, 1], c=ground_truth_labels, s=10, alpha=.1, cmap=cmap)
-#     axes[1].set_title("Original Coloring")
-
-
-#     # Adjust title based on 'raw_spectogram' flag
-#     if raw_spectogram:
-#         plt.title(f'UMAP of Spectogram', fontsize=14)
-#     else:
-#         plt.title(f'UMAP Projection of (Layer: {layer_index}, Key: {dict_key})', fontsize=14)
-
-
-#     # Save the plot if 'save_dir' is specified, otherwise display it
-#     if save_dir:
-#         plt.savefig(save_dir, format='png')
-#     else:
-#         plt.show()
-
 
 import numpy as np
 from collections import Counter
