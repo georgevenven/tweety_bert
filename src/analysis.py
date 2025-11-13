@@ -393,7 +393,6 @@ def plot_umap_projection(model, device, data_dirs, category_colors_file="test_ll
                 facecolor=fig2.get_facecolor(), edgecolor='none')
     plt.close(fig2)
     
-    
     # save the data
     np.savez(
         f"files/{save_name}",
