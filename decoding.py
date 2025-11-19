@@ -139,6 +139,10 @@ def main(args):
         "--bird_name", args.bird_name,
         "--context_length", str(args.context_umap)
     ]
+
+    if args.freeze_backbone:
+        decoder_cmd.append("--freeze_backbone")
+
     run_command(decoder_cmd)
 
     shutil.rmtree(temp_dir)
@@ -176,10 +180,12 @@ if __name__ == "__main__":
                         help="Context size used for UMAP generation.")
 
     # Single Mode specific arguments
-    parser.add_argument("--num_random_files_spec", type=int, default=1000,
+    parser.add_argument("--num_random_files_spec", type=int, default=5000,
                         help="Number of random WAV files to use for spectrogram generation in 'single' mode.")
     
     parser.add_argument("--nfft", type=int, default=1024, help="Number of FFT points for spectrogram generation.")
+
+    parser.add_argument("--freeze_backbone", action="store_true", help="If set, freezes the backbone (linear probe mode). Default is fine-tuning.")
 
     # Grouping Mode specific arguments (Currently handled by copy script interaction)
     # parser.add_argument("--num_groups", type=int, default=4, help="Number of groups for temporal splitting in 'grouping' mode.")

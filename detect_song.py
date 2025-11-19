@@ -22,6 +22,13 @@ def main(args):
 
     input_dir_path = Path(args.input_dir).resolve()
     output_json_path = Path(args.output_json).resolve()
+
+    # SAFETY FIX: If output path is a directory, append a default filename
+    if output_json_path.is_dir():
+        print(f"Warning: Provided output path '{output_json_path}' is a directory.")
+        output_json_path = output_json_path / "song_detection_results.json"
+        print(f"Saving to: {output_json_path}")
+
     song_detector_path = project_root / SONG_DETECTOR_DIR_NAME
     merge_script_path = project_root / "scripts" / "merge_output_label_jsons.py"
 
@@ -55,6 +62,7 @@ def main(args):
     if not json_file_paths:
         with open(output_json_path, 'w') as f:
             json.dump([], f)
+        shutil.rmtree(temp_detector_output_dir)
     else:
         merge_cmd = [
             sys.executable,
@@ -62,10 +70,16 @@ def main(args):
         ] + json_file_paths + [
             str(output_json_path)
         ]
-        run_command(merge_cmd, cwd=project_root)
-
-    shutil.rmtree(temp_detector_output_dir)
-
+        
+        # SAFETY FIX: Check return code and only delete if successful
+        result = subprocess.run(merge_cmd, cwd=project_root)
+        
+        if result.returncode == 0:
+            print("Merge successful. Cleaning up temporary files.")
+            shutil.rmtree(temp_detector_output_dir)
+        else:
+            print(f"Temporary output files HAVE NOT BEEN DELETED so you can recover your data.")
+            print(f"Location: {temp_detector_output_dir}")
 
 # --- Argument Parsing ---
 if __name__ == "__main__":

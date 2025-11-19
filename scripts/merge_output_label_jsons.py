@@ -68,6 +68,7 @@ def merge_json_files(input_files, output_file):
         print(f"Successfully merged {len(unique_data)} unique entries into '{output_file}'")
     except Exception as e:
         print(f"Error writing merged JSON to {output_file}: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

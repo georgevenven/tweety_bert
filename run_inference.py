@@ -45,8 +45,8 @@ if __name__ == "__main__":
                         help="Apply post-processing (smoothing). Default: True.")
     parser.add_argument("--window_size", type=int, default=50,
                         help="Window size for label smoothing if post-processing is enabled. Default: 200.")
-    parser.add_argument("--visualize", type=lambda x: (str(x).lower() == 'true'), default=True,
-                        help="Generate visualization plots during inference. Default: True.")
+    parser.add_argument("--visualize", action="store_true",
+                        help="Generate visualization plots during inference.")
 
     args = parser.parse_args()
     args.apply_post_processing = str(args.apply_post_processing)
