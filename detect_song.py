@@ -9,12 +9,13 @@ from pathlib import Path
 # --- Configuration ---
 SONG_DETECTOR_REPO = "https://github.com/georgevenven/tweety_net_song_detector.git"
 SONG_DETECTOR_DIR_NAME = "song_detector"
+DEFAULT_MODEL = "canary_fall_nerve_llb-.01"
 
 # --- Helper Function to Run Commands ---
 def run_command(command, cwd=None):
     """Runs a command using subprocess."""
     print(f"Running command: {' '.join(command)}")
-    subprocess.run(command, cwd=cwd)
+    subprocess.run(command, cwd=cwd, check=True)
 
 # --- Main Script Logic ---
 def main(args):
@@ -39,6 +40,17 @@ def main(args):
         run_command(clone_cmd, cwd=project_root)
 
     detector_inference_script = song_detector_path / "src" / "inference.py"
+    model_path = song_detector_path / "files" / args.model
+
+    if not model_path.is_dir():
+        print(f"Error: Model directory '{args.model}' not found at '{model_path}'.", file=sys.stderr)
+        print(f"Available models in {song_detector_path}/files/:", file=sys.stderr)
+        files_dir = song_detector_path / "files"
+        if files_dir.is_dir():
+            for model_dir in files_dir.iterdir():
+                if model_dir.is_dir():
+                    print(f"  - {model_dir.name}", file=sys.stderr)
+        sys.exit(1)
 
     temp_detector_output_dir = project_root / "temp_song_detection_output"
     if temp_detector_output_dir.exists():
@@ -50,7 +62,8 @@ def main(args):
         str(detector_inference_script),
         "--mode", "local_dir",
         "--input", str(input_dir_path),
-        "--output", str(temp_detector_output_dir)
+        "--output", str(temp_detector_output_dir),
+        "--model", str(model_path)
     ]
     if args.plot_spec:
         detection_cmd.append("--plot_spec")
@@ -89,6 +102,8 @@ if __name__ == "__main__":
                         help="Path to the directory containing WAV files to process.")
     parser.add_argument("--output_json", type=str, default="files/song_detection.json",
                         help="Path to save the final merged JSON output file.")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL,
+                        help="Model to use for detection.")
     parser.add_argument("--plot_spec", action="store_true",
                         help="If set, plot spectrograms during detection.")
 
