@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import torch
 import subprocess
 from tqdm import tqdm
@@ -51,7 +52,6 @@ def tweety_net_detector_inference(input_file, return_json=True, mode="local_file
 
 class TweetyBertInference:
   def __init__(self, classifier_path, spec_dst_folder, output_path, song_detection_json=None, visualize=False, dump_interval=500, apply_post_processing=True, window_size=50):
-      print(output_path)
       # Force CPU usage
       self.device = torch.device("cpu")
       self.classifier = self.load_decoder_state(classifier_path)
@@ -75,6 +75,7 @@ class TweetyBertInference:
       colors = colors[np.random.permutation(len(colors))]
       colors = np.vstack(([1, 1, 1, 1], colors))
       self.cmap = mcolors.ListedColormap(colors[:self.num_classes])
+      self.wav_base_dir = None
 
   def load_decoder_state(self, linear_decoder_dir):
       save_dir = os.path.join(linear_decoder_dir, "decoder_state")
@@ -112,24 +113,56 @@ class TweetyBertInference:
   def setup_wav_to_spec(self, folder, csv_file_dir=None):
       self.wav_to_spec = WavtoSpec(
           folder, self.spec_dst_folder, song_detection_json_path=self.song_detection_json)
+      self.wav_base_dir = Path(folder).resolve()
 
   def smooth_labels(self, labels, window_size=50):
       return majority_vote(labels, window_size=window_size)
   
-  def process_file(self, file_path):
-    # Print detection method being used
-    if self.song_detection_data is None:
-        print(f"Using TweetyNET detection for {os.path.basename(file_path)}")
-    else:
-        print(f"Using pre-designated JSON for {os.path.basename(file_path)}")
+  def _make_unique_prefix(self, file_path):
+      path = Path(file_path).resolve()
+      if self.wav_base_dir is not None:
+          try:
+              path = path.relative_to(self.wav_base_dir)
+          except ValueError:
+              pass
+      path_no_suffix = path.with_suffix('')
+      sanitized_parts = [
+          re.sub(r'[^A-Za-z0-9_-]', '_', part)
+          for part in path_no_suffix.parts
+      ]
+      prefix = "__".join(filter(None, sanitized_parts))
+      return prefix or re.sub(r'[^A-Za-z0-9_-]', '_', path_no_suffix.name)
 
-    file_creation_timestamp = get_creation_date(Path(file_path))
-    creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
+  def _make_segment_name(self, file_path, segment_index=None):
+      prefix = self._make_unique_prefix(file_path)
+      if segment_index is None:
+          return prefix
+      return f"{prefix}_segment_{segment_index}"
+  
+  def process_file(self, file_path):
+    unique_prefix = self._make_unique_prefix(file_path)
+    file_basename = os.path.basename(file_path)
 
     # Ensure WavtoSpec instance exists
     if self.wav_to_spec is None:
-        print(f"Error: WavtoSpec not initialized before processing {os.path.basename(file_path)}. Skipping.")
-        return [{"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": "WavtoSpec not initialized", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
+        return []
+
+    song_segments = []
+
+    if self.song_detection_data is not None:
+        vocalization_data = next((item for item in self.song_detection_data if item["filename"] == file_basename), None)
+        if vocalization_data is None:
+            return []
+        if not vocalization_data.get("song_present", False):
+            return []
+        song_segments = vocalization_data.get("segments") or []
+        if not song_segments:
+            return []
+    else:
+        vocalization_data = tweety_net_detector_inference(input_file=file_path)
+        if not vocalization_data or not vocalization_data.get('segments'):
+            return []
+        song_segments = vocalization_data['segments']
 
     spec_data_tuple = self.wav_to_spec.multiprocess_process_file(
         file_path,
@@ -138,32 +171,25 @@ class TweetyBertInference:
     )
 
     if spec_data_tuple is None or spec_data_tuple[0] is None:
-        print(f"Spectrogram generation failed or skipped for {os.path.basename(file_path)}")
-        return [{"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "error": "Spectrogram generation failed or skipped", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
+        return []
 
     spec = spec_data_tuple[0]
+    file_creation_timestamp = get_creation_date(Path(file_path))
+    creation_date_str = datetime.fromtimestamp(file_creation_timestamp).isoformat()
 
     if self.song_detection_data is None:
-        vocalization_data = tweety_net_detector_inference(input_file=file_path)
-        if not vocalization_data or vocalization_data.get('segments') == []:
-            return [{"file_name": os.path.basename(file_path), "creation_date": creation_date_str, "song_present": False, "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
-    else:
-        file_name = os.path.basename(file_path)
-        vocalization_data = next((item for item in self.song_detection_data if item["filename"] == file_name), None)
-        if vocalization_data is None:
-            vocalization_data = tweety_net_detector_inference(input_file=file_path)
-        if vocalization_data is not None and not vocalization_data.get("song_present", False):
-            return [{"file_name": file_name, "creation_date": creation_date_str, "song_present": False, "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}}]
+        song_segments = vocalization_data['segments']
 
-    song_segments = vocalization_data['segments']
     results = []
+    all_segment_labels = []  # Store (onset, offset, labels) tuples for debug visualization
 
     for i, seg in enumerate(song_segments):
+        segment_name = self._make_segment_name(file_path, i)
         song_spec = spec[:, seg['onset_timebin']:seg['offset_timebin']]
         spectogram, pad_amount = self.inference_data_class(song_spec)
 
         if spectogram is None:
-            results.append({"file_name": f"{os.path.splitext(os.path.basename(file_path))[0]}_{i}", "creation_date": creation_date_str, "song_present": False, "error": "Data class preparation failed", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}})
+            results.append({"file_name": segment_name, "creation_date": creation_date_str, "song_present": False, "error": "Data class preparation failed", "syllable_onsets_offsets_ms": {}, "syllable_onsets_offsets_timebins": {}})
             continue
         
         spec_tensor = torch.Tensor(spectogram).to(self.device).unsqueeze(1)
@@ -177,22 +203,33 @@ class TweetyBertInference:
             post_processed_labels = post_processed_labels[:-pad_amount]
         else:
             post_processed_labels = predicted_labels
+        
+        # Store labels for debug visualization
+        if self.visualize:
+            labels_np = post_processed_labels if isinstance(post_processed_labels, np.ndarray) else post_processed_labels.cpu().numpy()
+            all_segment_labels.append((seg['onset_timebin'], seg['offset_timebin'], labels_np))
             
         onsets_offsets_ms, onsets_offsets_timebins = self.convert_to_onset_offset(post_processed_labels)
         song_present = bool(onsets_offsets_ms)
 
-        if self.visualize:
-            spec_np = spec if isinstance(spec, np.ndarray) else spec.cpu().numpy()
-            labels_np = post_processed_labels if isinstance(post_processed_labels, np.ndarray) else post_processed_labels.cpu().numpy()
-            self.visualize_spectrogram(spec_np, labels_np, f"{os.path.splitext(os.path.basename(file_path))[0]}_{i}")
+        # if self.visualize:
+        #     spec_np = spec if isinstance(spec, np.ndarray) else spec.cpu().numpy()
+        #     labels_np = post_processed_labels if isinstance(post_processed_labels, np.ndarray) else post_processed_labels.cpu().numpy()
+        #     self.visualize_spectrogram(spec_np, labels_np, segment_name)
 
         results.append({
-            "file_name": f"{os.path.splitext(os.path.basename(file_path))[0]}_{i}",
+            "file_name": segment_name,
             "creation_date": creation_date_str,
             "song_present": song_present,
             "syllable_onsets_offsets_ms": onsets_offsets_ms,
             "syllable_onsets_offsets_timebins": onsets_offsets_timebins
         })
+
+    # Debug visualization: show full file with song detection boundaries
+    if self.visualize and song_segments:
+        spec_np = spec if isinstance(spec, np.ndarray) else spec.cpu().numpy()
+        file_prefix = self._make_unique_prefix(file_path)
+        self.visualize_full_file_with_detections(spec_np, song_segments, file_prefix, all_segment_labels)
 
     return results
 
@@ -201,7 +238,6 @@ class TweetyBertInference:
       file_count = 0
       processed_files = set()
       if os.path.exists(self.output_path):
-        print(self.output_path)
         with open(self.output_path, 'r') as f:
             loaded_data = json.load(f)
             results = loaded_data.get('results', [])
@@ -332,6 +368,77 @@ class TweetyBertInference:
           print(f"ERROR [{file_name}]: Failed during visualization/saving! Error: {e}") # Catch plotting/saving errors
       finally:
           plt.close() # Ensure plot is closed even if error occurs
+
+  def visualize_full_file_with_detections(self, spec, song_segments, file_name, all_segment_labels=None):
+      # Debug visualization: show whole file with song detection boundaries
+      # spec is a 2D numpy array [freq, time]
+      # song_segments is a list of dicts with 'onset_timebin' and 'offset_timebin' keys
+      # all_segment_labels is a list of (onset, offset, labels) tuples
+
+      if spec.ndim != 2:
+          print(f"ERROR [{file_name}]: Spectrogram passed to visualize_full_file_with_detections is not 2D! Shape: {spec.shape}. Skipping visualization.")
+          return
+
+      fig = plt.figure(figsize=(25, 8))
+      gs = plt.GridSpec(2, 1, height_ratios=[7, 1], hspace=0.15)
+
+      # Plot full spectrogram
+      ax1 = plt.subplot(gs[0])
+      im = ax1.imshow(spec, aspect='auto', origin='lower', cmap='viridis')
+      ax1.set_title(f'Full File Spectrogram with Song Detection Boundaries - {file_name}', fontsize=16)
+      ax1.set_ylabel('Frequency Bins', fontsize=14)
+      ax1.tick_params(axis='y', labelsize=10)
+      ax1.tick_params(axis='x', bottom=False, labelbottom=False)
+
+      # Draw vertical lines for song detection boundaries
+      for i, seg in enumerate(song_segments):
+          onset = seg.get('onset_timebin', 0)
+          offset = seg.get('offset_timebin', spec.shape[1])
+          # Draw onset line in red
+          ax1.axvline(x=onset, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Onset' if i == 0 else '')
+          # Draw offset line in blue
+          ax1.axvline(x=offset, color='blue', linestyle='--', linewidth=2, alpha=0.7, label='Offset' if i == 0 else '')
+          # Fill the detected segment region
+          ax1.axvspan(onset, offset, alpha=0.1, color='yellow', label='Detected Segment' if i == 0 else '')
+
+      # Add legend only once
+      if song_segments:
+          ax1.legend(loc='upper right', fontsize=10)
+
+      # Create full-length label array aligned with spectrogram
+      full_length_labels = np.full(spec.shape[1], -1, dtype=np.int32)  # Initialize with -1 (black)
+      
+      # Fill in predicted labels for detected segments
+      if all_segment_labels:
+          for onset, offset, labels in all_segment_labels:
+              segment_length = offset - onset
+              labels_length = len(labels)
+              # Handle case where labels might be shorter or longer than segment
+              if labels_length <= segment_length:
+                  full_length_labels[onset:onset + labels_length] = labels
+              else:
+                  full_length_labels[onset:offset] = labels[:segment_length]
+
+      # Plot predicted decoder labels as colorbar below the spectrogram
+      ax2 = plt.subplot(gs[1], sharex=ax1)
+      min_label_val = -1
+      max_label_val = self.num_classes - 1
+      im_labels = ax2.imshow([full_length_labels], aspect='auto', origin='lower', cmap=self.cmap,
+                             vmin=min_label_val, vmax=max_label_val)
+      ax2.set_ylabel('Predicted\nLabels', fontsize=12)
+      ax2.set_xlabel('Time Bins', fontsize=14)
+      ax2.set_yticks([])
+      ax2.tick_params(axis='x', labelsize=10)
+
+      plt.tight_layout(rect=[0, 0, 1, 0.97])
+      output_path = os.path.join(self.spec_dst_folder, f"{os.path.splitext(file_name)[0]}_full_file_debug.png")
+
+      try:
+          plt.savefig(output_path, dpi=150, bbox_inches='tight')
+      except Exception as e:
+          print(f"ERROR [{file_name}]: Failed during full file visualization/saving! Error: {e}")
+      finally:
+          plt.close()
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Run TweetyBert Inference")

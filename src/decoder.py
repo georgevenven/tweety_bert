@@ -21,7 +21,7 @@ def majority_vote(arr, window_size):
     return result
 
 class TweetyBertClassifier:
-    def __init__(self, model_dir, linear_decoder_dir, context_length=1000):
+    def __init__(self, model_dir, linear_decoder_dir, context_length=1000, freeze_layers=False):
         self.device = get_device()
         self.tweety_bert_model = self.load_tweety_bert(model_dir)
         self.linear_decoder_dir = linear_decoder_dir
@@ -31,6 +31,7 @@ class TweetyBertClassifier:
         self.model_dir = model_dir
         self.data_file = None
         self.context_length = context_length
+        self.freeze_layers = freeze_layers
 
         # Delete existing decoder directory if it exists
         if os.path.exists(linear_decoder_dir):
@@ -107,7 +108,7 @@ class TweetyBertClassifier:
             num_classes=self.num_classes, 
             model_type="neural_net", 
             model=self.tweety_bert_model, 
-            freeze_layers=True, 
+            freeze_layers=self.freeze_layers, 
             layer_num=-1, 
             layer_id="attention_output", 
             TweetyBERT_readout_dims=196,
@@ -183,45 +184,39 @@ class SpecGenerator:
         self.plot_and_save(spec_chunk, predicted_classes, label_chunk, logits, output_dir, file, i)
 
     def plot_and_save(self, spec_chunk, predicted_classes, label_chunk, logits, output_dir, file, i):
-        plt.figure(figsize=(40, 15))  # Increased width significantly
+        plt.figure(figsize=(40, 12))  # Adjusted height
         plt.subplots_adjust(hspace=0.5, left=0.05, right=0.98, top=0.95, bottom=0.05)
 
+        # Common normalization for consistent coloring across plots
+        vmin = 0
+        vmax = self.num_classes - 1
+        cmap = 'viridis'
+
         # Plot spectrogram
-        ax1 = plt.subplot2grid((15, 1), (0, 0), rowspan=8)
+        ax1 = plt.subplot2grid((12, 1), (0, 0), rowspan=8)
         im1 = ax1.imshow(spec_chunk, aspect='auto', origin='lower', extent=[0, spec_chunk.shape[1], 0, spec_chunk.shape[0]])
         ax1.set_title('Spectrogram', fontsize=24)
         ax1.tick_params(axis='both', which='major', labelsize=18)
 
         # Plot ground truth labels
-        ax2 = plt.subplot2grid((15, 1), (8, 0), rowspan=1, sharex=ax1)
-        ax2.imshow([label_chunk], aspect='auto', origin='lower', cmap='viridis', extent=[0, len(label_chunk), 0, 1])
+        ax2 = plt.subplot2grid((12, 1), (8, 0), rowspan=1, sharex=ax1)
+        ax2.imshow([label_chunk], aspect='auto', origin='lower', cmap=cmap, vmin=vmin, vmax=vmax, extent=[0, len(label_chunk), 0, 1])
         ax2.set_title('Ground Truth Labels', fontsize=24)
         ax2.set_yticks([])
 
         # Plot predicted classes
-        ax3 = plt.subplot2grid((15, 1), (9, 0), rowspan=1, sharex=ax1)
-        ax3.imshow([predicted_classes], aspect='auto', origin='lower', cmap='viridis', extent=[0, len(predicted_classes), 0, 1])
+        ax3 = plt.subplot2grid((12, 1), (9, 0), rowspan=1, sharex=ax1)
+        ax3.imshow([predicted_classes], aspect='auto', origin='lower', cmap=cmap, vmin=vmin, vmax=vmax, extent=[0, len(predicted_classes), 0, 1])
         ax3.set_title('Predicted Classes', fontsize=24)
         ax3.set_yticks([])
 
         # Calculate and plot majority vote predictions
         window_size = 100
         majority_vote_predictions = majority_vote(predicted_classes, window_size)
-        ax4 = plt.subplot2grid((15, 1), (10, 0), rowspan=1, sharex=ax1)
-        ax4.imshow([majority_vote_predictions], aspect='auto', origin='lower', cmap='viridis', extent=[0, len(majority_vote_predictions), 0, 1])
+        ax4 = plt.subplot2grid((12, 1), (10, 0), rowspan=1, sharex=ax1)
+        ax4.imshow([majority_vote_predictions], aspect='auto', origin='lower', cmap=cmap, vmin=vmin, vmax=vmax, extent=[0, len(majority_vote_predictions), 0, 1])
         ax4.set_title(f'Majority Vote Predictions (Window Size: {window_size})', fontsize=24)
         ax4.set_yticks([])
-
-        # Plot class probability
-        ax5 = plt.subplot2grid((15, 1), (11, 0), rowspan=3, sharex=ax1)
-        probs = torch.sigmoid(logits[0]).cpu().detach().numpy()
-        
-        ax5.plot(probs, color='blue', label='Class Probability')
-        ax5.set_title('Class Probability', fontsize=24)
-        ax5.set_xlabel('Timebins', fontsize=24)
-        ax5.set_ylabel('Probability', fontsize=24)
-        ax5.set_ylim(0, 1)
-        ax5.tick_params(axis='both', which='major', labelsize=18)
 
         # Ensure all subplots are aligned
         plt.xlim(0, spec_chunk.shape[1])
@@ -316,6 +311,7 @@ if __name__ == "__main__":
     parser.add_argument("--bird_name", type=str, required=True, help="Name of the bird")
     parser.add_argument("--context_length", type=int, default=1000, help="Context length for the classifier")
     parser.add_argument("--generate_loss_plot", action="store_true", default=False, help="Generate loss plot during training")
+    parser.add_argument("--freeze_backbone", action="store_true", help="If set, freezes the TweetyBERT backbone. Default is fine-tuning (unfrozen).")
 
     args = parser.parse_args()
 
@@ -325,8 +321,10 @@ if __name__ == "__main__":
     model_dir = f"experiments/{experiment_name}"
     linear_decoder_dir = f"experiments/{bird_name}_linear_decoder"
     data_file = f"files/{bird_name}.npz"
+    
+    freeze_layers = args.freeze_backbone
 
-    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir, context_length=context_length)
+    classifier = TweetyBertClassifier(model_dir=model_dir, linear_decoder_dir=linear_decoder_dir, context_length=context_length, freeze_layers=freeze_layers)
     classifier.prepare_data(data_file)
     classifier.create_dataloaders()
     classifier.create_classifier()
